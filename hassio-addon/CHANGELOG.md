@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.20.39
+
+### Added
+- Automatisierung-Tab: „Hält für …"-Fenster pro Variante + Vorgangsliste mit History-Auswertung (Laden/Nutzen/PV-verdrängt)
+
+### Fixed
+- Modal springt nicht mehr beim Tab-Wechsel (entities aus useEffect-Deps entfernt)
+
 ## 1.20.38
 
 ### Changed

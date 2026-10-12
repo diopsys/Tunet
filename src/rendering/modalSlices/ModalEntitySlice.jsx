@@ -146,6 +146,7 @@ export function ModalEntitySlice({ core, modals, cardConfig, entityHelpers, reso
                 settings={data.settings}
                 hideSupport={isOctopus}
                 entities={entities}
+                conn={conn}
               />
             </ModalSuspense>
           );

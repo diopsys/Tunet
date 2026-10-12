@@ -1,3 +1,13 @@
+## [1.20.39] — 2026-10-12
+
+### Added
+- Automatisierung-Tab: „Hält für …"-Textzeile pro Variantenkarte — berechnet Entladefenster aus Octopus-Preisen und Helios-Prognose; zeigt Zeitfenster mit heute/morgen-Label und Preisschwelle
+- Automatisierung-Tab: Vorgangsliste mit History-Auswertung — erkennt Laden, Nutzen und PV-verdrängte Vorgänge aus `_speicher`/`_kosten`/`_erlos`-History; Varianten- und Zeitraum-Selektor (Heute/7 Tage); Summen und Konsistenzprüfung
+- StateChip bleibt in Variantenkarten erhalten, Textzeile ergänzt den Zustand mit Kontext
+
+### Fixed
+- Vorgangsliste: entities aus useEffect-Dependencies entfernt — verhindert sekundenweise History-Neuabrufe und Modal-Springen beim Tab-Wechsel
+
 ## [1.20.38] — 2026-10-09
 
 ### Changed
