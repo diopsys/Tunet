@@ -19,7 +19,8 @@ const SIM_VARIANTS = [
   { key: '8ct', label: '8 ct' },
 ];
 
-const MERGE_GAP_MS   = 120_000; // 2 min gap → same Vorgang
+const MERGE_GAP_LADEN_MS  = 20 * 60_000; // 20 min – Speicher voll → kurze Nachlade-Pulse
+const MERGE_GAP_NUTZEN_MS =  2 * 60_000; // 2 min gap → same Vorgang
 const MAX_FENSTER_H  = 16;
 
 // ── Helpers ───────────────────────────────────────────────────────────
@@ -115,9 +116,12 @@ function parseHistoryPoints(raw) {
   return raw
     .map(d => {
       const val = parseFloat(d.state ?? d.s);
-      const t   = d.last_changed ? new Date(d.last_changed).getTime()
-                : d.lc           ? (d.lc < 1e12 ? d.lc * 1000 : d.lc)
-                : null;
+      // WS compact format: lc/lu are Unix seconds; lc only present when ≠ lu
+      const secToMs = (v) => v < 1e12 ? v * 1000 : v;
+      const t = d.last_changed  ? new Date(d.last_changed).getTime()
+              : d.lc != null    ? secToMs(d.lc)
+              : d.lu != null    ? secToMs(d.lu)
+              : null;
       return { val, t };
     })
     .filter(d => !isNaN(d.val) && d.t !== null && d.val >= 0)
@@ -159,8 +163,8 @@ function buildVorgaenge(speicherPts, kostenPts, erlosPts, einspeiseCt, wirkungsg
   const tol  = 0.005;
   const vorgaenge = [];
 
-  // Laden: kosten rising → speicher rising
-  for (const ph of extractRisingPhases(kostenPts)) {
+  // Laden: kosten rising → speicher rising (großer Gap: voller Speicher lädt kurz nach)
+  for (const ph of extractRisingPhases(kostenPts, MERGE_GAP_LADEN_MS)) {
     const s0 = speicherAt(speicherPts, ph.startT);
     const s1 = speicherAt(speicherPts, ph.endT);
     const geladenKwh = s0 != null && s1 != null ? Math.max(0, s1 - s0) : null;
@@ -171,7 +175,7 @@ function buildVorgaenge(speicherPts, kostenPts, erlosPts, einspeiseCt, wirkungsg
   }
 
   // Nutzen / PV-verdrängt: erlos rising AND speicher falling
-  for (const ph of extractRisingPhases(erlosPts)) {
+  for (const ph of extractRisingPhases(erlosPts, MERGE_GAP_NUTZEN_MS)) {
     const s0 = speicherAt(speicherPts, ph.startT);
     const s1 = speicherAt(speicherPts, ph.endT);
     const sDelta = s0 != null && s1 != null ? s0 - s1 : null; // positive = falling
@@ -552,7 +556,21 @@ function VorgangSummen({ vorgaenge, rangeStartTs }) {
 }
 
 function Vorgangsliste({ entities, conn }) {
-  const [varKey, setVarKey]       = useState('4ct');
+  const [varKey, setVarKey] = useState(() => {
+    const variants = ['0ct', '4ct', '8ct'];
+    let best = null;
+    let bestT = -Infinity;
+    for (const v of variants) {
+      for (const suffix of ['_kosten', '_erlos']) {
+        const e = entities?.[`input_number.netzladung_sim_${v}${suffix}`];
+        if (e?.last_changed) {
+          const t = new Date(e.last_changed).getTime();
+          if (t > bestT) { bestT = t; best = v; }
+        }
+      }
+    }
+    return best ?? '0ct';
+  });
   const [range, setRange]         = useState('today');
   const [loading, setLoading]     = useState(false);
   const [error, setError]         = useState(null);

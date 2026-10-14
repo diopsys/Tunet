@@ -1,3 +1,10 @@
+## [1.20.40] — 2026-10-14
+
+### Fixed
+- Vorgangsliste: History-Timestamps aus WS-Kompaktformat (`lu`-Feld als Fallback) werden jetzt korrekt gelesen — zuvor wurden alle Punkte verworfen und keine Vorgänge angezeigt
+- Vorgangsliste: Merge-Lücke für Ladevorgänge auf 20 min erhöht (von 2 min) — verhindert, dass Nachladen bei vollem Speicher als viele Einzelvorgänge erscheint
+- Vorgangsliste: Standard-Variante wird aus der jüngsten Aktivität (`_kosten`/`_erlos`) gewählt statt hart auf 4 ct
+
 ## [1.20.39] — 2026-10-12
 
 ### Added
@@ -1665,6 +1672,17 @@
 - Add release notes.
 
 ## [1.20.34] — 2026-10-07
+
+### Added
+- Add release notes.
+
+### Changed
+- Add release notes.
+
+### Fixed
+- Add release notes.
+
+## [1.20.40] — 2026-10-14
 
 ### Added
 - Add release notes.

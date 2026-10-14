@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.20.40
+
+### Changed
+- Add release notes.
+
+## 1.20.40
+
+### Fixed
+- Vorgangsliste findet jetzt Vorgänge: `lu`-Fallback für WS-Kompakt-History-Format
+- Laden-Merge-Lücke auf 20 min (verhindert viele Kleinsteinträge bei vollem Speicher)
+- Standard-Variante: jüngste Aktivität statt fest 4 ct
+
 ## 1.20.39
 
 ### Added
