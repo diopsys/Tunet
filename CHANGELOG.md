@@ -1,3 +1,9 @@
+## [1.20.41] — 2026-10-16
+
+### Added
+- SensorModal: Raum-Temperaturen visuell aufbereitet — bei Gruppen-Sensoren mit `entity_id`-Attribut werden Sub-Sensoren als farbige Balkenzeilen (blau → grün → orange je Temperatur) pro Etage angezeigt
+- Lange Raumnamen automatisch abgekürzt (Badezimmer → Bad, Schlafzimmer → Schlaf, Luftqualitätssensor → Luftq. usw.)
+
 ## [1.20.40] — 2026-10-14
 
 ### Fixed
@@ -1683,6 +1689,17 @@
 - Add release notes.
 
 ## [1.20.40] — 2026-10-14
+
+### Added
+- Add release notes.
+
+### Changed
+- Add release notes.
+
+### Fixed
+- Add release notes.
+
+## [1.20.41] — 2026-10-16
 
 ### Added
 - Add release notes.

@@ -496,6 +496,7 @@ export function ModalEntitySlice({ core, modals, cardConfig, entityHelpers, reso
             onClose={() => setShowSensorInfoModal(null)}
             entityId={showSensorInfoModal}
             entity={entities[showSensorInfoModal]}
+            entities={entities}
             customName={customNames[showSensorInfoModal]}
             conn={conn}
             haUrl={activeUrl}

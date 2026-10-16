@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.20.41
+
+### Added
+- SensorModal: Raum-Temperaturen mit farbigen Balken (blau/grün/orange) pro Etage; lange Raumnamen abgekürzt
+
 ## 1.20.40
 
 ### Changed
