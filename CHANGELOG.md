@@ -1,3 +1,8 @@
+## [1.20.42] — 2026-10-16
+
+### Fixed
+- SensorModal: Räume-Sektion auf Mobile korrekt nach dem Graphen platziert (vor Zeitachse); Raumnamen abgekürzt
+
 ## [1.20.41] — 2026-10-16
 
 ### Added
@@ -1700,6 +1705,17 @@
 - Add release notes.
 
 ## [1.20.41] — 2026-10-16
+
+### Added
+- Add release notes.
+
+### Changed
+- Add release notes.
+
+### Fixed
+- Add release notes.
+
+## [1.20.42] — 2026-10-16
 
 ### Added
 - Add release notes.

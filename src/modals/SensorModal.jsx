@@ -484,6 +484,104 @@ export default function SensorModal({
   const Icon = getIconComponent(attrs.icon) || Activity;
   const modalTitleId = `sensor-modal-title-${entityId.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
 
+  // Pre-build Räume JSX so it can be placed in mobile (left panel) and desktop (right panel)
+  const subEntityJsx = hasSubEntities ? (() => {
+    const allVals = subEntityGroups.flatMap((g) =>
+      (g.children.length > 0 ? g.children : [{ id: g.id, entity: g.entity }])
+        .map((c) => parseFloat(c.entity?.state))
+        .filter((v) => !isNaN(v))
+    );
+    const minV = allVals.length ? Math.min(...allVals) : 18;
+    const maxV = allVals.length ? Math.max(...allVals) : 25;
+    const range = Math.max(maxV - minV, 0.5);
+    return (
+      <div>
+        <h4 className="mb-4 text-xs font-bold tracking-widest text-[var(--text-secondary)] uppercase opacity-40">
+          Räume
+        </h4>
+        <div className="space-y-4">
+          {subEntityGroups.map(({ id: gId, entity: gEnt, children }) => {
+            const gName = gEnt.attributes?.friendly_name || gId;
+            const gLabel = gName
+              .replace(/\[Klima\]\s*/i, '')
+              .replace(/Durchschnittliche\s+Temperatur\s+/i, '');
+            const gVal = parseFloat(gEnt.state);
+            const ROOM_SHORT = {
+              'Luftqualitätssensor': 'Luftq.',
+              'Badezimmer': 'Bad',
+              'Schlafzimmer': 'Schlaf',
+              'Kinderzimmer': 'Kinder',
+              'Wohn/Essbereich': 'Wohn/Ess',
+              'Gäste WC': 'G.-WC',
+            };
+            const rows = children.length > 0 ? children : [{ id: gId, entity: gEnt }];
+            return (
+              <div key={gId}>
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="text-[10px] font-bold tracking-widest text-[var(--text-secondary)] uppercase opacity-70">
+                    {gLabel}
+                  </span>
+                  {!isNaN(gVal) && (
+                    <span
+                      className="rounded-full px-2 py-0.5 text-[10px] font-bold tabular-nums"
+                      style={{
+                        background: `hsla(${tempHue(gVal)},65%,50%,0.18)`,
+                        color: `hsl(${tempHue(gVal)},55%,62%)`,
+                      }}
+                    >
+                      Ø {gVal.toFixed(1)} °C
+                    </span>
+                  )}
+                </div>
+                <div className="space-y-1.5">
+                  {rows.map(({ id: rId, entity: rEnt }) => {
+                    const rNameRaw = (rEnt?.attributes?.friendly_name || rId)
+                      .replace(/^EG\s+/i, '')
+                      .replace(/^OG\s+/i, '')
+                      .replace(/\s+Temperatur$/i, '');
+                    const rName = ROOM_SHORT[rNameRaw] ?? rNameRaw;
+                    const rVal = parseFloat(rEnt?.state);
+                    const unavail = !rEnt || rEnt.state === 'unavailable' || isNaN(rVal);
+                    const barPct = unavail ? 0 : Math.round(((rVal - minV) / range) * 100);
+                    const hue = unavail ? 0 : tempHue(rVal);
+                    return (
+                      <div key={rId} className="flex items-center gap-2">
+                        <span
+                          className="w-[80px] shrink-0 truncate text-[11px] font-medium"
+                          style={{ color: unavail ? 'var(--text-muted)' : `hsl(${hue},45%,60%)` }}
+                          title={rEnt?.attributes?.friendly_name || rId}
+                        >
+                          {rName}
+                        </span>
+                        <div className="relative h-1.5 flex-1 overflow-hidden rounded-full bg-[var(--glass-bg-hover)]">
+                          {!unavail && (
+                            <div
+                              className="absolute inset-y-0 left-0 rounded-full transition-all duration-500"
+                              style={{
+                                width: `${Math.max(4, barPct)}%`,
+                                background: `hsl(${hue},65%,52%)`,
+                              }}
+                            />
+                          )}
+                        </div>
+                        <span
+                          className="w-[44px] shrink-0 text-right text-[11px] font-semibold tabular-nums"
+                          style={{ color: unavail ? 'var(--text-muted)' : `hsl(${hue},55%,62%)` }}
+                        >
+                          {unavail ? '—' : `${rVal.toFixed(1)} °C`}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  })() : null;
+
   return (
     <AccessibleModalShell
       open={isOpen && !!entityId && !!entity}
@@ -687,108 +785,8 @@ export default function SensorModal({
 
           {/* RIGHT PANEL: Meta & Attributes (2 cols) */}
           <div className="relative flex flex-col gap-10 overflow-y-auto bg-[var(--glass-bg)]/10 p-6 md:p-10 lg:col-span-2">
-            {/* Sub-entity temperature overview */}
-            {hasSubEntities && (() => {
-              // Collect all leaf values to compute range for bar scaling
-              const allVals = subEntityGroups.flatMap((g) =>
-                (g.children.length > 0 ? g.children : [{ id: g.id, entity: g.entity }])
-                  .map((c) => parseFloat(c.entity?.state))
-                  .filter((v) => !isNaN(v))
-              );
-              const minV = allVals.length ? Math.min(...allVals) : 18;
-              const maxV = allVals.length ? Math.max(...allVals) : 25;
-              const range = Math.max(maxV - minV, 0.5);
-
-              return (
-                <div>
-                  <h4 className="mb-4 text-xs font-bold tracking-widest text-[var(--text-secondary)] uppercase opacity-40">
-                    Räume
-                  </h4>
-                  <div className="space-y-4">
-                    {subEntityGroups.map(({ id: gId, entity: gEnt, children }) => {
-                      const gName = gEnt.attributes?.friendly_name || gId;
-                      const gLabel = gName
-                        .replace(/\[Klima\]\s*/i, '')
-                        .replace(/Durchschnittliche\s+Temperatur\s+/i, '');
-                      const gVal = parseFloat(gEnt.state);
-                      const ROOM_SHORT = {
-                        'Luftqualitätssensor': 'Luftq.',
-                        'Badezimmer': 'Bad',
-                        'Schlafzimmer': 'Schlaf',
-                        'Kinderzimmer': 'Kinder',
-                        'Wohn/Essbereich': 'Wohn/Ess',
-                        'Gäste WC': 'G.-WC',
-                      };
-                      const rows = children.length > 0 ? children : [{ id: gId, entity: gEnt }];
-                      return (
-                        <div key={gId}>
-                          <div className="mb-2 flex items-center justify-between">
-                            <span className="text-[10px] font-bold tracking-widest text-[var(--text-secondary)] uppercase opacity-70">
-                              {gLabel}
-                            </span>
-                            {!isNaN(gVal) && (
-                              <span
-                                className="rounded-full px-2 py-0.5 text-[10px] font-bold tabular-nums"
-                                style={{
-                                  background: `hsla(${tempHue(gVal)},65%,50%,0.18)`,
-                                  color: `hsl(${tempHue(gVal)},55%,62%)`,
-                                }}
-                              >
-                                Ø {gVal.toFixed(1)} °C
-                              </span>
-                            )}
-                          </div>
-                          <div className="space-y-1.5">
-                            {rows.map(({ id: rId, entity: rEnt }) => {
-                              const rNameRaw = (rEnt?.attributes?.friendly_name || rId)
-                                .replace(/^EG\s+/i, '')
-                                .replace(/^OG\s+/i, '')
-                                .replace(/\s+Temperatur$/i, '');
-                              const rName = ROOM_SHORT[rNameRaw] ?? rNameRaw;
-                              const rVal = parseFloat(rEnt?.state);
-                              const unavail =
-                                !rEnt || rEnt.state === 'unavailable' || isNaN(rVal);
-                              const barPct = unavail
-                                ? 0
-                                : Math.round(((rVal - minV) / range) * 100);
-                              const hue = unavail ? 0 : tempHue(rVal);
-                              return (
-                                <div key={rId} className="flex items-center gap-2">
-                                  <span
-                                    className="w-[80px] shrink-0 truncate text-[11px] font-medium"
-                                    style={{ color: unavail ? 'var(--text-muted)' : `hsl(${hue},45%,60%)` }}
-                                    title={rEnt?.attributes?.friendly_name || rId}
-                                  >
-                                    {rName}
-                                  </span>
-                                  <div className="relative h-1.5 flex-1 overflow-hidden rounded-full bg-[var(--glass-bg-hover)]">
-                                    {!unavail && (
-                                      <div
-                                        className="absolute inset-y-0 left-0 rounded-full transition-all duration-500"
-                                        style={{
-                                          width: `${Math.max(4, barPct)}%`,
-                                          background: `hsl(${hue},65%,52%)`,
-                                        }}
-                                      />
-                                    )}
-                                  </div>
-                                  <span
-                                    className="w-[44px] shrink-0 text-right text-[11px] font-semibold tabular-nums"
-                                    style={{ color: unavail ? 'var(--text-muted)' : `hsl(${hue},55%,62%)` }}
-                                  >
-                                    {unavail ? '—' : `${rVal.toFixed(1)} °C`}
-                                  </span>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })()}
+            {/* Räume */}
+            {subEntityJsx}
 
             {/* Timestamps */}
             <div>

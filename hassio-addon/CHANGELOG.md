@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.20.42
+
+### Fixed
+- SensorModal: Räume-Sektion auf Mobile nach Graph, vor Zeitachse; Raumnamen abgekürzt
+
 ## 1.20.41
 
 ### Added
