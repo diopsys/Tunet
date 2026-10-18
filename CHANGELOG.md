@@ -1,3 +1,9 @@
+## [1.30.1] — 2026-10-18
+
+### Fixed
+- Mobile: Header-Titel erscheint jetzt wieder links/waagerecht (Standard-Ausrichtung war fälschlich auf `center` gesetzt)
+- Mobile: WeatherTempCard — Condition-Pill auf 2-Spalten-Mobile ausgeblendet, Temperatur-Schriftgröße auf `text-2xl` reduziert
+
 ## [1.30.0] — 2026-10-18
 
 ### Added
@@ -1864,6 +1870,17 @@
 - Add release notes.
 
 ## [1.20.42] — 2026-10-16
+
+### Added
+- Add release notes.
+
+### Changed
+- Add release notes.
+
+### Fixed
+- Add release notes.
+
+## [1.30.1] — 2026-10-18
 
 ### Added
 - Add release notes.

@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.30.1
+
+### Fixed
+- Mobile: header title alignment restored to left (default was incorrectly set to center after upstream merge)
+- Mobile: WeatherTempCard condition pill hidden on 2-column layout; temperature text reduced to smaller size
+
 ## 1.30.0
 
 ### Added

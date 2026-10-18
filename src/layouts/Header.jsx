@@ -112,7 +112,7 @@ export default function Header({
   const showBatteryNub = headerSettings?.showBatteryNub ?? true;
   const mobileAlignment = MOBILE_ALIGNMENT_CLASSES[headerSettings?.mobileAlignment]
     ? headerSettings.mobileAlignment
-    : 'center';
+    : 'left';
   const mobileAlignmentClasses = MOBILE_ALIGNMENT_CLASSES[mobileAlignment];
 
   const dateStr = now.toLocaleDateString(locale, { weekday: 'long', day: 'numeric', month: 'long' });
@@ -232,8 +232,8 @@ export default function Header({
       )}
 
       <div
-        className={`flex items-start justify-between leading-none ${
-          isMobile ? `flex-col gap-4 ${mobileAlignmentClasses.container}` : 'gap-10'
+        className={`flex items-center justify-between leading-none ${
+          isMobile ? 'gap-2' : 'gap-10'
         }`}
       >
         <div

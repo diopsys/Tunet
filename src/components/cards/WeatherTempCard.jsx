@@ -548,20 +548,22 @@ const WeatherTempCard = memo(
                     )}
                   </div>
                   <div className="flex shrink-0 flex-col items-end gap-2">
-                    <div
-                      className={`flex items-center gap-1.5 rounded-full border border-[var(--glass-border)] bg-[var(--glass-bg)] py-1 text-[var(--text-secondary)] ${
-                        isMobile ? 'px-2.5' : 'px-3'
-                      }`}
-                    >
-                      <span
-                        className={`leading-none font-bold uppercase ${
-                          isMobile ? 'text-[10px] tracking-[0.08em]' : 'text-xs tracking-widest'
+                    {!(isMobile && !isFullWidthMobile) && (
+                      <div
+                        className={`flex items-center gap-1.5 rounded-full border border-[var(--glass-border)] bg-[var(--glass-bg)] py-1 text-[var(--text-secondary)] ${
+                          isMobile ? 'px-2.5' : 'px-3'
                         }`}
                       >
-                        {info.label}
-                      </span>
-                    </div>
-                    <span className="text-4xl leading-none font-thin text-[var(--text-primary)]">
+                        <span
+                          className={`leading-none font-bold uppercase ${
+                            isMobile ? 'text-[10px] tracking-[0.08em]' : 'text-xs tracking-widest'
+                          }`}
+                        >
+                          {info.label}
+                        </span>
+                      </div>
+                    )}
+                    <span className={`leading-none font-thin text-[var(--text-primary)] ${isMobile && !isFullWidthMobile ? 'text-2xl' : 'text-4xl'}`}>
                       {formatUnitValue(displayTempValue, { fallback: '--' })}
                       {displayTempUnit}
                     </span>
