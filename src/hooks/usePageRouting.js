@@ -11,6 +11,7 @@ export function usePageRouting() {
   const { pageId } = useParams();
 
   const [activePage, _setActivePage] = useState(() => {
+    if (pageId) return pageId;
     try {
       return localStorage.getItem('tunet_active_page') || 'home';
     } catch {
@@ -18,33 +19,32 @@ export function usePageRouting() {
     }
   });
 
-  const setActivePage = useCallback((page) => {
-    _setActivePage(page);
-    try {
-      localStorage.setItem('tunet_active_page', page);
-    } catch {}
-  }, []);
+  const setActivePage = useCallback(
+    (page) => {
+      _setActivePage(page);
+      try {
+        localStorage.setItem('tunet_active_page', page);
+      } catch {}
+      navigate(`/page/${page}`, { replace: true });
+    },
+    [navigate]
+  );
 
   useEffect(() => {
     if (!pageId) return;
-    _setActivePage((prev) => {
-      if (prev !== pageId) {
-        try {
-          localStorage.setItem('tunet_active_page', pageId);
-        } catch {}
-        return pageId;
-      }
-      return prev;
-    });
+    _setActivePage(pageId);
+    try {
+      localStorage.setItem('tunet_active_page', pageId);
+    } catch {}
   }, [pageId]);
 
   useEffect(() => {
-    if (!activePage) return;
+    if (!activePage || pageId) return;
     const target = `/page/${activePage}`;
     if (location.pathname !== target) {
       navigate(target, { replace: true });
     }
-  }, [activePage, location.pathname, navigate]);
+  }, [activePage, pageId, location.pathname, navigate]);
 
   return { activePage, setActivePage };
 }

@@ -82,6 +82,10 @@ export function ModalManagementSlice({
     setSelectedAndroidTVMediaId,
     selectedAndroidTVRemoteId,
     setSelectedAndroidTVRemoteId,
+    selectedAppleTVMediaId,
+    setSelectedAppleTVMediaId,
+    selectedAppleTVRemoteId,
+    setSelectedAppleTVRemoteId,
     selectedCostTodayId,
     setSelectedCostTodayId,
     selectedCostMonthId,
@@ -139,6 +143,10 @@ export function ModalManagementSlice({
             setSelectedAndroidTVMediaId={setSelectedAndroidTVMediaId}
             selectedAndroidTVRemoteId={selectedAndroidTVRemoteId}
             setSelectedAndroidTVRemoteId={setSelectedAndroidTVRemoteId}
+            selectedAppleTVMediaId={selectedAppleTVMediaId}
+            setSelectedAppleTVMediaId={setSelectedAppleTVMediaId}
+            selectedAppleTVRemoteId={selectedAppleTVRemoteId}
+            setSelectedAppleTVRemoteId={setSelectedAppleTVRemoteId}
             selectedCostTodayId={selectedCostTodayId}
             setSelectedCostTodayId={setSelectedCostTodayId}
             selectedCostMonthId={selectedCostMonthId}

@@ -32,7 +32,7 @@ Thank you for your interest in contributing to Tunet!
 - If release check fails, fix sync/changelog mismatches before tagging.
 - Write short, natural changelog bullets for each release; do not use placeholder text like `Release metadata sync.`.
 - Add issue references in release notes when relevant (example: `(#96)`).
-- Update static Settings fallback version in `src/modals/ConfigModal.jsx` (`SETTINGS_STATIC_VERSION`) for each release.
+- The Settings fallback version is injected from `package.json` by Vite; no manual version update is needed in `ConfigModal.jsx`.
 
 ## Reporting Issues
 

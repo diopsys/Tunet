@@ -87,6 +87,147 @@ export const test = baseTest.extend({
               return;
             }
 
+            if (
+              msg.type === 'call_service' &&
+              msg.domain === 'calendar' &&
+              msg.service === 'get_events'
+            ) {
+              const eventAt = (offsetMinutes) =>
+                new Date(Date.now() + offsetMinutes * 60_000).toISOString();
+              setTimeout(() => {
+                emitMessage(this, {
+                  id: msg.id,
+                  type: 'result',
+                  success: true,
+                  result: {
+                    service_response: {
+                      calendar: {
+                        'calendar.family': {
+                          events: [
+                            {
+                              summary: 'Breakfast appointment',
+                              start: eventAt(-120),
+                              end: eventAt(-60),
+                            },
+                            {
+                              summary: 'Dinner with family',
+                              start: eventAt(60),
+                              end: eventAt(120),
+                              location: 'Home',
+                            },
+                          ],
+                        },
+                        'calendar.work': {
+                          events: [
+                            {
+                              summary: 'Project review',
+                              start: eventAt(180),
+                              end: eventAt(240),
+                            },
+                          ],
+                        },
+                      },
+                    },
+                  },
+                });
+              }, 25);
+              return;
+            }
+
+            if (msg.type === 'media_player/browse_media') {
+              const contentId = msg.media_content_id || '';
+              const browseResults = {
+                '': {
+                  title: 'Media sources',
+                  children: [
+                    {
+                      title: 'Music Assistant',
+                      media_class: 'app',
+                      media_content_type: 'app',
+                      media_content_id: 'media-source://music-assistant',
+                      can_play: false,
+                      can_expand: true,
+                    },
+                  ],
+                },
+                'media-source://music-assistant': {
+                  title: 'Music Assistant',
+                  children: [
+                    {
+                      title: 'Favorittar',
+                      media_class: 'directory',
+                      media_content_type: 'music',
+                      media_content_id: 'library://favorites',
+                      can_play: false,
+                      can_expand: true,
+                    },
+                    {
+                      title: 'Spelelister',
+                      media_class: 'directory',
+                      media_content_type: 'playlist',
+                      media_content_id: 'library://playlists',
+                      can_play: false,
+                      can_expand: true,
+                    },
+                    {
+                      title: 'Bibliotek',
+                      media_class: 'directory',
+                      media_content_type: 'music',
+                      media_content_id: 'library://albums',
+                      can_play: false,
+                      can_expand: true,
+                    },
+                  ],
+                },
+                'library://favorites': {
+                  title: 'Favorittar',
+                  children: [
+                    {
+                      title: 'Born to Be Alive',
+                      media_content_type: 'music',
+                      media_content_id: 'spotify://track/favorite-1',
+                      can_play: true,
+                      can_expand: false,
+                    },
+                  ],
+                },
+                'library://playlists': {
+                  title: 'Spelelister',
+                  children: [
+                    {
+                      title: '2023',
+                      media_content_type: 'playlist',
+                      media_content_id: 'library://playlist/2023',
+                      can_play: true,
+                      can_expand: false,
+                    },
+                  ],
+                },
+                'library://albums': {
+                  title: 'Bibliotek',
+                  children: [
+                    {
+                      title: '90-talet',
+                      media_content_type: 'album',
+                      media_content_id: 'library://album/90s',
+                      can_play: true,
+                      can_expand: false,
+                    },
+                  ],
+                },
+              };
+
+              setTimeout(() => {
+                emitMessage(this, {
+                  id: msg.id,
+                  type: 'result',
+                  success: true,
+                  result: browseResults[contentId] || { title: '', children: [] },
+                });
+              }, 140);
+              return;
+            }
+
             if (msg.type === 'auth/current_user') {
               setTimeout(() => {
                 emitMessage(this, {
@@ -145,6 +286,7 @@ export const test = baseTest.extend({
                           friendly_name: 'Bedroom Light',
                           brightness: 200,
                           supported_features: 1,
+                          entity_id: ['light.kitchen'],
                         }),
                         'light.kitchen': entityUpdate('off', {
                           friendly_name: 'Kitchen Light',
@@ -161,6 +303,24 @@ export const test = baseTest.extend({
                           friendly_name: 'Front Door Battery',
                           device_class: 'battery',
                           unit_of_measurement: '%',
+                        }),
+                        'media_player.emby_tv': entityUpdate('playing', {
+                          friendly_name: 'Gaute - Gaute TV Bibliotek Gaute TV',
+                          media_title: 'Knutsen & Ludvigsen og den fæle Rasputin',
+                          media_series_title: 'Emby',
+                          media_duration: 4505,
+                          media_position: 3558,
+                          volume_level: 0.35,
+                          is_volume_muted: false,
+                          shuffle: false,
+                          repeat: 'off',
+                          supported_features: 152511,
+                        }),
+                        'calendar.family': entityUpdate('on', {
+                          friendly_name: 'Family',
+                        }),
+                        'calendar.work': entityUpdate('off', {
+                          friendly_name: 'Work',
                         }),
                       },
                     },

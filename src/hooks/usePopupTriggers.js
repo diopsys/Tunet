@@ -44,6 +44,7 @@ function openPopupForCard(cardId, settings, modalActions, entities) {
     setShowMowerModal,
     setShowFanModal,
     setShowAndroidTVModal,
+    setShowAppleTVModal,
     setActiveCarModal,
     setShowWeatherModal,
     setShowNordpoolModal,
@@ -72,6 +73,13 @@ function openPopupForCard(cardId, settings, modalActions, entities) {
     safeClose?.();
     openFn();
   };
+
+  if (cardId.startsWith('entity_card_')) {
+    const entityId = typeof settings?.entityId === 'string' ? settings.entityId : null;
+    if (!entityId) return false;
+    closeAndOpen(() => setShowSensorInfoModal({ entityId, cardId }));
+    return true;
+  }
 
   if (cardId.startsWith('light_') || cardId.startsWith('light.')) {
     const resolvedLightId = resolveConditionEntityId(cardId, settings || {}, entities || {});
@@ -117,7 +125,7 @@ function openPopupForCard(cardId, settings, modalActions, entities) {
   if (cardId.startsWith('climate_card_')) {
     const climateId = typeof settings?.climateId === 'string' ? settings.climateId : null;
     if (!climateId) return false;
-    closeAndOpen(() => setActiveClimateEntityModal(climateId));
+    closeAndOpen(() => setActiveClimateEntityModal({ entityId: climateId, cardId }));
     return true;
   }
 
@@ -128,6 +136,11 @@ function openPopupForCard(cardId, settings, modalActions, entities) {
 
   if (cardId.startsWith('androidtv_card_')) {
     closeAndOpen(() => setShowAndroidTVModal(cardId));
+    return true;
+  }
+
+  if (cardId.startsWith('appletv_card_')) {
+    closeAndOpen(() => setShowAppleTVModal(cardId));
     return true;
   }
 
@@ -228,7 +241,8 @@ function openPopupForCard(cardId, settings, modalActions, entities) {
   }
 
   if (cardId.includes('.')) {
-    closeAndOpen(() => setShowSensorInfoModal(cardId));
+    const entityId = settings?.type === 'sensor' ? settings.entityId || cardId : cardId;
+    closeAndOpen(() => setShowSensorInfoModal(entityId === cardId ? cardId : { entityId, cardId }));
     return true;
   }
 
