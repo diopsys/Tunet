@@ -1,3 +1,10 @@
+## [1.20.43] — 2026-10-18
+
+### Changed
+- Netzladung-Simulation: „Hält für …"-Berechnung nutzt dynamischen Halte-Horizont (nächster Sonnenaufgang + 2 h bei PV-Prognose ≥ 3 kWh, sonst 24 h) statt fixem 16-h-Fenster
+- Netzladung-Simulation: PV-Sperre — ist die Sonne über dem Horizont und > 1 kWh PV noch erwartet, entfällt die Haltephase; Anzeige „Schattenenergie – sobald Speicher leer · x kWh PV noch heute"
+- Vorgangsliste: Vorgänge und Summen erst ab Zähler-Reset 18.10.2026 15:05 ausgewertet
+
 ## [1.20.42] — 2026-10-16
 
 ### Fixed

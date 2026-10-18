@@ -1,7 +1,7 @@
 // Minimal service worker for PWA installability
 // Serves cached shell offline and caches immutable build assets at runtime.
 // APP_VERSION is updated by release:prep so the browser detects a new SW on every release.
-const APP_VERSION = '1.20.42';
+const APP_VERSION = '1.20.43';
 
 const SHELL_CACHE_NAME = `tunet-shell-${APP_VERSION}`;
 const ASSET_CACHE_NAME = `tunet-assets-${APP_VERSION}`;

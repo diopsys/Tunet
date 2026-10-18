@@ -19,9 +19,13 @@ const SIM_VARIANTS = [
   { key: '8ct', label: '8 ct' },
 ];
 
-const MERGE_GAP_LADEN_MS  = 20 * 60_000; // 20 min – Speicher voll → kurze Nachlade-Pulse
-const MERGE_GAP_NUTZEN_MS =  2 * 60_000; // 2 min gap → same Vorgang
-const MAX_FENSTER_H  = 16;
+const MERGE_GAP_LADEN_MS  = 20 * 60_000;
+const MERGE_GAP_NUTZEN_MS =  2 * 60_000;
+const RESET_TS = new Date(2026, 9, 18, 15, 5).getTime(); // 18.10.2026 15:05 Zähler-Reset
+const SUN_ID           = 'sun.sun';
+const PV_REMAINING_ID  = 'sensor.pv_anlage_energy_today_remaining';
+const PV_DAY1_ID       = 'sensor.pv_anlage_energy_day_1';
+const PV_DAY2_ID       = 'sensor.pv_anlage_energy_day_2';
 
 // ── Helpers ───────────────────────────────────────────────────────────
 const fmt2 = (n) => String(n).padStart(2, '0');
@@ -53,14 +57,33 @@ function computeEntladefenster(v, entities) {
 
   if (speicherKwh == null || speicherKwh <= 0.05) return null;
 
+  // PV-Sperre: Sonne über Horizont + noch > 1 kWh PV heute → keine Haltephase
+  const sunAbove    = entities?.[SUN_ID]?.state === 'above_horizon';
+  const pvRemaining = parseFloat(entities?.[PV_REMAINING_ID]?.state);
+  if (sunAbove && !isNaN(pvRemaining) && pvRemaining > 1) {
+    return { type: 'pv_active', pvRemaining };
+  }
+
   const rates    = entities?.[OCTOPUS_ID]?.attributes?.rates;
   const forecast = entities?.[HELIOS_ID]?.attributes?.forecast;
   if (!Array.isArray(rates) || !Array.isArray(forecast) || forecast.length === 0) return null;
 
-  const now    = Date.now();
-  const maxTs  = now + MAX_FENSTER_H * 3_600_000;
-  const today  = new Date(); today.setHours(0, 0, 0, 0);
-  const tmrw   = new Date(today.getTime() + 86_400_000);
+  const now   = Date.now();
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const tmrw  = new Date(today.getTime() + 86_400_000);
+
+  // Halte-Horizont: bis nächster Sonnenaufgang + 2 h, wenn PV-Tag ≥ 3 kWh; sonst 24 h
+  let horizonTs = now + 24 * 3_600_000;
+  const nextRisingStr = entities?.[SUN_ID]?.attributes?.next_rising;
+  if (nextRisingStr) {
+    const nextRising = new Date(nextRisingStr).getTime();
+    if (!isNaN(nextRising)) {
+      const risingDay = new Date(nextRising); risingDay.setHours(0, 0, 0, 0);
+      const pvId  = risingDay.getTime() === today.getTime() ? PV_DAY1_ID : PV_DAY2_ID;
+      const pvKwh = parseFloat(entities?.[pvId]?.state);
+      if (!isNaN(pvKwh) && pvKwh >= 3) horizonTs = nextRising + 2 * 3_600_000;
+    }
+  }
 
   // Build forecast map: timestamp → soc
   const fcMap = new Map();
@@ -76,7 +99,7 @@ function computeEntladefenster(v, entities) {
     const slotStart = new Date(r.start).getTime();
     const slotEnd   = new Date(r.end).getTime();
     if (slotStart >= tmrw.getTime()) hasTomorrowRates = true;
-    if (slotStart < now || slotStart > maxTs || r.value_inc_vat == null) continue;
+    if (slotStart < now || slotStart > horizonTs || r.value_inc_vat == null) continue;
 
     // Match forecast: exact, then ±15 min
     const soc = fcMap.get(slotStart)
@@ -323,6 +346,13 @@ function FensterText({ state, v, entities, statusRaw }) {
   }
 
   if (state === 'halten') {
+    if (fenster?.type === 'pv_active') {
+      return (
+        <span className="text-[10px] text-[var(--text-secondary)]">
+          Schattenenergie – sobald Speicher leer · {fenster.pvRemaining.toFixed(1)} kWh PV noch heute
+        </span>
+      );
+    }
     if (!fenster || fenster.type === 'no_leer_slots') {
       return <span className="text-[10px] text-[var(--text-muted)]">Hält – kein Entladefenster gefunden</span>;
     }
@@ -615,7 +645,7 @@ function Vorgangsliste({ entities, conn }) {
       const wirkungsgrad = parseFloat(ent?.[WIRKUNGSGRAD_ID]?.state) || 0.85;
 
       const list = buildVorgaenge(speicherPts, kostenPts, erlosPts, einspeiseCt, wirkungsgrad);
-      const warn = checkConsistency(list, kostenPts, erlosPts, start.getTime());
+      const warn = checkConsistency(list, kostenPts, erlosPts, Math.max(start.getTime(), RESET_TS));
 
       setVorgaenge(list);
       setWarnMsg(warn);
@@ -627,9 +657,12 @@ function Vorgangsliste({ entities, conn }) {
     return () => { cancelled = true; };
   }, [conn, varKey, range]); // entities absichtlich nicht hier — würde bei jedem HA-Push neu feuern
 
-  const rangeStartTs = range === 'today'
-    ? new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate()).getTime()
-    : Date.now() - 7 * 86_400_000;
+  const rangeStartTs = Math.max(
+    range === 'today'
+      ? new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate()).getTime()
+      : Date.now() - 7 * 86_400_000,
+    RESET_TS
+  );
 
   const tabCls = (active) =>
     `px-3 py-1 rounded-full text-[9px] font-bold tracking-widest uppercase transition-all ${
@@ -666,10 +699,12 @@ function Vorgangsliste({ entities, conn }) {
 
       {!loading && !error && (
         <>
-          {vorgaenge.length === 0
-            ? <p className="text-[10px] text-[var(--text-muted)]">Noch keine Vorgänge erfasst.</p>
-            : vorgaenge.map((v, i) => <VorgangRow key={i} v={v} />)
-          }
+          {(() => {
+            const shown = vorgaenge.filter(v => v.startT >= rangeStartTs);
+            return shown.length === 0
+              ? <p className="text-[10px] text-[var(--text-muted)]">Noch keine Vorgänge erfasst.</p>
+              : shown.map((v, i) => <VorgangRow key={i} v={v} />);
+          })()}
           <VorgangSummen vorgaenge={vorgaenge} rangeStartTs={rangeStartTs} />
         </>
       )}

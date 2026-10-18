@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.20.43
+
+### Changed
+- Netzladung-Simulation: Halte-Horizont dynamisch (nächster Sonnenaufgang + 2 h wenn PV ≥ 3 kWh, sonst 24 h)
+- PV-Sperre: keine Haltephase wenn Sonne über Horizont und > 1 kWh PV noch erwartet
+- Vorgangsliste: Auswertung erst ab Zähler-Reset 18.10. 15:05
+
 ## 1.20.42
 
 ### Fixed
