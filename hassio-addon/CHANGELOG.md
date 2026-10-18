@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.30.2
+
+### Fixed
+- Mobile: page navigation pills restored to original compact style (upstream had added min-h-11 min-w-11 justify-center making them larger)
+
 ## 1.30.1
 
 ### Fixed

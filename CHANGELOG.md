@@ -1,3 +1,8 @@
+## [1.30.2] — 2026-10-18
+
+### Fixed
+- Mobile: PageNavigation-Pills wieder in altem Stil (kompakt, gap-1.5, h-4 w-4 Icons) — Upstream hatte min-h-11 min-w-11 justify-center eingebaut
+
 ## [1.30.1] — 2026-10-18
 
 ### Fixed
@@ -1881,6 +1886,17 @@
 - Add release notes.
 
 ## [1.30.1] — 2026-10-18
+
+### Added
+- Add release notes.
+
+### Changed
+- Add release notes.
+
+### Fixed
+- Add release notes.
+
+## [1.30.2] — 2026-10-18
 
 ### Added
 - Add release notes.
