@@ -1,10 +1,28 @@
 import React, { useState, useEffect, useRef, useMemo, memo } from 'react';
-import { Minus, Plus, Activity, Play, List } from 'lucide-react';
+import {
+  Minus,
+  Plus,
+  Activity,
+  Play,
+  ListChecks as List,
+  Power,
+  RefreshCw,
+  Check,
+  ArrowRight,
+  Info,
+  getIconComponent,
+} from '../../icons';
 import { getHistory, getStatistics } from '../../services/haClient';
 import SparkLine from '../charts/SparkLine';
 import { Gauge, Donut, Bar } from '../charts/SensorGauge';
 import ModernDropdown from '../ui/ModernDropdown';
 import { useConfig, useHomeAssistantMeta } from '../../contexts';
+import {
+  resolveSensorCardConfig,
+  isSensorEntityActive,
+  canSensorUseNumericVariants,
+} from '../../utils/sensorCardConfig';
+import { useSensorCardAction } from '../../hooks/useSensorCardAction';
 import {
   convertValueByKind,
   formatUnitValue,
@@ -31,12 +49,14 @@ const SensorCard = memo(
     entity,
     entities = {},
     conn,
+    callService,
     settings,
     dragProps,
     cardStyle,
-    Icon,
+    Icon: EntityIcon,
     name,
     editMode,
+    preview = false,
     controls,
     onControl,
     onOpen,
@@ -46,16 +66,54 @@ const SensorCard = memo(
     const translate = t || ((key) => key);
     const { unitsMode } = useConfig();
     const { haConfig } = useHomeAssistantMeta();
-    const state = entity?.state;
-    const unit = entity?.attributes?.unit_of_measurement || '';
+    const config = resolveSensorCardConfig(settings, entity, entities);
+    const Icon =
+      config.action.trigger === 'icon' && config.action.icon
+        ? getIconComponent(config.action.icon) || EntityIcon
+        : EntityIcon;
+    const primaryDomain = entity?.entity_id?.split('.')[0] || '';
+    const primaryState = entity?.state;
+    const displayEntity = ['entity', 'attribute'].includes(config.statusMode)
+      ? config.statusEntity
+      : entity;
+    const rawState =
+      config.statusMode === 'attribute'
+        ? displayEntity?.attributes?.[config.statusAttribute]
+        : displayEntity?.state;
+    const state =
+      rawState && typeof rawState === 'object'
+        ? JSON.stringify(rawState)
+        : typeof rawState === 'boolean'
+          ? String(rawState)
+          : rawState;
+    const isClimateTemperatureAttribute =
+      config.statusMode === 'attribute' &&
+      displayEntity?.entity_id?.startsWith('climate.') &&
+      ['current_temperature', 'temperature', 'target_temp_high', 'target_temp_low'].includes(
+        config.statusAttribute
+      );
+    const unit =
+      config.statusMode === 'attribute'
+        ? isClimateTemperatureAttribute
+          ? displayEntity?.attributes?.temperature_unit ||
+            haConfig?.unit_system?.temperature ||
+            haConfig?.temperature_unit ||
+            ''
+          : ''
+        : displayEntity?.attributes?.unit_of_measurement || '';
     const isNumeric =
-      typeof state === 'string' ? /^\s*-?\d+(\.\d+)?\s*$/.test(state) : !isNaN(parseFloat(state));
-    const domain = entity?.entity_id?.split('.')[0] || '';
-    const deviceClass = entity?.attributes?.device_class;
+      config.statusMode !== 'text' &&
+      (typeof state === 'string' ? /^\s*-?\d+(\.\d+)?\s*$/.test(state) : !isNaN(parseFloat(state)));
+    const domain = displayEntity?.entity_id?.split('.')[0] || '';
+    const deviceClass = isClimateTemperatureAttribute
+      ? 'temperature'
+      : config.statusMode === 'attribute'
+        ? undefined
+        : displayEntity?.attributes?.device_class;
     const isOnOffState = state === 'on' || state === 'off';
     const isUnavailable = state === 'unavailable' || state === 'unknown';
     const numericState = isNumeric ? parseFloat(state) : null;
-    const isBinaryNumeric = isNumeric && (numericState === 0 || numericState === 1);
+    const isBinaryNumeric = isNumeric && !unit && (numericState === 0 || numericState === 1);
     const isBinaryLike = isOnOffState || isBinaryNumeric;
     const effectiveUnitMode = getEffectiveUnitMode(unitsMode, haConfig);
     const inferredUnitKind = inferUnitKind(deviceClass, unit);
@@ -68,9 +126,11 @@ const SensorCard = memo(
           })
         : numericState;
     const displayNumericUnit =
-      isNumeric && !isBinaryNumeric && inferredUnitKind
-        ? getDisplayUnitForKind(inferredUnitKind, effectiveUnitMode)
-        : unit;
+      config.statusMode === 'text'
+        ? ''
+        : isNumeric && !isBinaryNumeric && inferredUnitKind
+          ? getDisplayUnitForKind(inferredUnitKind, effectiveUnitMode)
+          : unit;
     const isActiveState = isOnOffState
       ? state === 'on'
       : isBinaryNumeric
@@ -94,26 +154,49 @@ const SensorCard = memo(
           )
         : null;
     const toggleDisplayState =
-      isOnOffState && ['automation', 'input_boolean', 'switch', 'input_number'].includes(domain)
+      isOnOffState &&
+      ['automation', 'input_boolean', 'switch', 'input_number', 'light', 'climate'].includes(domain)
         ? translate(state === 'on' ? 'status.on' : 'status.off')
         : null;
-    const sceneDisplayState = domain === 'scene' ? translate('sensor.scene.label') : null;
+    const sceneDisplayState =
+      config.statusMode === 'auto' && domain === 'scene' ? translate('sensor.scene.label') : null;
+    const buttonDisplayState =
+      config.statusMode === 'auto' && ['button', 'input_button'].includes(domain)
+        ? translate('sensor.button.label')
+        : null;
     const customScriptStatus =
       typeof settings?.scriptStatusText === 'string' ? settings.scriptStatusText.trim() : '';
     const scriptDisplayState =
-      domain === 'script'
+      config.statusMode === 'auto' && domain === 'script'
         ? customScriptStatus ||
           translate(state === 'on' ? 'sensor.script.running' : 'sensor.script.ready')
         : null;
-    const isSelectDomain = domain === 'select' || domain === 'input_select';
+    const isSelectDomain = primaryDomain === 'select' || primaryDomain === 'input_select';
     const selectOptions = isSelectDomain ? entity?.attributes?.options || [] : [];
-    const displayState = isNumeric
+    const automaticDisplayState = isNumeric
       ? formatUnitValue(convertedNumericState, { fallback: '--' })
       : binaryDisplayState ||
         toggleDisplayState ||
         sceneDisplayState ||
+        buttonDisplayState ||
         scriptDisplayState ||
         state;
+    const displayState =
+      config.statusMode === 'text'
+        ? config.statusText || automaticDisplayState
+        : (automaticDisplayState ?? '--');
+    const actionActive = isSensorEntityActive(config.action.targetEntity);
+    const actionFeedback = useSensorCardAction({
+      conn,
+      callService,
+      action: config.action,
+      entities:
+        entities[entity?.entity_id] === entity
+          ? entities
+          : { ...entities, ...(entity ? { [entity.entity_id]: entity } : {}) },
+      onOpen,
+      disabled: editMode || preview,
+    });
     const iconToneClass = isBinaryLike
       ? isUnavailable
         ? 'bg-[var(--status-error-bg)] text-[var(--status-error-fg)]'
@@ -125,7 +208,7 @@ const SensorCard = memo(
     // Feature flags from settings
     const showControls = settings?.showControls !== false;
     const showName = settings?.showName !== false;
-    const showStatus = settings?.showStatus !== false;
+    const showStatus = config.statusMode !== 'hidden';
     const showIcon = settings?.showIcon !== false;
     const isSmall = settings?.size === 'small';
     const variant = settings?.sensorVariant || 'default';
@@ -133,6 +216,9 @@ const SensorCard = memo(
     const showGraph =
       !isSmall &&
       isNumeric &&
+      showStatus &&
+      config.statusMode !== 'attribute' &&
+      !preview &&
       domain !== 'input_number' &&
       settings?.showGraph !== false &&
       variant === 'default';
@@ -254,11 +340,11 @@ const SensorCard = memo(
     const showVariantPanel =
       !isSmall &&
       variant !== 'default' &&
-      domain !== 'input_number' &&
+      canSensorUseNumericVariants(config, displayEntity, entity) &&
       showStatus &&
       (variant === 'number' || (isNumeric && normalizedNumericState !== null));
     const showSmallVariantVisual =
-      isSmall && isRangeVariant && isNumeric && normalizedNumericState !== null;
+      showStatus && isSmall && isRangeVariant && isNumeric && normalizedNumericState !== null;
     const useDenseMobileSmallLayout = isMobile && isSmall;
     const useDenseMobileLargeLayout = isMobile && !isSmall;
     const smallVariantGaugeSize = 80;
@@ -278,17 +364,7 @@ const SensorCard = memo(
 
     const [history, setHistory] = useState([]);
     const [isVisible, setIsVisible] = useState(false);
-    const [activeUntil, setActiveUntil] = useState(0);
     const cardRef = useRef(null);
-
-    useEffect(() => {
-      if (activeUntil > 0) {
-        const timeout = setTimeout(() => {
-          setActiveUntil(0);
-        }, activeUntil - Date.now());
-        return () => clearTimeout(timeout);
-      }
-    }, [activeUntil]);
 
     useEffect(() => {
       if (typeof IntersectionObserver === 'undefined') {
@@ -313,8 +389,15 @@ const SensorCard = memo(
       return () => observer.disconnect();
     }, []);
 
+    // Latest state in a ref: the flat-line fallback reads it without
+    // re-fetching 24h of history on every entity update.
+    const stateRef = useRef(state);
     useEffect(() => {
-      if (!conn || !entity?.entity_id || !showGraph || !isVisible) {
+      stateRef.current = state;
+    }, [state]);
+
+    useEffect(() => {
+      if (!conn || !displayEntity?.entity_id || !showGraph || !isVisible) {
         if (!isVisible && showGraph) {
           // Keep empty while waiting for visibility
           return;
@@ -324,16 +407,18 @@ const SensorCard = memo(
         return;
       }
 
+      let cancelled = false;
       const fetchHistory = async () => {
         try {
           const end = new Date();
           const start = new Date(end.getTime() - 24 * 60 * 60 * 1000);
           const data = await getHistory(conn, {
-            entityId: entity.entity_id,
+            entityId: displayEntity.entity_id,
             start,
             end,
             minimal_response: true,
           });
+          if (cancelled) return;
 
           const processed = (data && Array.isArray(data) ? data : [])
             .map((d) => {
@@ -372,11 +457,12 @@ const SensorCard = memo(
           }
 
           const stats = await getStatistics(conn, {
-            statisticId: entity.entity_id,
+            statisticId: displayEntity.entity_id,
             start,
             end,
             period: 'hour',
           });
+          if (cancelled) return;
 
           const statPoints = (stats && Array.isArray(stats) ? stats : [])
             .map((d) => ({
@@ -401,9 +487,9 @@ const SensorCard = memo(
             return;
           }
 
-          if (!isNaN(parseFloat(state))) {
+          if (!isNaN(parseFloat(stateRef.current))) {
             const now = new Date();
-            const currentValue = parseFloat(state);
+            const currentValue = parseFloat(stateRef.current);
             setHistory([
               { value: currentValue, time: new Date(now.getTime() - 60 * 60 * 1000) },
               { value: currentValue, time: now },
@@ -413,6 +499,7 @@ const SensorCard = memo(
 
           setHistory([]);
         } catch (e) {
+          if (cancelled) return;
           console.error('Failed to fetch history', e);
           setHistory([]);
         }
@@ -428,17 +515,27 @@ const SensorCard = memo(
       }
 
       return () => {
+        cancelled = true;
         if (idleId) window.cancelIdleCallback(idleId);
         if (timerId) clearTimeout(timerId);
       };
-    }, [conn, entity?.entity_id, showGraph, state, isVisible]);
+    }, [conn, displayEntity?.entity_id, showGraph, isVisible]);
 
     // Early return AFTER all hooks to respect Rules of Hooks
     if (!entity) return null;
 
     // Determine controls based on domain
+    const managedAction =
+      !config.action.isAutomatic ||
+      Boolean(
+        config.action.label || config.action.labelOn || config.action.labelOff || config.action.icon
+      ) ||
+      config.action.trigger !== 'button' ||
+      config.action.entityId !== entity.entity_id ||
+      ['scene', 'script', 'button', 'input_button', 'climate'].includes(primaryDomain);
+    const useCompactMobileActionLayout = useDenseMobileLargeLayout && managedAction;
     const isToggleDomain =
-      domain === 'input_boolean' || domain === 'switch' || domain === 'automation';
+      !managedAction && ['input_boolean', 'switch', 'automation', 'light'].includes(primaryDomain);
     const showToggleControls = isToggleDomain && showControls;
     const showCompactMobileToggleState = isMobile && showToggleControls && showStatus && !isNumeric;
     const useCompactMobileToggleLayout = useDenseMobileLargeLayout && showToggleControls;
@@ -458,13 +555,19 @@ const SensorCard = memo(
       </span>
     );
 
+    const control = (action, value) => {
+      if (editMode || preview) return;
+      Promise.resolve(onControl?.(action, value)).catch(() => {});
+    };
     const renderSelectDropdown = (compact = false) => (
       <ModernDropdown
         label={translate('sensor.select.label')}
         icon={compact ? undefined : List}
         options={selectOptions}
-        current={state || ''}
-        onChange={(option) => onControl('select_option', option)}
+        current={primaryState || ''}
+        onChange={(option) => {
+          control('select_option', option);
+        }}
         placeholder={translate('sensor.select.label')}
         labelHidden
         variant="compact"
@@ -488,7 +591,103 @@ const SensorCard = memo(
       />
     );
 
+    const actionUnavailable =
+      config.action.type !== 'service' &&
+      config.action.entityId &&
+      (!config.action.targetEntity ||
+        !config.action.targetSupported ||
+        config.action.targetEntity.state === 'unavailable' ||
+        (config.action.targetEntity.state === 'unknown' &&
+          ['toggle', 'turn_on', 'turn_off'].includes(config.action.type)));
+    const actionDisabled =
+      editMode ||
+      preview ||
+      actionFeedback.pending ||
+      (config.action.type !== 'more-info' && (!conn || actionUnavailable));
+    const actionLabel =
+      (actionActive ? config.action.labelOn : config.action.labelOff) ||
+      config.action.label ||
+      (config.action.type === 'scene'
+        ? translate('sensor.scene.activate')
+        : config.action.type === 'script'
+          ? translate('sensor.script.run')
+          : config.action.type === 'toggle'
+            ? translate(actionActive ? 'sensor.action.turnOff' : 'sensor.action.turnOn')
+            : config.action.type === 'turn_on'
+              ? translate('sensor.action.turnOn')
+              : config.action.type === 'turn_off'
+                ? translate('sensor.action.turnOff')
+                : config.action.type === 'more-info'
+                  ? translate('sensor.action.details')
+                  : config.action.type === 'press'
+                    ? translate('sensor.action.press')
+                    : translate('sensor.scene.activate'));
+    const ActionIcon =
+      getIconComponent(config.action.icon) ||
+      (['toggle', 'turn_on', 'turn_off'].includes(config.action.type)
+        ? Power
+        : config.action.type === 'more-info'
+          ? ArrowRight
+          : Play);
+    const executeAction = (event, override) => {
+      event?.stopPropagation();
+      if (actionDisabled) return;
+      actionFeedback.execute(override);
+    };
+    const handleCardClick = (event) => {
+      if (editMode || preview) return;
+      if (config.action.trigger === 'card' && config.action.type !== 'none') executeAction(event);
+      else onOpen?.(event);
+    };
+    const handleCardKeyDown = (event) => {
+      if (event.target !== event.currentTarget || !['Enter', ' '].includes(event.key)) return;
+      event.preventDefault();
+      handleCardClick(event);
+    };
+    const renderFeedback = () =>
+      actionFeedback.status !== 'idle' && (
+        <span
+          role="status"
+          aria-live="polite"
+          className={`block text-xs ${['error', 'timeout'].includes(actionFeedback.status) ? 'text-[var(--status-error-fg)]' : 'text-[var(--text-secondary)]'}`}
+        >
+          {translate(`sensor.action.${actionFeedback.status}`)}
+        </span>
+      );
+    const renderPrimaryButton = (compact = false) =>
+      showControls &&
+      config.action.type !== 'none' &&
+      config.action.trigger === 'button' && (
+        <button
+          type="button"
+          onClick={executeAction}
+          disabled={actionDisabled}
+          aria-busy={actionFeedback.pending}
+          title={actionLabel}
+          className={`relative z-20 flex min-h-11 ${compact ? 'max-w-[min(10rem,45cqw)] shrink-0 px-3 @max-[200px]:w-11 @max-[200px]:px-0' : 'w-full px-4'} items-center justify-center gap-2 rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] py-2 text-xs font-bold text-[var(--text-primary)] transition-all hover:bg-[var(--glass-bg-hover)] active:scale-95 disabled:opacity-60`}
+        >
+          {actionFeedback.pending ? (
+            <RefreshCw className="h-4 w-4 shrink-0 animate-spin motion-reduce:animate-none" />
+          ) : actionFeedback.status === 'confirmed' || actionFeedback.status === 'sent' ? (
+            <Check className="h-4 w-4 shrink-0" />
+          ) : (
+            <ActionIcon className="h-4 w-4 shrink-0" />
+          )}
+          <span
+            className={`${compact ? 'line-clamp-2 @max-[200px]:sr-only' : ''} min-w-0 break-words`}
+          >
+            {actionLabel}
+          </span>
+        </button>
+      );
+
     const renderControls = () => {
+      if (managedAction)
+        return (
+          <div className={isSmall ? '' : useCompactMobileActionLayout ? 'mt-2' : 'mt-4'}>
+            {renderPrimaryButton(isSmall)}
+          </div>
+        );
       // Select entities always show the dropdown since it is the primary interaction
       if (isSelectDomain && selectOptions.length > 0) {
         if (isSmall) {
@@ -504,51 +703,22 @@ const SensorCard = memo(
 
       if (!showControls) return null;
 
-      if (domain === 'script' || domain === 'scene') {
-        const showActive = (domain === 'script' && state === 'on') || Date.now() < activeUntil;
-        const label = showActive
-          ? domain === 'scene'
-            ? t('sensor.scene.activated')
-            : t('sensor.script.ran')
-          : domain === 'script'
-            ? t('sensor.script.run')
-            : t('sensor.scene.activate');
-
-        const handleRun = (e) => {
-          e.stopPropagation();
-          onControl('turn_on');
-          setActiveUntil(Date.now() + 5000);
-        };
-
-        if (isSmall) {
-          return (
-            <div className="flex flex-col items-center gap-1 rounded-lg bg-[var(--glass-bg)] p-0.5">
-              <button
-                onClick={handleRun}
-                className={`flex h-5 w-6 items-center justify-center rounded-md transition-all hover:bg-[var(--glass-bg-hover)] active:scale-95 ${showActive ? 'bg-[var(--status-success-bg)] text-[var(--status-success-fg)]' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
-              >
-                <Play className="h-3 w-3 fill-current" />
-              </button>
-            </div>
-          );
-        }
-
-        return (
-          <div className="mt-4 flex w-full items-center">
-            <button
-              onClick={handleRun}
-              className={`w-full rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] py-2 hover:bg-[var(--glass-bg-hover)] ${showActive ? 'border-[var(--status-success-border)] bg-[var(--status-success-bg)] text-[var(--status-success-fg)]' : 'text-[var(--text-primary)]'} flex items-center justify-center gap-2 text-xs font-bold tracking-widest uppercase transition-all active:scale-95`}
-            >
-              <Play className="h-3 w-3 fill-current" /> {label}
-            </button>
-          </div>
-        );
-      }
-
-      if (domain === 'input_number') {
+      if (primaryDomain === 'input_number') {
         const min = entity.attributes?.min || 0;
         const max = entity.attributes?.max || 100;
-        const val = parseFloat(state);
+        const val = parseFloat(primaryState);
+        const inputUnit = entity.attributes?.unit_of_measurement || '';
+        const inputKind = inferUnitKind(entity.attributes?.device_class, inputUnit);
+        const inputDisplayValue = inputKind
+          ? convertValueByKind(val, {
+              kind: inputKind,
+              fromUnit: inputUnit,
+              unitMode: effectiveUnitMode,
+            })
+          : val;
+        const inputDisplayUnit = inputKind
+          ? getDisplayUnitForKind(inputKind, effectiveUnitMode)
+          : inputUnit;
 
         if (isSmall) {
           return (
@@ -556,7 +726,7 @@ const SensorCard = memo(
               <button
                 onClick={(e) => {
                   e.stopPropagation();
-                  onControl('increment');
+                  control('increment');
                 }}
                 className="flex h-5 w-6 items-center justify-center rounded-md text-[var(--text-secondary)] transition-all hover:bg-[var(--glass-bg-hover)] hover:text-[var(--text-primary)] active:scale-95"
                 disabled={val >= max}
@@ -566,7 +736,7 @@ const SensorCard = memo(
               <button
                 onClick={(e) => {
                   e.stopPropagation();
-                  onControl('decrement');
+                  control('decrement');
                 }}
                 className="flex h-5 w-6 items-center justify-center rounded-md text-[var(--text-secondary)] transition-all hover:bg-[var(--glass-bg-hover)] hover:text-[var(--text-primary)] active:scale-95"
                 disabled={val <= min}
@@ -582,7 +752,7 @@ const SensorCard = memo(
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                onControl('decrement');
+                control('decrement');
               }}
               className="flex h-7 w-7 items-center justify-center rounded-lg text-[var(--text-secondary)] transition-all hover:bg-[var(--glass-bg-hover)] hover:text-[var(--text-primary)] active:scale-95"
               disabled={val <= min}
@@ -591,16 +761,16 @@ const SensorCard = memo(
             </button>
             <div className="flex items-baseline gap-1">
               <span className="text-base font-semibold tracking-tight text-[var(--text-primary)]">
-                {isNumeric ? formatUnitValue(convertedNumericState, { fallback: '--' }) : state}
+                {formatUnitValue(inputDisplayValue, { fallback: '--' })}
               </span>
               <span className="ml-1 text-[10px] font-medium tracking-wider text-[var(--text-secondary)] uppercase">
-                {displayNumericUnit}
+                {inputDisplayUnit}
               </span>
             </div>
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                onControl('increment');
+                control('increment');
               }}
               className="flex h-7 w-7 items-center justify-center rounded-lg text-[var(--text-secondary)] transition-all hover:bg-[var(--glass-bg-hover)] hover:text-[var(--text-primary)] active:scale-95"
               disabled={val >= max}
@@ -667,21 +837,67 @@ const SensorCard = memo(
       return null;
     };
 
+    const iconIsAction = config.action.trigger === 'icon' && config.action.type !== 'none';
+    const IconTag = iconIsAction ? 'button' : 'div';
+    const SmallIconTag = iconIsAction || showToggleControls ? 'button' : 'div';
+    const cardIsAction = config.action.trigger === 'card' && config.action.type !== 'none';
+    const showDetailsButton = cardIsAction && config.action.type !== 'more-info';
+    const cardIsInteractive = (cardIsAction || managedAction) && !editMode && !preview;
+    const cardLabel = cardIsAction
+      ? actionLabel
+      : `${String(name)}: ${translate('sensor.action.details')}`;
+    const showInputStatus =
+      primaryDomain !== 'input_number' || managedAction || config.statusMode !== 'auto';
+    const detailsButton = showDetailsButton && (
+      <button
+        type="button"
+        disabled={editMode || preview}
+        aria-label={translate('sensor.action.details')}
+        title={translate('sensor.action.details')}
+        onClick={(event) => {
+          event.stopPropagation();
+          onOpen?.();
+        }}
+        className="relative z-20 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[var(--text-muted)] transition-colors before:absolute before:-inset-1.5 hover:bg-[var(--glass-bg-hover)] hover:text-[var(--text-primary)]"
+      >
+        <Info className="h-4 w-4" aria-hidden="true" />
+      </button>
+    );
+    const actionCaption =
+      config.action.trigger !== 'button' && config.action.type !== 'none'
+        ? config.action.label
+        : '';
+    const renderActionCaption = (className = '') =>
+      actionCaption ? (
+        <span
+          className={`flex min-w-0 items-center gap-1.5 text-xs font-medium text-[var(--text-secondary)] ${className}`}
+        >
+          <ActionIcon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+          <span className="truncate">{actionCaption}</span>
+        </span>
+      ) : null;
+
     if (isSmall) {
       const smallToggleIconClass = showToggleControls
-        ? isActiveState
+        ? actionActive
           ? 'ring-1 ring-[var(--accent-color)]/40 bg-[var(--accent-bg)] text-[var(--accent-color)]'
           : 'bg-[var(--glass-bg)] text-[var(--text-secondary)] opacity-50'
-        : iconToneClass;
+        : iconIsAction && actionActive
+          ? 'bg-[var(--accent-bg)] text-[var(--accent-color)]'
+          : iconToneClass;
 
       return (
         <div
           ref={cardRef}
           {...dragProps}
           data-haptic={editMode ? undefined : 'card'}
-          onClick={(e) => {
-            if (!editMode) onOpen?.(e);
-          }}
+          onClick={handleCardClick}
+          onKeyDown={handleCardKeyDown}
+          role={cardIsInteractive ? 'button' : undefined}
+          tabIndex={cardIsInteractive ? 0 : undefined}
+          aria-label={cardIsInteractive ? cardLabel : undefined}
+          aria-busy={cardIsAction ? actionFeedback.pending : undefined}
+          aria-disabled={cardIsAction ? !!actionDisabled : undefined}
           className={`touch-feedback group relative flex h-full overflow-hidden rounded-3xl border font-sans transition-all duration-500 ${useDenseMobileSmallLayout ? 'items-center gap-3 p-3 pl-4' : 'items-center gap-3 p-4 pl-5'} ${!editMode ? 'cursor-pointer' : 'cursor-move'}`}
           style={{ ...cardStyle, containerType: 'inline-size' }}
         >
@@ -690,28 +906,33 @@ const SensorCard = memo(
             className={`relative flex min-w-0 flex-1 items-center ${useDenseMobileSmallLayout ? 'gap-2.5' : 'gap-3'}`}
           >
             {showIcon && (
-              <div
-                className={`flex flex-shrink-0 items-center justify-center ${useDenseMobileSmallLayout ? 'h-9 w-9 rounded-xl' : 'h-10 w-10 rounded-xl'} ${smallToggleIconClass} transition-all duration-300 group-hover:scale-110 group-hover:shadow-[0_0_15px_rgba(255,255,255,0.1)]`}
+              <SmallIconTag
+                type={iconIsAction || showToggleControls ? 'button' : undefined}
+                disabled={iconIsAction || showToggleControls ? actionDisabled : undefined}
+                aria-label={iconIsAction || showToggleControls ? actionLabel : undefined}
+                aria-busy={iconIsAction || showToggleControls ? actionFeedback.pending : undefined}
+                className={`flex flex-shrink-0 items-center justify-center ${iconIsAction || showToggleControls ? 'h-11 w-11 rounded-xl' : useDenseMobileSmallLayout ? 'h-9 w-9 rounded-xl' : 'h-10 w-10 rounded-xl'} ${smallToggleIconClass} transition-all duration-300 group-hover:scale-110 group-hover:shadow-[0_0_15px_rgba(255,255,255,0.1)]`}
                 onClick={
-                  showToggleControls && !editMode
+                  (iconIsAction || showToggleControls) && !editMode && !preview
                     ? (e) => {
                         e.stopPropagation();
-                        onControl('toggle');
+                        executeAction(e);
                       }
                     : undefined
                 }
-                role={showToggleControls ? 'button' : undefined}
-                tabIndex={showToggleControls ? 0 : undefined}
+                tabIndex={iconIsAction || showToggleControls ? 0 : undefined}
                 style={showToggleControls ? { cursor: 'pointer' } : undefined}
               >
-                {Icon ? (
+                {(iconIsAction || showToggleControls) && actionFeedback.pending ? (
+                  <RefreshCw className="h-5 w-5 animate-spin motion-reduce:animate-none" />
+                ) : Icon ? (
                   <Icon
                     className={`${useDenseMobileSmallLayout ? 'h-4.5 w-4.5' : 'h-5 w-5'} stroke-[1.5px]`}
                   />
                 ) : (
                   <Activity className={useDenseMobileSmallLayout ? 'h-4.5 w-4.5' : 'h-5 w-5'} />
                 )}
-              </div>
+              </SmallIconTag>
             )}
             <div className="flex min-w-0 flex-1 flex-col">
               {showName && (
@@ -753,6 +974,9 @@ const SensorCard = memo(
                     )}
                 </div>
               )}
+              {actionFeedback.status !== 'idle'
+                ? renderFeedback()
+                : renderActionCaption('mt-1 @max-[200px]:hidden')}
             </div>
 
             {showSmallVariantVisual && (
@@ -766,6 +990,7 @@ const SensorCard = memo(
           </div>
 
           {!showToggleControls && <div className="shrink-0">{renderControls()}</div>}
+          {detailsButton}
         </div>
       );
     }
@@ -775,10 +1000,14 @@ const SensorCard = memo(
         ref={cardRef}
         {...dragProps}
         data-haptic={editMode ? undefined : 'card'}
-        onClick={(e) => {
-          if (!editMode) onOpen?.(e);
-        }}
-        className={`touch-feedback group relative flex h-full flex-col overflow-hidden rounded-3xl border font-sans transition-all duration-500 ${useDenseMobileLargeLayout ? (useCompactMobileToggleLayout ? 'p-4' : 'p-5') : useCompactDesktopSelectLayout ? 'p-5' : 'p-7'} ${useCompactMobileToggleLayout || useCompactSelectLayout ? 'justify-start' : 'justify-between'} ${!editMode ? 'cursor-pointer' : 'cursor-move'}`}
+        onClick={handleCardClick}
+        onKeyDown={handleCardKeyDown}
+        role={cardIsInteractive ? 'button' : undefined}
+        tabIndex={cardIsInteractive ? 0 : undefined}
+        aria-label={cardIsInteractive ? cardLabel : undefined}
+        aria-busy={cardIsAction ? actionFeedback.pending : undefined}
+        aria-disabled={cardIsAction ? !!actionDisabled : undefined}
+        className={`touch-feedback group relative flex h-full flex-col overflow-hidden rounded-3xl border font-sans transition-all duration-500 ${useCompactMobileActionLayout ? 'p-3' : useDenseMobileLargeLayout ? (useCompactMobileToggleLayout ? 'p-4' : 'p-5') : useCompactDesktopSelectLayout ? 'p-5' : 'p-7'} ${useCompactMobileToggleLayout || useCompactSelectLayout ? 'justify-start' : 'justify-between'} ${!editMode ? 'cursor-pointer' : 'cursor-move'}`}
         style={cardStyle}
       >
         {controls}
@@ -807,10 +1036,17 @@ const SensorCard = memo(
         >
           <div className="flex min-w-0 flex-col items-start">
             {showIcon ? (
-              <div
-                className={`flex items-center justify-center ${useDenseMobileLargeLayout ? (useCompactMobileToggleLayout ? 'h-9 w-9 rounded-xl' : 'h-10 w-10 rounded-xl') : useCompactDesktopSelectLayout ? 'h-10 w-10 rounded-xl' : 'h-11 w-11 rounded-2xl'} ${iconToneClass} transition-transform duration-500 group-hover:scale-110 group-hover:rotate-3`}
+              <IconTag
+                type={iconIsAction ? 'button' : undefined}
+                disabled={iconIsAction ? actionDisabled : undefined}
+                onClick={iconIsAction ? executeAction : undefined}
+                aria-label={iconIsAction ? actionLabel : undefined}
+                aria-busy={iconIsAction ? actionFeedback.pending : undefined}
+                className={`flex items-center justify-center ${iconIsAction ? 'h-11 w-11 rounded-2xl' : useCompactMobileActionLayout ? 'h-8 w-8 rounded-xl' : useDenseMobileLargeLayout ? (useCompactMobileToggleLayout ? 'h-9 w-9 rounded-xl' : 'h-10 w-10 rounded-xl') : useCompactDesktopSelectLayout ? 'h-10 w-10 rounded-xl' : 'h-11 w-11 rounded-2xl'} ${iconIsAction && actionActive ? 'bg-[var(--accent-bg)] text-[var(--accent-color)]' : iconToneClass} transition-transform duration-500 group-hover:scale-110 group-hover:rotate-3`}
               >
-                {Icon ? (
+                {iconIsAction && actionFeedback.pending ? (
+                  <RefreshCw className="h-5 w-5 animate-spin motion-reduce:animate-none" />
+                ) : Icon ? (
                   <Icon
                     className={`${useDenseMobileLargeLayout ? (useCompactMobileToggleLayout ? 'h-[15px] w-[15px]' : 'h-4 w-4') : useCompactDesktopSelectLayout ? 'h-4 w-4' : 'h-5 w-5'} stroke-[1.5px]`}
                   />
@@ -827,7 +1063,7 @@ const SensorCard = memo(
                     }
                   />
                 )}
-              </div>
+              </IconTag>
             ) : (
               <div
                 className={
@@ -858,7 +1094,7 @@ const SensorCard = memo(
             )}
           </div>
 
-          {domain !== 'input_number' && showStatus && isNumeric && (
+          {showInputStatus && showStatus && isNumeric && (
             <div
               className={`flex shrink-0 items-baseline justify-end text-right ${useCompactMobileRangeLayout ? 'gap-1' : useDenseMobileLargeLayout ? 'gap-1.5' : 'gap-1.5'}`}
             >
@@ -880,7 +1116,7 @@ const SensorCard = memo(
 
         {useDenseMobileLargeLayout && showName && (
           <p
-            className={`relative z-10 ${useCompactMobileToggleLayout ? 'mt-1 text-[9px]' : 'mt-1.5 text-[10px]'} line-clamp-2 w-full font-bold tracking-wide text-[var(--text-secondary)] uppercase opacity-60`}
+            className={`relative z-10 shrink-0 ${useCompactMobileToggleLayout || useCompactMobileActionLayout ? 'mt-1 text-[9px]' : 'mt-1.5 text-[10px]'} line-clamp-2 w-full font-bold tracking-wide text-[var(--text-secondary)] uppercase opacity-60`}
             title={String(name)}
           >
             {String(name)}
@@ -888,54 +1124,64 @@ const SensorCard = memo(
         )}
 
         <div
-          className={`relative z-10 ${useDenseMobileLargeLayout ? (useCompactMobileToggleLayout ? 'mt-1' : useCompactMobileRangeLayout ? 'mt-1' : 'mt-2') : useCompactDesktopSelectLayout ? 'mt-2.5' : 'mt-4'} ${useCompactMobileToggleLayout ? 'mt-auto pt-2' : ''}`}
+          className={`relative z-10 ${useDenseMobileLargeLayout ? (useCompactMobileToggleLayout || useCompactMobileActionLayout ? 'mt-1' : useCompactMobileRangeLayout ? 'mt-1' : 'mt-2') : useCompactDesktopSelectLayout ? 'mt-2.5' : 'mt-4'} ${useCompactMobileToggleLayout ? 'mt-auto pt-2' : ''}`}
         >
-          {domain !== 'input_number' &&
-            showStatus &&
-            !isNumeric &&
-            !showCompactMobileToggleState && (
-              <div
-                className={
-                  useDenseMobileLargeLayout
+          {showInputStatus && showStatus && !isNumeric && !showCompactMobileToggleState && (
+            <div
+              className={
+                useCompactMobileActionLayout
+                  ? ''
+                  : useDenseMobileLargeLayout
                     ? 'mb-2'
                     : useCompactDesktopSelectLayout
                       ? 'mb-2'
                       : 'mb-3'
-                }
+              }
+            >
+              <span
+                className={`${useDenseMobileLargeLayout ? (isSelectDomain ? 'text-[1.2rem]' : 'text-[1.4rem]') : useCompactDesktopSelectLayout ? 'text-[2rem]' : 'text-3xl'} block truncate leading-none font-thin text-[var(--text-primary)]`}
               >
-                <span
-                  className={`${useDenseMobileLargeLayout ? (isSelectDomain ? 'text-[1.2rem]' : 'text-[1.4rem]') : useCompactDesktopSelectLayout ? 'text-[2rem]' : 'text-3xl'} block truncate leading-none font-thin text-[var(--text-primary)]`}
-                >
-                  {displayState}
-                </span>
-              </div>
-            )}
+                {displayState}
+              </span>
+            </div>
+          )}
 
           {showToggleControls ? (
             <div
               className={`${useDenseMobileLargeLayout ? `${useCompactMobileToggleLayout ? 'mt-0 gap-1.5' : 'mt-3 gap-2'} grid w-full grid-cols-2 bg-transparent p-0` : 'mt-4 flex w-fit items-center gap-2 rounded-full bg-[var(--glass-bg)] p-1'}`}
             >
               <button
+                disabled={actionDisabled}
+                aria-busy={actionFeedback.pending}
                 onClick={(e) => {
                   e.stopPropagation();
-                  if (state === 'on') onControl('toggle');
+                  if (primaryState === 'on') executeAction(e, 'turn_off');
                 }}
-                className={`${useDenseMobileLargeLayout ? `${useCompactMobileToggleLayout ? 'flex h-9 items-center justify-center rounded-xl px-2.5 py-2 text-[9px]' : 'flex h-10 items-center justify-center rounded-xl px-3 py-2 text-[10px]'} bg-[var(--glass-bg)]` : 'rounded-full px-4 py-2 text-xs'} font-bold tracking-widest uppercase transition-all ${state !== 'on' ? 'bg-[var(--glass-bg-hover)] text-[var(--text-primary)]' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
+                className={`${useDenseMobileLargeLayout ? `${useCompactMobileToggleLayout ? 'flex h-9 items-center justify-center rounded-xl px-2.5 py-2 text-[9px]' : 'flex h-10 items-center justify-center rounded-xl px-3 py-2 text-[10px]'} bg-[var(--glass-bg)]` : 'rounded-full px-4 py-2 text-xs'} font-bold tracking-widest uppercase transition-all ${primaryState !== 'on' ? 'bg-[var(--glass-bg-hover)] text-[var(--text-primary)]' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
               >
                 {translate('common.off')}
               </button>
               <button
+                disabled={actionDisabled}
+                aria-busy={actionFeedback.pending}
                 onClick={(e) => {
                   e.stopPropagation();
-                  if (state !== 'on') onControl('toggle');
+                  if (primaryState !== 'on') executeAction(e, 'turn_on');
                 }}
-                className={`${useDenseMobileLargeLayout ? `${useCompactMobileToggleLayout ? 'flex h-9 items-center justify-center rounded-xl px-2.5 py-2 text-[9px]' : 'flex h-10 items-center justify-center rounded-xl px-3 py-2 text-[10px]'} bg-[var(--glass-bg)]` : 'rounded-full px-4 py-2 text-xs'} font-bold tracking-widest uppercase transition-all ${state === 'on' ? 'bg-[var(--accent-bg)] text-[var(--accent-color)]' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
+                className={`${useDenseMobileLargeLayout ? `${useCompactMobileToggleLayout ? 'flex h-9 items-center justify-center rounded-xl px-2.5 py-2 text-[9px]' : 'flex h-10 items-center justify-center rounded-xl px-3 py-2 text-[10px]'} bg-[var(--glass-bg)]` : 'rounded-full px-4 py-2 text-xs'} font-bold tracking-widest uppercase transition-all ${primaryState === 'on' ? 'bg-[var(--accent-bg)] text-[var(--accent-color)]' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
               >
                 {translate('common.on')}
               </button>
             </div>
           ) : (
             <>{renderControls()}</>
+          )}
+          {renderFeedback()}
+          {(actionCaption || detailsButton) && (
+            <div className="mt-2 flex min-h-8 items-center justify-between gap-2">
+              {renderActionCaption()}
+              {detailsButton && <span className="ml-auto">{detailsButton}</span>}
+            </div>
           )}
 
           {showVariantPanel && (

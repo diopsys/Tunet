@@ -6,6 +6,7 @@ import { prepareOctopusData } from '../../services/octopusUtils';
 const CalendarModal = lazy(() => import('../../modals/CalendarModal'));
 const CostModal = lazy(() => import('../../modals/CostModal'));
 const GenericAndroidTVModal = lazy(() => import('../../modals/GenericAndroidTVModal'));
+const GenericAppleTVModal = lazy(() => import('../../modals/GenericAppleTVModal'));
 const GenericClimateModal = lazy(() => import('../../modals/GenericClimateModal'));
 const GenericFanModal = lazy(() => import('../../modals/GenericFanModal'));
 const CoverModal = lazy(() => import('../../modals/CoverModal'));
@@ -49,6 +50,8 @@ export function ModalEntitySlice({ core, modals, cardConfig, entityHelpers, reso
     setShowPersonModal,
     showAndroidTVModal,
     setShowAndroidTVModal,
+    showAppleTVModal,
+    setShowAppleTVModal,
     showVacuumModal,
     setShowVacuumModal,
     showMowerModal,
@@ -176,20 +179,37 @@ export function ModalEntitySlice({ core, modals, cardConfig, entityHelpers, reso
           );
         })()}
 
-      {activeClimateEntityModal && entities[activeClimateEntityModal] && (
-        <ModalSuspense>
-          <GenericClimateModal
-            entityId={activeClimateEntityModal}
-            entity={entities[activeClimateEntityModal]}
-            onClose={() => setActiveClimateEntityModal(null)}
-            callService={callService}
-            hvacMap={hvacMap}
-            fanMap={fanMap}
-            swingMap={swingMap}
-            t={t}
-          />
-        </ModalSuspense>
-      )}
+      {activeClimateEntityModal &&
+        (() => {
+          const target =
+            typeof activeClimateEntityModal === 'string'
+              ? { entityId: activeClimateEntityModal }
+              : activeClimateEntityModal;
+          const climateEntity = entities[target.entityId];
+          if (!climateEntity) return null;
+
+          const settingsKey =
+            target.settingsKey || (target.cardId ? getCardSettingsKey(target.cardId) : null);
+          const settings = settingsKey
+            ? cardSettings[settingsKey] || cardSettings[target.cardId] || {}
+            : {};
+
+          return (
+            <ModalSuspense>
+              <GenericClimateModal
+                entityId={target.entityId}
+                entity={climateEntity}
+                onClose={() => setActiveClimateEntityModal(null)}
+                callService={callService}
+                hvacMap={hvacMap}
+                fanMap={fanMap}
+                swingMap={swingMap}
+                settings={settings}
+                t={t}
+              />
+            </ModalSuspense>
+          );
+        })()}
 
       {showLightModal && (
         <ModalSuspense>
@@ -216,6 +236,29 @@ export function ModalEntitySlice({ core, modals, cardConfig, entityHelpers, reso
               <GenericAndroidTVModal
                 show={true}
                 onClose={() => setShowAndroidTVModal(null)}
+                entities={entities}
+                mediaPlayerId={settings.mediaPlayerId}
+                remoteId={settings.remoteId}
+                linkedMediaPlayers={settings.linkedMediaPlayers}
+                callService={callService}
+                getA={getA}
+                getEntityImageUrl={getEntityImageUrl}
+                customNames={customNames}
+                t={t}
+              />
+            </ModalSuspense>
+          );
+        })()}
+
+      {showAppleTVModal &&
+        (() => {
+          const settings = cardSettings[getCardSettingsKey(showAppleTVModal)] || {};
+          return (
+            <ModalSuspense>
+              <GenericAppleTVModal
+                show={true}
+                cardId={showAppleTVModal}
+                onClose={() => setShowAppleTVModal(null)}
                 entities={entities}
                 mediaPlayerId={settings.mediaPlayerId}
                 remoteId={settings.remoteId}
@@ -481,6 +524,7 @@ export function ModalEntitySlice({ core, modals, cardConfig, entityHelpers, reso
                 entity={cameraEntity}
                 customName={customNames?.[showCameraModal]}
                 customIcon={customIcons?.[showCameraModal]}
+                conn={conn}
                 getEntityImageUrl={getEntityImageUrl}
                 settings={cameraSettings}
                 t={t}
@@ -489,25 +533,32 @@ export function ModalEntitySlice({ core, modals, cardConfig, entityHelpers, reso
           );
         })()}
 
-      {showSensorInfoModal && (
-        <ModalSuspense>
-          <SensorModal
-            isOpen={!!showSensorInfoModal}
-            onClose={() => setShowSensorInfoModal(null)}
-            entityId={showSensorInfoModal}
-            entity={entities[showSensorInfoModal]}
-            entities={entities}
-            customName={customNames[showSensorInfoModal]}
-            conn={conn}
-            haUrl={activeUrl}
-            haToken={
-              config.authMethod === 'oauth' ? authRef?.current?.accessToken || '' : config.token
-            }
-            callService={callService}
-            t={t}
-          />
-        </ModalSuspense>
-      )}
+      {showSensorInfoModal &&
+        (() => {
+          const target =
+            typeof showSensorInfoModal === 'string'
+              ? { entityId: showSensorInfoModal }
+              : showSensorInfoModal;
+          return (
+            <ModalSuspense>
+              <SensorModal
+                isOpen={true}
+                onClose={() => setShowSensorInfoModal(null)}
+                entityId={target.entityId}
+                entity={entities[target.entityId]}
+                entities={entities}
+                customName={customNames[target.cardId || target.entityId]}
+                conn={conn}
+                haUrl={activeUrl}
+                haToken={
+                  config.authMethod === 'oauth' ? authRef?.current?.accessToken || '' : config.token
+                }
+                callService={callService}
+                t={t}
+              />
+            </ModalSuspense>
+          );
+        })()}
 
       {showWaermepumpeModal && (
         <ModalSuspense>

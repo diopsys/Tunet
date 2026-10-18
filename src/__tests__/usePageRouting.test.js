@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { StrictMode, createElement } from 'react';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import { usePageRouting } from '../hooks/usePageRouting';
 
@@ -32,6 +33,19 @@ describe('usePageRouting', () => {
     expect(routerState.navigate).toHaveBeenCalledWith('/page/kitchen', { replace: true });
   });
 
+  it('preserves a deep link when StrictMode replays mount effects', () => {
+    localStorage.setItem('tunet_active_page', 'home');
+    routerState.params = { pageId: 'energia' };
+    routerState.location = { pathname: '/page/energia' };
+
+    const { result } = renderHook(() => usePageRouting(), {
+      wrapper: ({ children }) => createElement(StrictMode, null, children),
+    });
+
+    expect(result.current.activePage).toBe('energia');
+    expect(routerState.navigate).not.toHaveBeenCalledWith('/page/home', { replace: true });
+  });
+
   it('syncs route param to activePage and localStorage', async () => {
     routerState.params = { pageId: 'media' };
     routerState.location = { pathname: '/page/media' };
@@ -42,6 +56,19 @@ describe('usePageRouting', () => {
       expect(result.current.activePage).toBe('media');
     });
     expect(localStorage.getItem('tunet_active_page')).toBe('media');
+  });
+
+  it('keeps the deep-linked page when it differs from localStorage', async () => {
+    localStorage.setItem('tunet_active_page', 'home');
+    routerState.params = { pageId: 'energia' };
+    routerState.location = { pathname: '/page/energia' };
+
+    const { result } = renderHook(() => usePageRouting());
+
+    await waitFor(() => {
+      expect(result.current.activePage).toBe('energia');
+    });
+    expect(routerState.navigate).not.toHaveBeenCalledWith('/page/home', { replace: true });
   });
 
   it('setActivePage updates localStorage and navigates', () => {

@@ -1,3 +1,13 @@
+## [1.30.0] — 2026-10-18
+
+### Added
+- Flexible Sensor-Karten: eigener Name, Untertitel, Icon, Status-Quelle, Layout und Tap-Aktion konfigurierbar
+- Apple TV-Karte mit Popup (Mediensteuerung, Remote, verknüpfte Lautsprecher)
+- Spanische Übersetzung (es-ES) von upstream
+- Fix: Sensor-History wird nicht mehr bei jedem HA-State-Update neu geladen (`#229`)
+- Fix: Deep-linked Seiten bleiben nach Navigation erhalten (`#230`)
+- Dependency-Updates: hls.js 1.7.3, home-assistant-js-websocket 9.7.0, express-rate-limit 8.7.0, qs 6.16.0, ip-address 10.7.2
+
 ## [1.20.43] — 2026-10-18
 
 ### Changed
@@ -1301,116 +1311,247 @@
 ### Fixed
 - Stundenplan Mobile: Zeiten wieder gestapelt (52px Spalte), überlappen nicht mehr mit Fach-Spalte
 
+## [1.23.0] — 2026-10-11
+
+### Added
+
+- Added a Spanish (es-ES) translation (#224).
+
+### Changed
+
+- Updated React to 19.3, along with lucide-react, hls.js, home-assistant-js-websocket, react-router-dom, and ws (#220).
+- Updated build and test tooling, including Vite 8.3, Vitest 5.0.3, and jsdom 30.1 (#217).
+
+### Fixed
+
+- A new device now picks up dashboard settings already saved on the server instead of starting empty (#225).
+
+### Security
+
+- Updated proxy-addr, shell-quote, and source-map-js to resolve dependency security alerts (#226, #227, #228).
+
+## [1.22.2] — 2026-10-10
+
+### Fixed
+
+- Fixed a crash when rendering MDI icons with custom styles in React 19 (#223).
+
+## [1.22.1] — 2026-09-30
+
+### Changed
+
+- Simplified custom card settings and kept scene and action cards consistent with the standard sensor layout (#218).
+- Custom action text now appears for button, icon, and whole-card actions, with buttons that fit narrow mobile cards.
+
+### Fixed
+
+- Editing action text now replaces old on/off labels, and unsupported action targets cannot be activated.
+
+### Security
+
+- Updated ip-address, js-yaml, and brace-expansion to resolve dependency security alerts (#212, #219, #221).
+
+## [1.22.0] — 2026-09-30
+
+### Added
+
+- Added flexible entity cards: place the same entity on a page more than once and give each card its own name, subtitle, icon, status source, layout, and tap action.
+- Added card actions for entity cards: open details, toggle, turn on or off, activate a scene, run a script, press a button, or call any Home Assistant action, with progress and confirmation feedback.
+- Added an Apple TV card and popup with media controls, an optional remote, linked speakers, and a tap action.
+- Added power buttons with progress feedback to climate and Apple TV cards, plus a tap action setting to open details or toggle power.
+
+### Changed
+
+- Rebuilt the sensor card editor into Content, Status, Appearance, and Action sections, with a live preview beside the settings on wide screens. Options only appear when they apply.
+- Lights, climate devices, and buttons can now be added as sensor cards. Existing sensor cards keep working.
+- Climate power buttons fall back to setting the HVAC mode when a device cannot be turned off directly.
+
+### Fixed
+
+- Fixed Escape closing a whole dialog instead of only the dropdown menu that was open.
+
+## [1.21.3] — 2026-09-08
+
+### Changed
+
+- Made mobile connection warnings quieter and restarted the reconnect grace period when returning to the app.
+- Removed the press-to-shrink effect while swiping weather cards.
+
+### Fixed
+
+- Show expired-login warnings immediately and keep them visible when the app resumes.
+
+## [1.21.2] — 2026-09-08
+
+### Changed
+
+- Updated production and development dependencies (#208, #209) and the release action (#204).
+
+### Security
+
+- Updated qs to 6.16.0 to fix two denial-of-service vulnerabilities (#207).
+
+### Fixed
+
+- Fixed weather forecast toggle prop types so CI type checking passes.
+
+## [1.21.1] — 2026-08-21
+
+### Changed
+
+- Added an animated swipe between current weather and forecast views, with responsive layouts for small, large, and wide mobile cards.
+- Polished the light popup, calendar popup, and media-page editing experience.
+
+### Fixed
+
+- Restored go2rtc and MSE camera playback with reliable Home Assistant stream fallback (#164).
+- Fixed rapid card-setting changes being overwritten in Firefox.
+
+## [1.21.0] — 2026-08-20
+
+### Added
+
+- Added up to two configurable climate mode shortcuts, with Off and Heat as useful defaults when supported.
+- Added automatic camera source fallback across Home Assistant WebRTC and HLS, go2rtc, MJPEG, and signed snapshots (#140, #164).
+
+### Changed
+
+- Refined dashboard navigation, header controls, mobile badges, and overview-page layouts.
+- Reworked the media chooser to discover favorites, playlists, and libraries across Sonos, Music Assistant, and standard media players.
+- Adapted the Emby media popup for phones and gave climate shortcuts a quieter, neutral selected state.
+
+### Fixed
+
+- Improved camera card and popup reliability when a preferred live stream is unavailable (#140).
+- Fixed media chooser layout shifts, duplicate close controls, and empty favorites for non-Sonos players.
+
 ## [1.20.9] — 2026-08-19
 
 ### Added
+
 - Added per-card mobile width controls for supported dashboard cards.
 - Added configurable ready and running text for script cards.
 
 ### Changed
+
 - Redesigned the appearance, layout, and header sidebars with clearer shared controls.
 - Improved automatic mobile sizing for media, climate, weather, cost, and Nordpool cards.
 
 ### Fixed
+
 - Improved Home Assistant reconnect feedback and kept grid settings within usable device widths.
 - Fixed custom card name updates and several mobile rendering details across sensor, status, lock, weather, and media cards.
-
 
 ## [1.20.8] — 2026-08-16
 
 ### Added
+
 - Added optional person status text to the mobile header.
 
 ### Changed
+
 - Moved mobile settings beside the person row and increased mobile header and navigation text sizes.
 - Optimized power, climate, fan, light, car, weather, TV, and vacuum popups for phone-sized screens.
 
 ### Fixed
+
 - Fixed PWA installation metadata when Tunet is served through Cloudflare Access.
 - Improved Home Assistant reconnection after returning to the app and delayed offline or stale-data notices briefly while synchronization catches up.
 - Fixed the mobile person status visibility setting and aligned the weather card icon with the other dashboard cards.
 
-
 ## [1.20.7] — 2026-08-13
 
 ### Added
+
 - Added the Home Assistant add-on store icon and logo.
 
 ### Changed
+
 - Updated better-sqlite3, express-rate-limit, lucide-react, and ws.
 
 ### Fixed
+
 - Fixed Roborock vacuum consumables reporting remaining time as a percentage, and restored the sensor consumable reset action (#157).
 
 ### Security
-- Patched advisories in ip-address, js-yaml, and react-router.
 
+- Patched advisories in ip-address, js-yaml, and react-router.
 
 ## [1.20.6] — 2026-08-05
 
 ### Added
+
 - Added low-battery status pills with configurable thresholds and entity scoping.
 - Added configurable decimal places for numeric Sensor pills.
 
 ### Changed
+
 - Improved sensor charts with clearer summaries, labels, sizing, and accessibility.
 - Improved Home Assistant connection setup and numeric unit formatting.
 
 ### Fixed
-- Fixed numeric Sensor pills sometimes showing excessive decimal places.
 
+- Fixed numeric Sensor pills sometimes showing excessive decimal places.
 
 ## [1.20.5] — 2026-07-25
 
 ### Changed
+
 - Migrated Home Assistant app build metadata into the Dockerfile and removed the unsupported `armv7` target.
 
 ### Fixed
+
 - Restored App Store installs by updating the app base image to resolve the musl package conflict (#188).
 
 ## [1.20.4] — 2026-07-24
 
 ### Changed
+
 - Updated production and development dependencies, GitHub Actions, and runtime versions.
 - Moved CI to Node 24 and container builders to Node 26.
 
 ### Fixed
+
 - Added native build tooling and deterministic npm installs for better-sqlite3 13.
 - Updated the changed-file formatting check to parse JSON-safe filenames.
 
 ## [1.20.3] — 2026-06-08
 
 ### Changed
+
 - Improved vacuum maintenance reset button matching so Home Assistant button entities with consumable-style names are detected more reliably.
 
 ### Fixed
-- Fixed the Vacuum modal sensor reset action so maintenance resets call the Home Assistant `button.press` service again.
 
+- Fixed the Vacuum modal sensor reset action so maintenance resets call the Home Assistant `button.press` service again.
 
 ## [1.20.2] — 2026-05-20
 
 ### Added
+
 - Add release notes.
 
 ### Changed
+
 - Add release notes.
 
 ### Fixed
-- Add release notes.
 
+- Add release notes.
 
 ## [1.20.1] — 2026-05-20
 
 ### Changed
+
 - Broadened vacuum map entity discovery to match both `camera.*` and `image.*` domains, and use friendly-name token matching for more reliable auto-detection.
 - Persisted vacuum map zoom and pan position per vacuum to localStorage so the view is restored when reopening the modal.
 - Cleaned map entity display names by stripping vacuum name tokens for a tidier multi-map selector.
 
 ### Fixed
+
 - Fixed vacuum map entity matching for setups where the entity friendly name contains the vacuum name but the entity ID does not.
 - Added Norwegian `kart` keyword to fallback map entity detection.
 - Fixed ModernDropdown portal-aware click-outside handling so dropdown menus rendered through a portal no longer close unexpectedly.
-
 
 ## [1.20.0] — 2026-05-20
 

@@ -1,4 +1,9 @@
 import { test, expect } from './fixtures';
+import { readFileSync } from 'node:fs';
+
+const appVersion = JSON.parse(
+  readFileSync(new URL('../package.json', import.meta.url), 'utf8')
+).version;
 
 test.describe('Modal Interactions', () => {
   const enableEditMode = async (page) => {
@@ -52,10 +57,18 @@ test.describe('Modal Interactions', () => {
         JSON.stringify({
           header: [],
           pages: ['home'],
-          home: ['light.bedroom', 'light.kitchen'],
+          home: ['light.bedroom', 'light.kitchen', 'calendar_card_e2e'],
         })
       );
-      localStorage.setItem('tunet_card_settings', JSON.stringify({}));
+      localStorage.setItem(
+        'tunet_card_settings',
+        JSON.stringify({
+          'home::calendar_card_e2e': {
+            calendars: ['calendar.family', 'calendar.work'],
+            size: 'large',
+          },
+        })
+      );
       localStorage.setItem(
         'tunet_auth_cache_v1',
         JSON.stringify({
@@ -78,6 +91,14 @@ test.describe('Modal Interactions', () => {
     await expect(modal).toBeVisible();
   });
 
+  test('shows the build version when the server health endpoint is unavailable', async ({
+    page,
+  }) => {
+    await page.route('**/api/health', (route) => route.fulfill({ status: 503, body: '{}' }));
+    const modal = await openSystemModal(page);
+    await expect(modal.getByText(`Running version: ${appVersion}`, { exact: true })).toBeVisible();
+  });
+
   test('should expose mobile add and edit actions from the floating settings menu', async ({
     page,
   }) => {
@@ -97,12 +118,218 @@ test.describe('Modal Interactions', () => {
     await expect(page.getByTestId('settings-menu-edit')).toHaveAccessibleName('Edit');
 
     await page.getByTestId('settings-menu-edit').click();
-    const doneButton = page.getByTestId('settings-mobile-done');
-    await expect(doneButton).toBeVisible();
-    await expect(doneButton).toHaveAccessibleName('Done');
+    await expect(trigger).toHaveAccessibleName('Done');
 
-    await doneButton.click();
-    await expect(doneButton).not.toBeVisible();
+    await trigger.click();
+    await expect(trigger).toHaveAccessibleName('Edit');
+  });
+
+  test('should keep the immersive Emby media popup inside the mobile viewport', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.evaluate(() => {
+      localStorage.setItem(
+        'tunet_status_pills_config',
+        JSON.stringify([
+          {
+            id: 'emby-mobile',
+            type: 'emby',
+            label: 'Emby',
+            visible: true,
+            clickable: true,
+            conditionEnabled: false,
+            mediaEntityIds: ['media_player.emby_tv'],
+          },
+        ])
+      );
+      localStorage.setItem(
+        'tunet_media_view_mode_by_modal',
+        JSON.stringify({ 'media::default': false })
+      );
+    });
+
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.getByRole('button', { name: /Emby/ }).click();
+
+    const modal = page.locator('[role="dialog"]').first();
+    await expect(modal).toBeVisible();
+    await expect(
+      modal
+        .getByTestId('media-immersive-content')
+        .getByRole('heading', { name: 'Knutsen & Ludvigsen og den fæle Rasputin' })
+    ).toBeVisible();
+
+    const modalBounds = await modal.boundingBox();
+    expect(modalBounds).not.toBeNull();
+    expect(modalBounds.x).toBeGreaterThanOrEqual(0);
+    expect(modalBounds.x + modalBounds.width).toBeLessThanOrEqual(390);
+    expect(modalBounds.y).toBeGreaterThanOrEqual(0);
+    expect(modalBounds.y + modalBounds.height).toBeLessThanOrEqual(844);
+
+    await expect(modal.getByTestId('media-immersive-controls')).toHaveCSS(
+      'flex-direction',
+      'column'
+    );
+
+    const visibleButtonBounds = await modal.locator('button').evaluateAll((buttons) =>
+      buttons
+        .filter((button) => {
+          const style = window.getComputedStyle(button);
+          const bounds = button.getBoundingClientRect();
+          return (
+            style.display !== 'none' &&
+            style.visibility !== 'hidden' &&
+            bounds.width > 0 &&
+            bounds.right > 0 &&
+            bounds.left < window.innerWidth &&
+            bounds.bottom > 0 &&
+            bounds.top < window.innerHeight
+          );
+        })
+        .map((button) => {
+          const bounds = button.getBoundingClientRect();
+          return { left: bounds.left, right: bounds.right };
+        })
+    );
+
+    visibleButtonBounds.forEach(({ left, right }) => {
+      expect(left).toBeGreaterThanOrEqual(modalBounds.x - 1);
+      expect(right).toBeLessThanOrEqual(modalBounds.x + modalBounds.width + 1);
+    });
+
+    const documentWidth = await page.evaluate(() => document.documentElement.scrollWidth);
+    expect(documentWidth).toBeLessThanOrEqual(390);
+  });
+
+  test('should show a power control and switches for grouped room lights', async ({ page }) => {
+    await page.getByText('Bedroom Light', { exact: true }).click();
+    const modal = page.locator('[role="dialog"]').first();
+    await expect(modal).toBeVisible();
+
+    const mainToggle = modal.getByRole('button', { name: 'light.toggle' });
+    await expect(mainToggle.locator('.lucide-power')).toBeVisible();
+    await expect(
+      modal.getByRole('switch', { name: 'Kitchen Light common.toggle' })
+    ).toHaveAttribute('aria-checked', 'false');
+  });
+
+  test('should focus calendar events and reveal calendar selection on demand', async ({ page }) => {
+    await page.clock.setFixedTime(
+      await page.evaluate(() => new Date(2026, 8, 29, 12, 0, 0).getTime())
+    );
+    await page.getByText('Calendar', { exact: true }).click();
+    const modal = page.locator('[role="dialog"]').first();
+    await expect(modal).toBeVisible();
+    await expect(modal.getByText('Breakfast appointment')).toBeVisible();
+
+    const pickerButton = modal.getByRole('button', { name: 'Select Calendars' });
+    await expect(pickerButton).toHaveAttribute('aria-expanded', 'false');
+    await expect(modal.locator('#calendar-picker-panel')).toHaveCount(0);
+    await expect(
+      modal.getByText('Breakfast appointment').locator('xpath=ancestor::*[@data-past-event][1]')
+    ).toHaveAttribute('data-past-event', 'true');
+    await expect(
+      modal.getByText('Dinner with family').locator('xpath=ancestor::*[@data-past-event][1]')
+    ).toHaveAttribute('data-past-event', 'false');
+
+    await pickerButton.click();
+    await expect(modal.getByRole('button', { name: 'Hide' })).toHaveAttribute(
+      'aria-expanded',
+      'true'
+    );
+    await expect(modal.locator('#calendar-picker-panel')).toBeVisible();
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    const modalBounds = await modal.boundingBox();
+    expect(modalBounds).not.toBeNull();
+    expect(modalBounds.x).toBeGreaterThanOrEqual(0);
+    expect(modalBounds.x + modalBounds.width).toBeLessThanOrEqual(390);
+    expect(modalBounds.y + modalBounds.height).toBeLessThanOrEqual(844);
+  });
+
+  test('should keep the media chooser stable and browse nested favorites for generic players', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1060, height: 600 });
+    await page.evaluate(() => {
+      localStorage.setItem(
+        'tunet_status_pills_config',
+        JSON.stringify([
+          {
+            id: 'generic-media',
+            type: 'media_player',
+            label: 'Media',
+            visible: true,
+            clickable: true,
+            conditionEnabled: false,
+            entityId: 'media_player.emby_tv',
+          },
+        ])
+      );
+      localStorage.setItem(
+        'tunet_media_view_mode_by_modal',
+        JSON.stringify({ 'media::default': true })
+      );
+    });
+
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(500);
+    await page.getByRole('button', { name: /Media/ }).click();
+
+    const modal = page.locator('[role="dialog"]').first();
+    await expect(modal).toBeVisible();
+    await modal.getByRole('button', { name: 'Choose media' }).click();
+
+    const chooser = modal.getByTestId('media-chooser');
+    const results = modal.getByTestId('media-chooser-results');
+    await expect(chooser).toBeVisible();
+    await expect(modal.getByTestId('media-chooser-loading')).toBeVisible();
+
+    const chooserBefore = await chooser.boundingBox();
+    const resultsBefore = await results.boundingBox();
+    expect(chooserBefore).not.toBeNull();
+    expect(resultsBefore).not.toBeNull();
+
+    await expect(chooser.getByRole('button', { name: 'Favorites' })).toBeVisible();
+    await expect(chooser.getByRole('button', { name: 'Playlists' })).toBeVisible();
+    await expect(chooser.getByRole('button', { name: 'Library' })).toBeVisible();
+    await expect(chooser.getByRole('button', { name: 'Search' })).toBeVisible();
+    await expect(chooser.getByText('Born to Be Alive')).toBeVisible();
+
+    const chooserAfter = await chooser.boundingBox();
+    const resultsAfter = await results.boundingBox();
+    expect(Math.abs(chooserAfter.width - chooserBefore.width)).toBeLessThanOrEqual(1);
+    expect(Math.abs(resultsAfter.y - resultsBefore.y)).toBeLessThanOrEqual(1);
+    expect(await modal.locator('.modal-close:visible').count()).toBe(1);
+    await expect(modal.getByTestId('media-chooser-close')).toBeVisible();
+
+    await chooser.getByRole('button', { name: 'Library' }).click();
+    await expect(chooser.getByText('90-talet')).toBeVisible();
+
+    await chooser.getByRole('button', { name: 'Search' }).click();
+    await chooser.getByRole('searchbox').fill('90');
+    await expect(chooser.getByText('90-talet')).toBeVisible();
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    const mobileChooserBounds = await chooser.boundingBox();
+    expect(mobileChooserBounds.x).toBeGreaterThanOrEqual(0);
+    expect(mobileChooserBounds.x + mobileChooserBounds.width).toBeLessThanOrEqual(390);
+
+    const mobileTabBounds = await chooser
+      .getByRole('group')
+      .getByRole('button')
+      .evaluateAll((buttons) =>
+        buttons.map((button) => {
+          const bounds = button.getBoundingClientRect();
+          return { left: bounds.left, right: bounds.right };
+        })
+      );
+    mobileTabBounds.forEach(({ left, right }) => {
+      expect(left).toBeGreaterThanOrEqual(mobileChooserBounds.x);
+      expect(right).toBeLessThanOrEqual(mobileChooserBounds.x + mobileChooserBounds.width);
+    });
+    await chooser.getByRole('button', { name: 'Favorites' }).click();
   });
 
   test('should close modal with close button', async ({ page }) => {

@@ -173,48 +173,43 @@ function isAllowedMusicContent(item) {
   const type = String(item.media_content_type || item.media_class || item.type || '').toLowerCase();
   const id = String(item.media_content_id || item.id || item.uri || '').toLowerCase();
   const title = String(item.title || item.name || '').toLowerCase();
-  if (BLOCKED_MEDIA_TYPES.has(type)) return false;
+  const isBrowsableContainer =
+    item.can_expand === true && ['', 'app', 'directory', 'folder'].includes(type);
+  if (BLOCKED_MEDIA_TYPES.has(type) && !isBrowsableContainer) return false;
   if (BLOCKED_ID_PATTERNS.some((pattern) => id.includes(pattern))) return false;
   if (BLOCKED_TITLE_WORDS.some((word) => title.includes(word))) return false;
   return true;
 }
 
-function flattenMediaBrowseChoices(nodes, fallbackType = 'music', sourceHint = '') {
-  const queue = Array.isArray(nodes) ? [...nodes] : [];
-  const result = [];
-  while (queue.length > 0) {
-    const current = queue.shift();
-    if (!current || typeof current !== 'object') continue;
-    if (!isAllowedMusicContent(current)) continue;
+function normalizeBrowseText(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+}
 
-    const nodeType = current.media_content_type || current.media_class || fallbackType;
-    const id = current.media_content_id || current.id || current.uri || current.value;
-    const canPlay = current.can_play !== false;
-    const title = current.title || current.name || id;
-    const source =
-      current.provider ||
-      current.app_name ||
-      current.domain ||
-      current.library_name ||
-      sourceHint ||
-      '';
-    const image = current.thumbnail || current.thumb || current.image || current.icon || null;
+function browseNodeMatches(node, terms) {
+  const haystack = normalizeBrowseText(
+    [
+      node?.title,
+      node?.name,
+      node?.media_content_type,
+      node?.media_class,
+      node?.media_content_id,
+      node?.id,
+    ]
+      .filter(Boolean)
+      .join(' ')
+  );
+  return terms.some((term) => haystack.includes(term));
+}
 
-    if (id && canPlay) {
-      result.push({
-        id: String(id),
-        label: String(title),
-        type: String(nodeType || fallbackType),
-        source: String(source || ''),
-        image,
-      });
-    }
+function isFavoriteBrowseNode(node) {
+  return browseNodeMatches(node, ['favorite', 'favourite', 'favorit', 'favoritt']);
+}
 
-    if (Array.isArray(current.children) && current.children.length > 0) {
-      queue.push(...current.children);
-    }
-  }
-  return normalizeMediaChoiceArray(result, fallbackType);
+function isPlaylistBrowseNode(node) {
+  return browseNodeMatches(node, ['playlist', 'spilleliste', 'speleliste', 'spellista']);
 }
 
 function mergeMediaChoiceArrays(...arrays) {
@@ -339,8 +334,6 @@ export default function MediaModal({
   const [browseChoicesByPlayer, setBrowseChoicesByPlayer] = useState({});
   const [browseLoading, setBrowseLoading] = useState(false);
   const [browseError, setBrowseError] = useState('');
-  const [favoritesByPlayer, setFavoritesByPlayer] = useState({});
-  const [favoritesLoading, setFavoritesLoading] = useState(false);
   const [showAddSonosPicker, setShowAddSonosPicker] = useState(false);
   const [showPlayersSidebar, setShowPlayersSidebar] = useState(true);
   const [viewModeByModal, setViewModeByModal] = useState(() =>
@@ -368,12 +361,6 @@ export default function MediaModal({
   );
 
   const isMusicContent = useCallback((item) => isAllowedMusicContent(item), []);
-
-  const flattenBrowseChoices = useCallback(
-    (nodes, fallbackType = 'music', sourceHint = '') =>
-      flattenMediaBrowseChoices(nodes, fallbackType, sourceHint),
-    []
-  );
 
   const mergeChoiceArrays = useCallback((...arrays) => mergeMediaChoiceArrays(...arrays), []);
 
@@ -616,200 +603,141 @@ export default function MediaModal({
     setShowAddSonosPicker(false);
   }, [activeMediaModal, activeMediaGroupKey, activeMediaId]);
 
-  // ── Favorites browse (like custom-sonos-card) ─────────────────────
-  const fetchFavorites = useCallback(
-    async (playerId) => {
-      if (!playerId || !conn || typeof conn.sendMessagePromise !== 'function') return;
-      // Don't re-fetch if we already have favorites for this player
-      if (favoritesByPlayer[playerId]?.length >= 0) return;
-
-      setFavoritesLoading(true);
-      try {
-        // Step 1: Get the root browse tree
-        const rootPayload = { type: 'media_player/browse_media', entity_id: playerId };
-        const rootResp = await conn.sendMessagePromise(rootPayload);
-        const root = rootResp?.result || rootResp || null;
-        if (!root) {
-          setFavoritesLoading(false);
-          return;
-        }
-
-        const rootChildren = Array.isArray(root.children) ? root.children : [];
-
-        // Step 2: Find the "favorites" folder (like custom-sonos-card)
-        const favoritesDir = rootChildren.find((child) => {
-          const type = String(child?.media_content_type || '').toLowerCase();
-          const id = String(child?.media_content_id || '').toLowerCase();
-          const title = String(child?.title || '').toLowerCase();
-          return (
-            type === 'favorites' ||
-            id === 'favorites' ||
-            title === 'favorites' ||
-            title === 'my favorites' ||
-            title === 'sonos favorites' ||
-            type.includes('favorites') ||
-            id.includes('favorites')
-          );
-        });
-
-        if (!favoritesDir) {
-          // Fallback: use source_list from entity attributes
-          const sourceList = getA(playerId, 'source_list', []);
-          const sonosFavs = getA(playerId, 'sonos_favorites', []);
-          const fallbackItems = [
-            ...normalizeChoiceArray(sonosFavs, 'music'),
-            ...normalizeChoiceArray(
-              sourceList.map((s) => ({ title: s, id: s })),
-              'music'
-            ),
-          ];
-          setFavoritesByPlayer((prev) => ({ ...prev, [playerId]: fallbackItems }));
-          setFavoritesLoading(false);
-          return;
-        }
-
-        // Step 3: Recursively browse the favorites directory
-        const allFavorites = [];
-        const browseFavDir = async (dir) => {
-          const payload = {
-            type: 'media_player/browse_media',
-            entity_id: playerId,
-            media_content_type: dir.media_content_type,
-            media_content_id: dir.media_content_id,
-          };
-          const resp = await conn.sendMessagePromise(payload);
-          const detail = resp?.result || resp || null;
-          const children = Array.isArray(detail?.children) ? detail.children : [];
-          for (const child of children) {
-            if (child.can_play) {
-              allFavorites.push({
-                id: child.media_content_id || child.title,
-                label: child.title || child.media_content_id,
-                type: child.media_content_type || 'music',
-                source: detail?.title || 'Favorites',
-                image: child.thumbnail || null,
-              });
-            } else if (child.can_expand) {
-              await browseFavDir(child);
-            }
-          }
-        };
-        await browseFavDir(favoritesDir);
-
-        // Also merge in sonos_favorites attribute if present
-        const sonosFavs = getA(playerId, 'sonos_favorites', []);
-        const merged = normalizeChoiceArray(
-          [...allFavorites, ...normalizeChoiceArray(sonosFavs, 'music')],
-          'music'
-        );
-
-        setFavoritesByPlayer((prev) => ({ ...prev, [playerId]: merged }));
-      } catch (err) {
-        console.error('Failed to fetch favorites:', err);
-        // Fallback to sonos_favorites attribute
-        const sonosFavs = getA(playerId, 'sonos_favorites', []);
-        setFavoritesByPlayer((prev) => ({
-          ...prev,
-          [playerId]: normalizeChoiceArray(sonosFavs, 'music'),
-        }));
-      } finally {
-        setFavoritesLoading(false);
-      }
-    },
-    [conn, favoritesByPlayer, getA, normalizeChoiceArray]
-  );
-
-  // Fetch favorites when the Choose panel opens or the player changes
-  useEffect(() => {
-    if (show && showChoosePanel && mpId) {
-      fetchFavorites(mpId);
-    }
-  }, [show, showChoosePanel, mpId, fetchFavorites]);
-
-  const currentFavorites = favoritesByPlayer[mpId] || [];
-
-  // ── Music Assistant browse (only for MA entities) ──────────────────
+  // ── Unified media browse for Sonos and generic players ─────────────
   useEffect(() => {
     const canBrowse =
       show && showChoosePanel && !!mpId && conn && typeof conn.sendMessagePromise === 'function';
     if (!canBrowse) return;
 
     const cached = browseChoicesByPlayer?.[mpId];
-    if (cached && cached._version === 2 && cached.playlists.length > 0) return;
+    if (cached?._version === 3) {
+      setBrowseLoading(false);
+      setBrowseError('');
+      return;
+    }
 
     let cancelled = false;
 
-    const browseMA = async () => {
+    const browseNode = async (node = null) => {
       const payload = {
         type: 'media_player/browse_media',
         entity_id: mpId,
       };
+      if (node?.media_content_type) payload.media_content_type = node.media_content_type;
+      if (node?.media_content_id) payload.media_content_id = node.media_content_id;
       const response = await conn.sendMessagePromise(payload);
       return response?.result || response || null;
-    };
-
-    const isPlaylistNode = (node) => {
-      const title = String(node?.title || '').toLowerCase();
-      const type = String(node?.media_content_type || node?.media_class || '').toLowerCase();
-      return (
-        title.includes('playlist') ||
-        title.includes('spilleliste') ||
-        title.includes('speleliste') ||
-        title.includes('spellista') ||
-        type.includes('playlist')
-      );
     };
 
     const loadChoices = async () => {
       setBrowseLoading(true);
       setBrowseError('');
       try {
-        const root = await browseMA();
-        if (!root || cancelled) return;
+        const root = await browseNode();
+        if (!root) throw new Error('browse_failed');
+        if (cancelled) return;
 
-        const rootChildren = Array.isArray(root.children) ? root.children : [];
+        const favorites = [];
         const playlists = [];
         const library = [];
+        const visited = new Set();
+        const maxExpansions = 18;
+        const maxDepth = 4;
+        let expansionCount = 0;
 
-        // Only expand music-related branches (skip cameras, TV, etc.)
-        const musicBranches = rootChildren.filter(
-          (child) => child && typeof child === 'object' && isMusicContent(child)
-        );
+        const resolveBucket = (node, inheritedBucket = 'library') => {
+          if (isFavoriteBrowseNode(node)) return 'favorites';
+          if (isPlaylistBrowseNode(node)) return 'playlists';
+          return inheritedBucket;
+        };
 
-        // Add playable root items directly
-        const rootPlayable = flattenBrowseChoices(
-          musicBranches.filter((c) => c.can_play),
-          'music',
-          ''
-        );
-        library.push(...rootPlayable);
+        const addPlayableChoice = (node, bucket, sourceHint) => {
+          if (node?.can_play !== true) return;
+          const fallbackType = bucket === 'playlists' ? 'playlist' : 'music';
+          const normalized = normalizeChoiceArray(
+            [{ ...node, source: node.source || sourceHint }],
+            fallbackType
+          );
+          if (bucket === 'favorites') favorites.push(...normalized);
+          else if (bucket === 'playlists') playlists.push(...normalized);
+          else library.push(...normalized);
+        };
 
-        // Expand up to 8 branches that can be expanded
-        const expandable = musicBranches.filter((c) => c.can_expand).slice(0, 8);
+        const rootChildren = Array.isArray(root.children) ? root.children : [];
+        let frontier = rootChildren
+          .filter((node) => node && typeof node === 'object' && isMusicContent(node))
+          .map((node) => ({ node, bucket: resolveBucket(node), sourceHint: root.title || '' }));
 
-        for (const branch of expandable) {
-          if (cancelled) break;
-          const isPlaylist = isPlaylistNode(branch);
-          const sourceHint = branch?.title || '';
-          try {
-            const payload = {
-              type: 'media_player/browse_media',
-              entity_id: mpId,
-              media_content_type: branch.media_content_type,
-              media_content_id: branch.media_content_id,
-            };
-            const detail = await conn.sendMessagePromise(payload);
-            const detailResult = detail?.result || detail || null;
-            const children = Array.isArray(detailResult?.children) ? detailResult.children : [];
-            const items = flattenBrowseChoices(
-              children,
-              isPlaylist ? 'playlist' : 'music',
-              sourceHint
-            );
-            if (isPlaylist) playlists.push(...items);
-            else library.push(...items);
-          } catch {
-            // Skip failed branches
+        for (let depth = 0; depth < maxDepth && frontier.length > 0; depth += 1) {
+          if (cancelled) return;
+          const nextFrontier = [];
+          const expandable = [];
+
+          frontier.forEach(({ node, bucket: inheritedBucket, sourceHint }) => {
+            if (!isMusicContent(node)) return;
+            const bucket = resolveBucket(node, inheritedBucket);
+            const nextSourceHint = node.title || sourceHint;
+            addPlayableChoice(node, bucket, sourceHint);
+
+            const embeddedChildren = Array.isArray(node.children) ? node.children : [];
+            embeddedChildren.forEach((child) => {
+              if (!child || typeof child !== 'object' || !isMusicContent(child)) return;
+              nextFrontier.push({
+                node: child,
+                bucket: resolveBucket(child, bucket),
+                sourceHint: nextSourceHint,
+              });
+            });
+
+            const nodeId = node.media_content_id || node.id || node.uri;
+            const visitKey = `${node.media_content_type || node.media_class || ''}::${nodeId || ''}`;
+            if (
+              embeddedChildren.length === 0 &&
+              node.can_expand === true &&
+              node.can_play !== true &&
+              nodeId &&
+              !visited.has(visitKey)
+            ) {
+              visited.add(visitKey);
+              expandable.push({ node, bucket, sourceHint: nextSourceHint });
+            }
+          });
+
+          expandable.sort((a, b) => {
+            const priority = { favorites: 0, playlists: 1, library: 2 };
+            return priority[a.bucket] - priority[b.bucket];
+          });
+
+          const remainingExpansions = Math.max(0, maxExpansions - expansionCount);
+          const branches = expandable.slice(0, remainingExpansions);
+          expansionCount += branches.length;
+
+          const branchResults = await Promise.all(
+            branches.map(async (entry) => {
+              try {
+                return { ...entry, detail: await browseNode(entry.node) };
+              } catch {
+                return { ...entry, detail: null };
+              }
+            })
+          );
+
+          branchResults.forEach(({ node, bucket, sourceHint, detail }) => {
+            const children = Array.isArray(detail?.children) ? detail.children : [];
+            const nextSourceHint = detail?.title || node.title || sourceHint;
+            children.forEach((child) => {
+              if (!child || typeof child !== 'object' || !isMusicContent(child)) return;
+              nextFrontier.push({
+                node: child,
+                bucket: resolveBucket(child, bucket),
+                sourceHint: nextSourceHint,
+              });
+            });
+          });
+
+          frontier = nextFrontier;
+          if (expansionCount >= maxExpansions && frontier.every(({ node }) => !node.can_play)) {
+            break;
           }
         }
 
@@ -817,7 +745,8 @@ export default function MediaModal({
           setBrowseChoicesByPlayer((prev) => ({
             ...(prev || {}),
             [mpId]: {
-              _version: 2,
+              _version: 3,
+              favorites: normalizeChoiceArray(favorites, 'music'),
               playlists: normalizeChoiceArray(playlists, 'playlist'),
               library: normalizeChoiceArray(library, 'music'),
             },
@@ -842,24 +771,33 @@ export default function MediaModal({
     mpId,
     conn,
     browseChoicesByPlayer,
-    flattenBrowseChoices,
     isMusicContent,
     normalizeChoiceArray,
   ]);
 
-  const browseChoices = browseChoicesByPlayer?.[mpId] || { playlists: [], library: [] };
+  const browseChoices = browseChoicesByPlayer?.[mpId] || {
+    favorites: [],
+    playlists: [],
+    library: [],
+  };
+
+  const currentFavorites = mergeChoiceArrays(
+    browseChoices.favorites || [],
+    normalizeChoiceArray(mpId ? getA(mpId, 'sonos_favorites', []) : [], 'music')
+  );
 
   const playlistChoices = mergeChoiceArrays(
-    browseChoices.playlists,
-    ...normalizeChoiceArray(mpId ? getA(mpId, 'sonos_playlists', []) : [], 'playlist')
+    browseChoices.playlists || [],
+    normalizeChoiceArray(mpId ? getA(mpId, 'sonos_playlists', []) : [], 'playlist')
   );
 
-  const libraryChoices = mergeChoiceArrays(
-    browseChoices.library || [],
-    ...normalizeChoiceArray(mpId ? getA(mpId, 'sonos_favorites', []) : [], 'music')
-  );
+  const libraryChoices = mergeChoiceArrays(browseChoices.library || []);
 
-  const allSearchChoices = normalizeChoiceArray([...playlistChoices, ...libraryChoices], 'music');
+  const allSearchChoices = mergeChoiceArrays(
+    currentFavorites,
+    playlistChoices,
+    libraryChoices
+  );
 
   const loweredQuery = chooseQuery.trim().toLowerCase();
   const filteredSearchChoices = loweredQuery
@@ -870,7 +808,30 @@ export default function MediaModal({
       )
     : allSearchChoices;
 
+  const activeChooseChoices =
+    {
+      favorites: currentFavorites,
+      playlists: playlistChoices,
+      library: libraryChoices,
+      search: filteredSearchChoices,
+    }[chooseTab] || [];
+
+  const activeChooseEmptyMessage =
+    chooseTab === 'favorites'
+      ? t('media.choose.emptyFavorites')
+      : chooseTab === 'playlists'
+        ? t('media.choose.emptyPlaylists')
+        : t('media.choose.emptyResults');
+
+  const hasLoadedBrowseChoices = browseChoices._version === 3;
+
   const lastChoice = lastChoiceByPlayer?.[mpId] || null;
+
+  const openChoosePanel = () => {
+    setChooseTab('favorites');
+    setChooseQuery('');
+    setShowChoosePanel(true);
+  };
 
   const playChoice = (choice) => {
     if (!choice?.id) return;
@@ -901,33 +862,28 @@ export default function MediaModal({
         key={`${keyPrefix}${choice.type}::${choice.id}`}
         type="button"
         onClick={() => playChoice(choice)}
-        className="w-full rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-2.5 text-left hover:bg-[var(--glass-bg-hover)]"
+        className="group min-w-0 rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg)] p-2.5 text-left transition-[background-color,border-color,transform] hover:-translate-y-0.5 hover:border-[var(--accent-color)] hover:bg-[var(--glass-bg-hover)] active:translate-y-0"
       >
-        <div className="flex items-center gap-3">
-          <div className="h-10 w-10 flex-shrink-0 overflow-hidden rounded-lg bg-[var(--glass-bg-hover)]">
-            {isImageAvailable(safeChoiceImage) ? (
-              <SafeImage
-                imageUrl={safeChoiceImage}
-                alt=""
-                className="h-full w-full object-cover"
-                onError={() => markImageFailed(safeChoiceImage)}
-              />
-            ) : (
-              <div className="flex h-full w-full items-center justify-center">
-                <Music className="h-4 w-4 text-[var(--text-secondary)]" />
-              </div>
-            )}
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-xs font-bold tracking-wider text-[var(--text-primary)] uppercase">
-              {choice.label}
-            </p>
-            <p className="truncate text-[10px] text-[var(--text-muted)]">
-              {t('media.choose.from')} {choice.source || t('media.choose.unknownSource')} •{' '}
-              {choice.type}
-            </p>
-          </div>
+        <div className="aspect-square w-full overflow-hidden rounded-xl bg-[var(--glass-bg-hover)]">
+          {isImageAvailable(safeChoiceImage) ? (
+            <SafeImage
+              imageUrl={safeChoiceImage}
+              alt=""
+              className="h-full w-full object-cover"
+              onError={() => markImageFailed(safeChoiceImage)}
+            />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center">
+              <Music className="h-9 w-9 text-[var(--text-muted)] transition-colors group-hover:text-[var(--accent-color)]" />
+            </div>
+          )}
         </div>
+        <p className="mt-2 line-clamp-2 min-h-8 text-[11px] leading-4 font-bold tracking-wide text-[var(--text-primary)] uppercase">
+          {choice.label}
+        </p>
+        <p className="mt-0.5 truncate text-[9px] tracking-wide text-[var(--text-muted)] uppercase">
+          {choice.source || choice.type || t('media.choose.unknownSource')}
+        </p>
       </button>
     );
   };
@@ -937,7 +893,8 @@ export default function MediaModal({
       key={id}
       type="button"
       onClick={() => setChooseTab(id)}
-      className={`rounded-lg px-3 py-1.5 text-[10px] font-bold tracking-wider uppercase ${chooseTab === id ? 'text-white' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
+      aria-pressed={chooseTab === id}
+      className={`min-w-0 rounded-xl border px-2 py-2 text-[9px] font-bold tracking-wider uppercase transition-colors ${chooseTab === id ? 'text-white' : 'border-transparent text-[var(--text-secondary)] hover:bg-[var(--glass-bg-hover)] hover:text-[var(--text-primary)]'}`}
       style={
         chooseTab === id
           ? {
@@ -997,7 +954,7 @@ export default function MediaModal({
         backdropFilter: showPlayersSidebar ? 'blur(20px)' : 'none',
         backgroundColor: showPlayersSidebar ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.15)',
       }}
-      panelClassName={`popup-anim relative flex w-full flex-col overflow-hidden shadow-2xl md:flex-row ${showPlayersSidebar ? 'max-w-5xl gap-4 rounded-3xl border p-4 backdrop-blur-xl md:gap-10 md:rounded-[4rem] md:p-10' : 'max-w-[95vw] rounded-3xl border-0 p-0 md:rounded-[3rem]'}`}
+      panelClassName={`popup-anim relative flex w-full flex-col overflow-hidden shadow-2xl md:flex-row ${showPlayersSidebar ? 'max-w-5xl gap-4 rounded-3xl border p-4 backdrop-blur-xl md:gap-10 md:rounded-[4rem] md:p-10' : 'max-w-[calc(100vw-1rem)] rounded-2xl border-0 p-0 md:max-w-[95vw] md:rounded-[3rem]'}`}
       panelStyle={{
         background: showPlayersSidebar
           ? 'linear-gradient(135deg, var(--card-bg) 0%, var(--modal-bg) 100%)'
@@ -1012,38 +969,40 @@ export default function MediaModal({
         <h2 id={resolvedTitleId} className="sr-only">
           {t('addCard.type.media')}
         </h2>
-        <button
-          onClick={handleModalClose}
-          className={`modal-close absolute z-50 ${showPlayersSidebar ? 'top-6 right-6 md:top-10 md:right-10' : 'top-6 right-6 md:top-10 md:right-10'}`}
-          aria-label={t('common.close') || 'Close'}
-        >
-          <X
-            className={`h-6 w-6 drop-shadow-md ${showPlayersSidebar ? 'text-[var(--text-primary)]' : 'text-[var(--accent-color)]'}`}
-          />
-        </button>
+        {!showChoosePanel && (
+          <button
+            onClick={handleModalClose}
+            className={`modal-close absolute z-50 ${showPlayersSidebar ? 'top-6 right-6 md:top-10 md:right-10' : 'top-4 right-4 md:top-10 md:right-10'}`}
+            aria-label={t('common.close') || 'Close'}
+          >
+            <X
+              className={`h-6 w-6 drop-shadow-md ${showPlayersSidebar ? 'text-[var(--text-primary)]' : 'text-[var(--accent-color)]'}`}
+            />
+          </button>
+        )}
 
         <div className={`custom-scrollbar relative z-10 flex min-h-0 flex-col justify-start ${showPlayersSidebar ? 'flex-1 pr-1 md:pr-2 overflow-hidden' : 'h-full w-full overflow-hidden'}`}>
-          <div className={`flex items-center gap-3 md:gap-4 flex-shrink-0 ${showPlayersSidebar ? 'mb-2 md:mb-4' : 'absolute top-6 left-6 z-50 md:top-10 md:left-10'}`}>
+          <div className={`flex items-center gap-2 md:gap-4 flex-shrink-0 ${showPlayersSidebar ? 'mb-2 md:mb-4' : 'absolute top-4 right-28 left-4 z-50 md:top-10 md:right-32 md:left-10'}`}>
             <div
-              className="rounded-2xl p-3 transition-all duration-500 md:p-4"
+              className="rounded-xl p-2 transition-all duration-500 md:rounded-2xl md:p-4"
               style={{ backgroundColor: showPlayersSidebar ? 'var(--glass-bg)' : 'rgba(255,255,255,0.1)', color: showPlayersSidebar ? 'var(--text-secondary)' : 'white' }}
             >
               {isChannel ? (
-                <Tv className="h-6 w-6 md:h-8 md:w-8" />
+                <Tv className="h-5 w-5 md:h-8 md:w-8" />
               ) : isCurrentSonos ? (
-                <Speaker className="h-6 w-6 md:h-8 md:w-8" />
+                <Speaker className="h-5 w-5 md:h-8 md:w-8" />
               ) : (
-                <Music className="h-6 w-6 md:h-8 md:w-8" />
+                <Music className="h-5 w-5 md:h-8 md:w-8" />
               )}
             </div>
             <div className="min-w-0">
-              <h3 className={`max-w-full pr-10 text-lg leading-tight font-light tracking-tight break-words uppercase italic md:pr-1 md:text-2xl md:leading-tight ${showPlayersSidebar ? 'text-[var(--text-primary)]' : 'text-white drop-shadow-md'}`}>
+              <h3 className={`max-w-full leading-tight font-light tracking-tight break-words uppercase italic md:leading-tight ${showPlayersSidebar ? 'pr-10 text-lg text-[var(--text-primary)] md:pr-1 md:text-2xl' : 'line-clamp-2 text-sm text-white drop-shadow-md sm:text-base md:text-2xl'}`}>
                 {activeUser
                   ? `${activeUser} - ${applyPlayerNameDisplayFilter(currentMp.attributes?.friendly_name || mpId)}`
                   : applyPlayerNameDisplayFilter(currentMp.attributes?.friendly_name || mpId)}
               </h3>
               <div
-                className="mt-2 inline-flex items-center gap-2 rounded-full border px-3 py-1"
+                className="mt-1 inline-flex items-center gap-2 rounded-full border px-2 py-0.5 md:mt-2 md:px-3 md:py-1"
                 style={{
                   backgroundColor: showPlayersSidebar ? 'var(--glass-bg)' : 'rgba(0,0,0,0.3)',
                   borderColor: showPlayersSidebar ? 'var(--glass-border)' : 'rgba(255,255,255,0.1)',
@@ -1059,13 +1018,13 @@ export default function MediaModal({
               </div>
             </div>
           </div>
-          <div className={`flex flex-col gap-2 flex-shrink-0 ${showPlayersSidebar ? 'mb-2 md:mb-4' : 'absolute top-6 right-20 z-50 md:top-10 md:right-24'}`}>
+          <div className={`flex flex-col gap-2 flex-shrink-0 ${showPlayersSidebar ? 'mb-2 md:mb-4' : 'absolute top-4 right-14 z-50 md:top-10 md:right-24'}`}>
             <div className="flex flex-wrap items-center gap-2">
               {showPlayersSidebar && (
                 <>
                   <button
                     type="button"
-                    onClick={() => setShowChoosePanel(true)}
+                    onClick={openChoosePanel}
                     className="inline-flex items-center gap-2 rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-2 text-[var(--text-primary)] transition-colors hover:bg-[var(--glass-bg-hover)]"
                   >
                     <Plus className="h-4 w-4" />
@@ -1410,7 +1369,7 @@ export default function MediaModal({
           </div>
 
           {!showPlayersSidebar && (
-            <div className="flex h-full w-full flex-col justify-end pb-12">
+            <div className="flex h-full w-full flex-col justify-end overflow-y-auto pt-24 pb-4 sm:pb-6 md:overflow-hidden md:pt-0 md:pb-12">
               {/* Background Artwork - Full Screen */}
               <div className="absolute inset-0 z-0">
                 {isImageAvailable(safeCurrentArtworkUrl) ? (
@@ -1431,21 +1390,24 @@ export default function MediaModal({
               </div>
 
               {/* Main Content Overlay - Bottom Aligned Controls */}
-              <div className="relative z-10 flex flex-col items-center gap-6 px-8 md:px-16 w-full max-w-5xl mx-auto">
+              <div
+                data-testid="media-immersive-content"
+                className="relative z-10 mx-auto flex w-full max-w-5xl flex-col items-center gap-3 px-4 sm:gap-4 sm:px-6 md:gap-6 md:px-16"
+              >
                 
                 {/* Intro / Metadata */}
                 <div className="text-center w-full">
-                  <h2 className="text-3xl font-bold text-white md:text-5xl drop-shadow-lg mb-2 line-clamp-2">
+                  <h2 className="mb-1 line-clamp-2 text-xl leading-tight font-bold text-white drop-shadow-lg sm:mb-2 sm:text-2xl md:text-5xl">
                     {mpTitle || t('common.unknown')}
                   </h2>
-                  <p className="text-xl font-medium text-white/80 md:text-2xl drop-shadow-md line-clamp-1">
+                  <p className="line-clamp-1 text-sm font-medium text-white/80 drop-shadow-md sm:text-base md:text-2xl">
                     {mpSeries || mpArtist}
                   </p>
                 </div>
 
                 {/* Progress Bar & Times */}
-                <div className="w-full flex items-center gap-4">
-                  <span className="text-xs font-medium text-white/80 w-12 text-right drop-shadow-md">
+                <div className="flex w-full items-center gap-2 sm:gap-3 md:gap-4">
+                  <span className="w-10 text-right text-[10px] font-medium text-white/80 drop-shadow-md sm:w-12 sm:text-xs">
                     {formatDuration(effectivePosition)}
                   </span>
                   <div className="flex-1">
@@ -1465,15 +1427,21 @@ export default function MediaModal({
                       colorClass="bg-white"
                     />
                   </div>
-                  <span className="text-xs font-medium text-white/80 w-12 drop-shadow-md">
+                  <span className="w-10 text-[10px] font-medium text-white/80 drop-shadow-md sm:w-12 sm:text-xs">
                     {formatDuration(duration)}
                   </span>
                 </div>
 
                 {/* Main Controls Row */}
-                <div className="flex items-center justify-between w-full gap-8">
+                <div
+                  data-testid="media-immersive-controls"
+                  className="flex w-full flex-col items-center justify-between gap-3 md:flex-row md:gap-8"
+                >
                   {/* Volume Group */}
-                  <div className="flex items-center gap-3 bg-black/30 backdrop-blur-md rounded-full px-4 py-2 border border-white/10">
+                  <div
+                    data-testid="media-immersive-volume"
+                    className="flex w-full max-w-sm items-center gap-3 rounded-full border border-white/10 bg-black/30 px-4 py-2 backdrop-blur-md md:w-auto md:max-w-none"
+                  >
                     <button
                       onClick={() =>
                         callService('media_player', 'volume_mute', {
@@ -1483,9 +1451,9 @@ export default function MediaModal({
                       }
                       className="text-white/80 hover:text-white transition-colors"
                     >
-                      {isMuted ? <VolumeX size={20} /> : <Volume2 size={20} />}
+                      {isMuted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
                     </button>
-                    <div className="w-24 md:w-48 lg:w-64">
+                    <div className="min-w-0 flex-1 md:w-48 md:flex-none lg:w-64">
                       <M3Slider
                          variant="volume"
                          min={0}
@@ -1504,7 +1472,10 @@ export default function MediaModal({
                   </div>
 
                   {/* Playback Buttons */}
-                  <div className="flex items-center gap-6 md:gap-8">
+                  <div
+                    data-testid="media-immersive-playback"
+                    className="flex items-center justify-center gap-3 sm:gap-4 md:gap-8"
+                  >
                      <button
                         onClick={() =>
                           callService('media_player', 'shuffle_set', {
@@ -1514,7 +1485,7 @@ export default function MediaModal({
                         }
                         className={`text-white/60 hover:text-white transition-colors ${shuffle ? 'text-[var(--status-success-fg)]' : ''}`}
                       >
-                        <Shuffle size={20} />
+                        <Shuffle className="h-4 w-4 sm:h-5 sm:w-5" />
                       </button>
 
                     <button
@@ -1523,19 +1494,19 @@ export default function MediaModal({
                       }
                       className="text-white hover:text-white/80 transition-transform active:scale-90"
                     >
-                      <SkipBack size={32} fill="currentColor" />
+                      <SkipBack className="h-6 w-6 sm:h-7 sm:w-7 md:h-8 md:w-8" fill="currentColor" />
                     </button>
 
                     <button
                       onClick={() =>
                         callService('media_player', 'media_play_pause', { entity_id: mpId })
                       }
-                      className="flex items-center justify-center bg-white text-black h-16 w-16 md:h-20 md:w-20 rounded-full shadow-xl hover:scale-105 active:scale-95 transition-all"
+                      className="flex h-14 w-14 items-center justify-center rounded-full bg-white text-black shadow-xl transition-all hover:scale-105 active:scale-95 sm:h-16 sm:w-16 md:h-20 md:w-20"
                     >
                        {isPlaying ? (
-                        <Pause size={32} fill="currentColor" />
+                        <Pause className="h-6 w-6 md:h-8 md:w-8" fill="currentColor" />
                       ) : (
-                        <Play size={32} fill="currentColor" className="ml-1" />
+                        <Play className="ml-1 h-6 w-6 md:h-8 md:w-8" fill="currentColor" />
                       )}
                     </button>
 
@@ -1545,7 +1516,7 @@ export default function MediaModal({
                       }
                       className="text-white hover:text-white/80 transition-transform active:scale-90"
                     >
-                      <SkipForward size={32} fill="currentColor" />
+                      <SkipForward className="h-6 w-6 sm:h-7 sm:w-7 md:h-8 md:w-8" fill="currentColor" />
                     </button>
 
                     <button
@@ -1559,7 +1530,11 @@ export default function MediaModal({
                         }}
                         className={`text-white/60 hover:text-white transition-colors ${repeat !== 'off' ? 'text-[var(--status-success-fg)]' : ''}`}
                       >
-                       {repeat === 'one' ? <Repeat1 size={20} /> : <Repeat size={20} />}
+                       {repeat === 'one' ? (
+                        <Repeat1 className="h-4 w-4 sm:h-5 sm:w-5" />
+                       ) : (
+                        <Repeat className="h-4 w-4 sm:h-5 sm:w-5" />
+                       )}
                     </button>
                   </div>
                   
@@ -1802,147 +1777,108 @@ export default function MediaModal({
         )}
 
         {showChoosePanel && (
-          <button
-            type="button"
-            aria-label={t('common.close')}
+          <div
+            aria-hidden="true"
             className="absolute inset-0 z-20 bg-black/30"
             onClick={() => setShowChoosePanel(false)}
           />
         )}
 
         <aside
-          className={`absolute top-0 right-0 z-30 h-full w-full transform border-l border-[var(--glass-border)] bg-[var(--modal-bg)] backdrop-blur-2xl transition-transform duration-300 ease-out md:w-[420px] ${showChoosePanel ? 'translate-x-0' : 'translate-x-full'}`}
+          data-testid="media-chooser"
+          aria-hidden={!showChoosePanel}
+          inert={!showChoosePanel}
+          className={`absolute top-0 right-0 z-30 h-full w-full transform overflow-hidden border-l border-[var(--glass-border)] bg-[var(--modal-bg)] backdrop-blur-2xl transition-transform duration-200 ease-out will-change-transform motion-reduce:transition-none md:w-[420px] ${showChoosePanel ? 'translate-x-0' : 'translate-x-full'}`}
         >
-          <div className="flex h-full flex-col gap-4 p-4 md:p-6">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h4 className="text-sm font-bold tracking-[0.2em] text-[var(--text-primary)] uppercase">
-                  {t('media.chooseMedia')}
-                </h4>
-                <p className="mt-1 text-[11px] text-[var(--text-muted)]">
-                  {t('media.chooseMediaHint')}
-                </p>
+          <div className="flex h-full min-h-0 flex-col">
+            <header className="flex-shrink-0 border-b border-[var(--glass-border)] px-4 pt-4 pb-3 md:px-5 md:pt-5 md:pb-4">
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0 pt-0.5">
+                  <h4 className="text-sm font-bold tracking-[0.2em] text-[var(--text-primary)] uppercase">
+                    {t('media.chooseMedia')}
+                  </h4>
+                  <p className="mt-1 truncate text-[11px] text-[var(--text-muted)]">
+                    {t('media.chooseMediaHint')}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  data-testid="media-chooser-close"
+                  onClick={() => setShowChoosePanel(false)}
+                  className="modal-close modal-close-dark flex-shrink-0"
+                  aria-label={t('common.close') || 'Close'}
+                >
+                  <X className="h-4 w-4" />
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={() => setShowChoosePanel(false)}
-                className="rounded-full p-2 text-[var(--text-secondary)] hover:bg-[var(--glass-bg-hover)]"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
 
-            <div className="flex flex-wrap items-center gap-2">
-              {renderChooseTabButton('favorites', t('media.choose.tab.favorites'))}
-              {renderChooseTabButton('playlists', t('media.choose.tab.playlists'))}
-              {libraryChoices.length > 0 &&
-                renderChooseTabButton('library', t('media.choose.tab.library'))}
-              {!isSonos && renderChooseTabButton('search', t('media.choose.tab.search'))}
-            </div>
-
-            {chooseTab === 'search' && (
-              <input
-                type="text"
-                value={chooseQuery}
-                onChange={(event) => setChooseQuery(event.target.value)}
-                placeholder={t('addCard.search')}
-                className="w-full rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-2 text-sm text-[var(--text-primary)] transition-colors outline-none focus:border-[var(--accent-color)]"
-              />
-            )}
-
-            <div className="custom-scrollbar flex-1 space-y-3 overflow-y-auto pr-1">
-              {browseLoading && (
-                <p className="py-2 text-sm text-[var(--text-muted)] italic">
-                  {t('media.choose.loading')}
-                </p>
-              )}
-              {!browseLoading && browseError && (
-                <p className="py-2 text-sm text-amber-400 italic">{t('media.choose.loadError')}</p>
-              )}
-
-              {chooseTab === 'favorites' && (
-                <>
-                  {favoritesLoading && (
-                    <p className="py-2 text-sm text-[var(--text-muted)] italic">
-                      {t('media.choose.loading')}
-                    </p>
-                  )}
-                  {!favoritesLoading && currentFavorites.length === 0 && (
-                    <p className="py-3 text-sm text-[var(--text-muted)] italic">
-                      {t('media.choose.emptyFavorites')}
-                    </p>
-                  )}
-                  {!favoritesLoading && currentFavorites.length > 0 && (
-                    <div className="grid grid-cols-2 gap-2">
-                      {currentFavorites.map((fav) => {
-                        const favImage =
-                          fav?.image && typeof getEntityImageUrl === 'function'
-                            ? getEntityImageUrl(fav.image)
-                            : fav?.image || null;
-                        const safeFavImage = sanitizeImageSrc(favImage);
-                        return (
-                          <button
-                            key={`fav::${fav.type}::${fav.id}`}
-                            type="button"
-                            onClick={() => playChoice(fav)}
-                            className="group flex flex-col items-center gap-2 rounded-xl p-3 transition-colors hover:bg-[var(--glass-bg-hover)]"
-                          >
-                            <div className="aspect-square w-full flex-shrink-0 overflow-hidden rounded-lg bg-[var(--glass-bg-hover)]">
-                              {isImageAvailable(safeFavImage) ? (
-                                <SafeImage
-                                  imageUrl={safeFavImage}
-                                  alt=""
-                                  className="h-full w-full object-cover"
-                                  onError={() => markImageFailed(safeFavImage)}
-                                />
-                              ) : (
-                                <div className="flex h-full w-full items-center justify-center">
-                                  <Heart className="h-6 w-6 text-[var(--text-secondary)] transition-colors group-hover:text-[var(--accent-color)]" />
-                                </div>
-                              )}
-                            </div>
-                            <p className="line-clamp-2 text-center text-[10px] leading-tight font-bold tracking-wider text-[var(--text-primary)] uppercase">
-                              {fav.label}
-                            </p>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-                </>
-              )}
-
-              {chooseTab === 'playlists' && (
-                <>
-                  {playlistChoices.length === 0 && (
-                    <p className="py-3 text-sm text-[var(--text-muted)] italic">
-                      {t('media.choose.emptyPlaylists')}
-                    </p>
-                  )}
-                  {playlistChoices.map((choice) => renderChoiceButton(choice, 'playlist::'))}
-                </>
-              )}
-
-              {chooseTab === 'library' && (
-                <>
-                  {libraryChoices.length === 0 && (
-                    <p className="py-3 text-sm text-[var(--text-muted)] italic">
-                      {t('media.choose.emptyResults')}
-                    </p>
-                  )}
-                  {libraryChoices.map((choice) => renderChoiceButton(choice, 'library::'))}
-                </>
-              )}
+              <div className="mt-4 grid grid-cols-4 gap-1.5" role="group">
+                {renderChooseTabButton('favorites', t('media.choose.tab.favorites'))}
+                {renderChooseTabButton('playlists', t('media.choose.tab.playlists'))}
+                {renderChooseTabButton('library', t('media.choose.tab.library'))}
+                {renderChooseTabButton('search', t('media.choose.tab.search'))}
+              </div>
 
               {chooseTab === 'search' && (
-                <>
-                  {filteredSearchChoices.length === 0 && (
-                    <p className="py-3 text-sm text-[var(--text-muted)] italic">
-                      {t('media.choose.emptyResults')}
-                    </p>
+                <input
+                  type="search"
+                  value={chooseQuery}
+                  onChange={(event) => setChooseQuery(event.target.value)}
+                  placeholder={t('addCard.search')}
+                  className="mt-3 w-full rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-2.5 text-sm text-[var(--text-primary)] transition-colors outline-none focus:border-[var(--accent-color)]"
+                />
+              )}
+            </header>
+
+            <div
+              data-testid="media-chooser-results"
+              aria-busy={browseLoading}
+              className="custom-scrollbar min-h-0 flex-1 overflow-y-auto px-4 pb-5 md:px-5"
+            >
+              <div className="flex h-9 items-center" aria-live="polite">
+                {browseLoading ? (
+                  <span className="text-[11px] font-medium text-[var(--text-muted)] italic">
+                    {t('media.choose.loading')}
+                  </span>
+                ) : browseError ? (
+                  <span className="text-[11px] font-medium text-amber-400 italic">
+                    {t('media.choose.loadError')}
+                  </span>
+                ) : null}
+              </div>
+
+              {browseLoading && !hasLoadedBrowseChoices ? (
+                <div data-testid="media-chooser-loading" className="grid grid-cols-2 gap-3">
+                  {[0, 1, 2, 3].map((item) => (
+                    <div
+                      key={item}
+                      className="animate-pulse rounded-2xl border border-[var(--glass-border)] bg-[var(--glass-bg)] p-2.5"
+                    >
+                      <div className="aspect-square rounded-xl bg-[var(--glass-bg-hover)]" />
+                      <div className="mt-2 h-3 w-4/5 rounded-full bg-[var(--glass-bg-hover)]" />
+                      <div className="mt-2 h-2 w-2/5 rounded-full bg-[var(--glass-bg-hover)]" />
+                    </div>
+                  ))}
+                </div>
+              ) : activeChooseChoices.length > 0 ? (
+                <div className="grid grid-cols-2 gap-3">
+                  {activeChooseChoices.map((choice) =>
+                    renderChoiceButton(choice, `${chooseTab}::`)
                   )}
-                  {filteredSearchChoices.map((choice) => renderChoiceButton(choice, 'search::'))}
-                </>
+                </div>
+              ) : (
+                <div className="flex min-h-52 flex-col items-center justify-center rounded-2xl border border-dashed border-[var(--glass-border)] px-6 text-center">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--glass-bg)] text-[var(--text-muted)]">
+                    {chooseTab === 'favorites' ? (
+                      <Heart className="h-5 w-5" />
+                    ) : (
+                      <Music className="h-5 w-5" />
+                    )}
+                  </div>
+                  <p className="mt-3 text-sm font-medium text-[var(--text-secondary)] italic">
+                    {activeChooseEmptyMessage}
+                  </p>
+                </div>
               )}
             </div>
           </div>

@@ -2,6 +2,7 @@ import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 
+/** @type {import('react').CSSProperties} */
 const HIDDEN_PORTAL_STYLE = {
   position: 'fixed',
   top: 0,
@@ -12,7 +13,7 @@ const HIDDEN_PORTAL_STYLE = {
 
 /**
  * @param {Object} props
- * @param {string} props.label
+ * @param {string} [props.label]
  * @param {any} props.icon
  * @param {string[]} props.options
  * @param {string} props.current
@@ -31,6 +32,7 @@ const HIDDEN_PORTAL_STYLE = {
  * @param {'start'|'end'} [props.menuAlign]
  * @param {number} [props.menuMinWidth]
  * @param {number} [props.menuOffset]
+ * @param {number} [props.menuZIndex]
  * @param {boolean} [props.stopPropagation]
  */
 export default function ModernDropdown({
@@ -53,6 +55,7 @@ export default function ModernDropdown({
   menuAlign = 'start',
   menuMinWidth,
   menuOffset = 8,
+  menuZIndex = 80,
   stopPropagation = false,
 }) {
   const resolvedPlaceholder = placeholder || t?.('dropdown.noneSelected') || 'Not selected';
@@ -61,7 +64,9 @@ export default function ModernDropdown({
   const buttonRef = useRef(null);
   const menuRef = useRef(null);
   const listboxId = useId().replace(/:/g, '');
-  const [portalStyle, setPortalStyle] = useState(HIDDEN_PORTAL_STYLE);
+  const [portalStyle, setPortalStyle] = useState(
+    /** @returns {import('react').CSSProperties} */ () => HIDDEN_PORTAL_STYLE
+  );
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -84,10 +89,11 @@ export default function ModernDropdown({
       if (event.key !== 'Escape') return;
       event.stopPropagation();
       setIsOpen(false);
+      buttonRef.current?.focus();
     };
 
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
+    document.addEventListener('keydown', handleKeyDown, true);
+    return () => document.removeEventListener('keydown', handleKeyDown, true);
   }, [isOpen]);
 
   useLayoutEffect(() => {
@@ -123,7 +129,7 @@ export default function ModernDropdown({
         top,
         left,
         width: resolvedWidth,
-        zIndex: 80,
+        zIndex: menuZIndex,
         visibility: 'visible',
         pointerEvents: 'auto',
       });
@@ -140,7 +146,7 @@ export default function ModernDropdown({
       window.removeEventListener('scroll', updatePosition, true);
       setPortalStyle(HIDDEN_PORTAL_STYLE);
     };
-  }, [isOpen, menuPortal, menuAlign, menuMinWidth, menuOffset, options]);
+  }, [isOpen, menuPortal, menuAlign, menuMinWidth, menuOffset, menuZIndex, options]);
 
   const getLabel = (val) => (map && map[val] ? map[val] : val);
   const selectedLabel = String(getLabel(current) || resolvedPlaceholder);

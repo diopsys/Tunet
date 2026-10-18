@@ -20,7 +20,13 @@ export function useEditModalProps({
       ? cardSettings[editSettingsKey] || cardSettings[showEditCardModal] || {}
       : {};
     const editId = showEditCardModal;
-    const editEntity = editId ? entities[editId] : null;
+    const isEntityCard = editId.startsWith('entity_card_');
+    const isEditSensor =
+      isEntityCard ||
+      (rawEditSettings?.type === 'sensor' &&
+        !/^(light[_.]|lock\.|vacuum\.|lawn_mower\.|fan\.|media_player\.)/.test(editId));
+    const editEntityId = isEditSensor ? rawEditSettings.entityId || editId : editId;
+    const editEntity = entities[editEntityId] || null;
 
     const isEditLightPanel = !!editId && editId.startsWith('light_panel_card_');
     const isEditLight = !!editId && !isEditLightPanel && (editId.startsWith('light_') || editId.startsWith('light.'));
@@ -34,6 +40,7 @@ export function useEditModalProps({
     const isEditTodo = !!editId && editId.startsWith('todo_card_');
     const isEditCost = !!editId && editId.startsWith('cost_card_');
     const isEditAndroidTV = !!editId && editId.startsWith('androidtv_card_');
+    const isEditAppleTV = !!editId && editId.startsWith('appletv_card_');
     const isEditVacuum = !!editId && editId.startsWith('vacuum.');
     const isEditAutomation = !!editId && editId.startsWith('automation.');
     const isEditCar = !!editId && (editId === 'car' || editId.startsWith('car_card_'));
@@ -45,13 +52,20 @@ export function useEditModalProps({
     const isEditCamera = !!editId && editId.startsWith('camera_card_');
     const isEditFrigateEvents = !!editId && editId.startsWith('frigate_events_card_');
     const isEditFan = !!editId && (editId.startsWith('fan.') || editId.startsWith('fan_card_'));
+    const isEditClimate = !!editId && editId.startsWith('climate_card_');
 
     const editSettings = isEditCar ? resolveCarSettings(editId, rawEditSettings) : rawEditSettings;
-    const nameFallbackEntityId = isEditCover
-      ? editSettings?.coverId || null
-      : isEditLock
-        ? editSettings?.lockId || editId
-        : editId;
+    const nameFallbackEntityId = isEditSensor
+      ? editEntityId
+      : isEditCover
+        ? editSettings?.coverId || null
+        : isEditClimate
+          ? editSettings?.climateId || null
+          : isEditAppleTV || isEditAndroidTV
+            ? editSettings?.mediaPlayerId || null
+            : isEditLock
+              ? editSettings?.lockId || editId
+              : editId;
     const isEditGenericType =
       (!!editSettings?.type &&
         (editSettings.type === 'entity' ||
@@ -61,10 +75,10 @@ export function useEditModalProps({
       isEditAutomation ||
       isEditCar ||
       isEditAndroidTV ||
+      isEditAppleTV ||
       isEditRoom ||
       isEditLock ||
       isEditFan;
-    const isEditSensor = !!editSettings?.type && editSettings.type === 'sensor';
     const isEditWeatherTemp = !!editId && editId.startsWith('weather_temp_');
     const canEditMobileWidth = supportsMobileCardWidth(editId);
 
@@ -79,6 +93,7 @@ export function useEditModalProps({
     const canEditIcon =
       !!editId &&
       (isEditLight ||
+        isEditSensor ||
         isEditMedia ||
         isEditCalendar ||
         isEditTodo ||
@@ -98,7 +113,8 @@ export function useEditModalProps({
         isEditFan);
 
     const canEditStatus =
-      !!editEntity && !!editSettingsKey && editSettingsKey.startsWith('settings::');
+      isEditSensor ||
+      (!!editEntity && !!editSettingsKey && editSettingsKey.startsWith('settings::'));
 
     return {
       canEditName,
@@ -112,6 +128,7 @@ export function useEditModalProps({
       isEditNordpool,
       isEditGenericType,
       isEditAndroidTV,
+      isEditAppleTV,
       isEditVacuum,
       isEditCar,
       isEditRoom,
@@ -123,6 +140,7 @@ export function useEditModalProps({
       isEditWeatherTemp,
       canEditMobileWidth,
       isEditFan,
+      isEditClimate,
       isEditAlarm,
       isEditLightPanel,
       nameFallbackEntityId,

@@ -43,6 +43,8 @@ export function useAddCard({
   const [selectedTempId, setSelectedTempId] = useState(null);
   const [selectedAndroidTVMediaId, setSelectedAndroidTVMediaId] = useState(null);
   const [selectedAndroidTVRemoteId, setSelectedAndroidTVRemoteId] = useState(null);
+  const [selectedAppleTVMediaId, setSelectedAppleTVMediaId] = useState(null);
+  const [selectedAppleTVRemoteId, setSelectedAppleTVRemoteId] = useState(null);
   const [selectedCostTodayId, setSelectedCostTodayId] = useState(null);
   const [selectedCostMonthId, setSelectedCostMonthId] = useState(null);
   const [costSelectionTarget, setCostSelectionTarget] = useState('today');
@@ -86,7 +88,14 @@ export function useAddCard({
   // ── Infer card type from target page ───────────────────────────────────
   useEffect(() => {
     if (!showAddCardModal) return;
-    if (isMediaPage(addCardTargetPage) || isSonosPage(addCardTargetPage) || isLightsPage(addCardTargetPage) || isBatteryPage(addCardTargetPage) || isRoomExplorerPage(addCardTargetPage) || isStundenplanPage(addCardTargetPage)) {
+    if (
+      isMediaPage(addCardTargetPage) ||
+      isSonosPage(addCardTargetPage) ||
+      isLightsPage(addCardTargetPage) ||
+      isBatteryPage(addCardTargetPage) ||
+      isRoomExplorerPage(addCardTargetPage) ||
+      isStundenplanPage(addCardTargetPage)
+    ) {
       setAddCardType('entity');
       return;
     }
@@ -105,6 +114,8 @@ export function useAddCard({
     setSelectedTempId(null);
     setSelectedAndroidTVMediaId(null);
     setSelectedAndroidTVRemoteId(null);
+    setSelectedAppleTVMediaId(null);
+    setSelectedAppleTVRemoteId(null);
     setSelectedCostTodayId(null);
     setSelectedCostMonthId(null);
     setCostSelectionTarget('today');
@@ -143,35 +154,35 @@ export function useAddCard({
           ? 'addCard.item.entities'
           : addCardType === 'lock'
             ? 'addCard.item.locks'
-          : addCardType === 'vacuum'
-            ? 'addCard.item.vacuums'
-            : addCardType === 'fan'
-              ? 'addCard.item.fans'
-              : addCardType === 'camera'
-                ? 'addCard.item.cameras'
-                : addCardType === 'climate'
-                  ? 'addCard.item.climates'
-                  : addCardType === 'cover'
-                    ? 'addCard.item.covers'
-                    : addCardType === 'alarm'
-                      ? 'addCard.item.alarms'
-                      : addCardType === 'cost'
-                        ? 'addCard.item.costs'
-                        : addCardType === 'media'
-                          ? 'addCard.item.players'
-                          : addCardType === 'sonos'
+            : addCardType === 'vacuum'
+              ? 'addCard.item.vacuums'
+              : addCardType === 'fan'
+                ? 'addCard.item.fans'
+                : addCardType === 'camera'
+                  ? 'addCard.item.cameras'
+                  : addCardType === 'climate'
+                    ? 'addCard.item.climates'
+                    : addCardType === 'cover'
+                      ? 'addCard.item.covers'
+                      : addCardType === 'alarm'
+                        ? 'addCard.item.alarms'
+                        : addCardType === 'cost'
+                          ? 'addCard.item.costs'
+                          : addCardType === 'media'
                             ? 'addCard.item.players'
-                          : addCardType === 'car'
-                            ? 'addCard.item.cars'
-                            : addCardType === 'toggle'
-                              ? 'addCard.item.toggles'
-                              : addCardType === 'sensor'
-                                ? 'addCard.item.sensors'
-                                : addCardType === 'entity'
-                                  ? 'addCard.item.entities'
-                                  : addCardType === 'navimow'
-                                    ? 'addCard.item.vacuums'
-                                    : 'addCard.item.lights';
+                            : addCardType === 'sonos'
+                              ? 'addCard.item.players'
+                              : addCardType === 'car'
+                                ? 'addCard.item.cars'
+                                : addCardType === 'toggle'
+                                  ? 'addCard.item.toggles'
+                                  : addCardType === 'sensor'
+                                    ? 'addCard.item.sensors'
+                                    : addCardType === 'entity'
+                                      ? 'addCard.item.entities'
+                                      : addCardType === 'navimow'
+                                        ? 'addCard.item.vacuums'
+                                        : 'addCard.item.lights';
 
     return t('addCard.noneLeft').replace('{item}', t(itemKey));
   };
@@ -205,6 +216,10 @@ export function useAddCard({
       setSelectedTempId,
       setSelectedAndroidTVMediaId,
       setSelectedAndroidTVRemoteId,
+      selectedAppleTVMediaId,
+      selectedAppleTVRemoteId,
+      setSelectedAppleTVMediaId,
+      setSelectedAppleTVRemoteId,
       setSelectedCostTodayId,
       setSelectedCostMonthId,
       setCostSelectionTarget,
@@ -233,6 +248,10 @@ export function useAddCard({
     setSelectedAndroidTVMediaId,
     selectedAndroidTVRemoteId,
     setSelectedAndroidTVRemoteId,
+    selectedAppleTVMediaId,
+    setSelectedAppleTVMediaId,
+    selectedAppleTVRemoteId,
+    setSelectedAppleTVRemoteId,
     selectedCostTodayId,
     setSelectedCostTodayId,
     selectedCostMonthId,
