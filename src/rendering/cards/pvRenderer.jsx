@@ -1,6 +1,6 @@
 import GenericPvCard from '../../components/cards/GenericPvCard';
 import { getSettings, renderMissingEntityWhenReady } from '../helpers';
-import { PV_ENTITY_IDS } from '../../components/cards/GenericPvCard';
+import { resolvePvIds } from '../../components/cards/GenericPvCard';
 
 export function renderPvCard(cardId, dragProps, getControls, cardStyle, settingsKey, ctx) {
   const {
@@ -17,14 +17,15 @@ export function renderPvCard(cardId, dragProps, getControls, cardStyle, settings
   } = ctx;
   const settings = getSettings(cardSettings, settingsKey, cardId);
 
-  const primaryEntity = entities?.[PV_ENTITY_IDS.pvW];
+  const pvId = resolvePvIds(settings).pvW;
+  const primaryEntity = entities?.[pvId];
   if (!primaryEntity) {
     return renderMissingEntityWhenReady(ctx, {
       cardId,
       dragProps,
       controls: getControls(cardId),
       cardStyle,
-      missingEntityId: PV_ENTITY_IDS.pvW,
+      missingEntityId: pvId,
       t,
     });
   }

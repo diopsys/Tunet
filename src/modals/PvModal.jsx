@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { getHistory, getHistoryRest, canUseHistoryRest } from '../services/haClient';
 import { Sun, X } from '../icons';
-import { PV_ENTITY_IDS } from '../components/cards/GenericPvCard';
+import { readPv, resolvePvIds } from '../components/cards/GenericPvCard';
 import AccessibleModalShell from '../components/ui/AccessibleModalShell';
 
 const SOLAR_COLOR = '#fb923c';
@@ -413,8 +413,10 @@ export default function PvModal({
   conn,
   haUrl,
   haToken,
+  settings,
   t,
 }) {
+  const ids = resolvePvIds(settings);
   const [mainTab, setMainTab] = useState('leistung');
   const [forecastChartDay, setForecastChartDay] = useState(0);
   const [pvHistory, setPvHistory] = useState([]);
@@ -425,7 +427,7 @@ export default function PvModal({
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const opts = {
-      entityId: 'sensor.solar_panel_production_w',
+      entityId: ids.pvW,
       start: today,
       end: new Date(),
       minimal_response: true,
@@ -459,41 +461,38 @@ export default function PvModal({
       }
     }
     load();
-  }, [show, conn, haUrl, haToken]);
+  }, [show, conn, haUrl, haToken, ids.pvW]);
 
   if (!show) return null;
 
   const name = customNames?.[cardId] || 'Solar';
 
-  const e = (id) => entities?.[id];
-  const v = (id) => {
-    const s = parseFloat(e(id)?.state);
-    return Number.isFinite(s) ? s : null;
-  };
+  const v = (id) => readPv(entities, id);
 
-  const pvW = v(PV_ENTITY_IDS.pvW);
-  const pvDaily = v(PV_ENTITY_IDS.pvDaily);
-  const pvMonthly = v(PV_ENTITY_IDS.pvMonthly);
-  const pvYearly = v(PV_ENTITY_IDS.pvYearly);
-  const houseW = v(PV_ENTITY_IDS.houseW);
-  const houseDaily = v(PV_ENTITY_IDS.houseDaily);
-  const heatPumpW = v('sensor.daikin_heizung_leistung');
-  const batteryInW = v(PV_ENTITY_IDS.batteryInW);
-  const batterySoc = v(PV_ENTITY_IDS.batterySoc);
-  const batteryInDaily = v(PV_ENTITY_IDS.batteryInDaily);
-  const batteryOutDaily = v(PV_ENTITY_IDS.batteryOutDaily);
-  const gridImportW = v(PV_ENTITY_IDS.gridImportW);
-  const gridExportW = v(PV_ENTITY_IDS.gridExportW);
-  const gridImportDaily = v(PV_ENTITY_IDS.gridImportDaily);
-  const gridExportDaily = v(PV_ENTITY_IDS.gridExportDaily);
-  const pvToHouseDaily = v(PV_ENTITY_IDS.pvToHouseDaily);
-  const batteryMaxEnergy = v(PV_ENTITY_IDS.batteryMaxEnergy);
-  const forecastRemaining = v(PV_ENTITY_IDS.forecastRemaining);
-  const forecastPeakToday = v(PV_ENTITY_IDS.forecastPeakToday);
-  const forecastData = entities?.[PV_ENTITY_IDS.forecastCurrent]?.attributes?.forecast ?? [];
+  const pvW = v(ids.pvW);
+  const pvDaily = v(ids.pvDaily);
+  const pvMonthly = v(ids.pvMonthly);
+  const pvYearly = v(ids.pvYearly);
+  const houseW = v(ids.houseW);
+  const houseDaily = v(ids.houseDaily);
+  const heatPumpW = v(ids.heatPumpW);
+  const batteryInW = v(ids.batteryInW);
+  const batterySoc = v(ids.batterySoc);
+  const batteryInDaily = v(ids.batteryInDaily);
+  const batteryOutDaily = v(ids.batteryOutDaily);
+  const gridImportW = v(ids.gridImportW);
+  const gridExportW = v(ids.gridExportW);
+  const gridImportDaily = v(ids.gridImportDaily);
+  const gridExportDaily = v(ids.gridExportDaily);
+  const pvToHouseDaily = v(ids.pvToHouseDaily);
+  const batteryMaxEnergy = v(ids.batteryMaxEnergy);
+  const forecastRemaining = v(ids.forecastRemaining);
+  const forecastPeakToday = v(ids.forecastPeakToday);
+  const forecastData = (ids.forecastCurrent && entities?.[ids.forecastCurrent]?.attributes?.forecast) ?? [];
 
   // Compute battery discharge estimate
-  const batteryOutW = Math.max(0, (houseW ?? 0) - (pvW ?? 0) - (gridImportW ?? 0));
+  // Entladung aus eigenem Sensor, sonst aus der Bilanz Haus − PV − Netzbezug
+  const batteryOutW = ids.batteryOutW ? (v(ids.batteryOutW) ?? 0) : Math.max(0, (houseW ?? 0) - (pvW ?? 0) - (gridImportW ?? 0));
   const batteryDischarging = (batteryInW ?? 0) < 1 && batteryOutW > 10;
 
   // Self-consumption & self-sufficiency
@@ -641,12 +640,12 @@ export default function PvModal({
               <div className="grid grid-cols-3 gap-3">
                 <InfoTile
                   label="Heute gesamt"
-                  value={v(PV_ENTITY_IDS.forecastToday) != null ? `${v(PV_ENTITY_IDS.forecastToday).toFixed(1)} kWh` : null}
+                  value={v(ids.forecastToday) != null ? `${v(ids.forecastToday).toFixed(1)} kWh` : null}
                   color={SOLAR_COLOR}
                 />
                 <InfoTile
                   label="Morgen"
-                  value={v(PV_ENTITY_IDS.forecastTomorrow) != null ? `${v(PV_ENTITY_IDS.forecastTomorrow).toFixed(1)} kWh` : null}
+                  value={v(ids.forecastTomorrow) != null ? `${v(ids.forecastTomorrow).toFixed(1)} kWh` : null}
                   color="#fbbf24"
                 />
                 <InfoTile
@@ -688,13 +687,13 @@ export default function PvModal({
                       <div className="flex flex-col">
                         <span className="text-[9px] font-bold tracking-wide uppercase" style={{ color: 'var(--text-muted)' }}>Diese Stunde</span>
                         <span className="text-sm font-light" style={{ color: SOLAR_COLOR }}>
-                          {v(PV_ENTITY_IDS.forecastThisHour) != null ? `${v(PV_ENTITY_IDS.forecastThisHour).toFixed(2)} kWh` : '—'}
+                          {v(ids.forecastThisHour) != null ? `${v(ids.forecastThisHour).toFixed(2)} kWh` : '—'}
                         </span>
                       </div>
                       <div className="flex flex-col">
                         <span className="text-[9px] font-bold tracking-wide uppercase" style={{ color: 'var(--text-muted)' }}>Nächste Stunde</span>
                         <span className="text-sm font-light" style={{ color: '#fbbf24' }}>
-                          {v(PV_ENTITY_IDS.forecastNextHour) != null ? `${v(PV_ENTITY_IDS.forecastNextHour).toFixed(2)} kWh` : '—'}
+                          {v(ids.forecastNextHour) != null ? `${v(ids.forecastNextHour).toFixed(2)} kWh` : '—'}
                         </span>
                       </div>
                     </div>
@@ -715,7 +714,7 @@ export default function PvModal({
                     { key: 'forecastDay4',     label: '+3' },
                     { key: 'forecastDay5',     label: '+4' },
                   ].map(({ key, label }, i) => {
-                    const val = v(PV_ENTITY_IDS[key]);
+                    const val = v(ids[key]);
                     return (
                       <div key={key} className="popup-surface flex flex-col items-center justify-center gap-1 rounded-2xl p-4">
                         <p className="text-[10px] font-bold tracking-[0.15em] uppercase" style={{ color: 'var(--text-muted)' }}>{label}</p>

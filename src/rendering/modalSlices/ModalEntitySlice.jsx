@@ -605,6 +605,7 @@ export function ModalEntitySlice({ core, modals, cardConfig, entityHelpers, reso
             entities={entities}
             customNames={customNames}
             cardId={showPvModal}
+            settings={cardSettings?.[getCardSettingsKey(showPvModal)] || cardSettings?.[showPvModal]}
             conn={conn}
             haUrl={activeUrl}
             haToken={

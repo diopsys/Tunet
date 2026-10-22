@@ -31,7 +31,28 @@ export const PV_ENTITY_IDS = {
   forecastNextHour: 'sensor.pv_anlage_energy_next_hour',
   pvToHouseDaily: 'sensor.solar_panel_to_house_daily',
   batteryMaxEnergy: 'sensor.solaredge_b1_maximum_energy',
+  // nur im Dialog: Verbraucher im Energiefluss; Speicher-Entladung (leer = aus Bilanz berechnet)
+  heatPumpW: 'sensor.daikin_heizung_leistung',
+  batteryOutW: null,
 };
+
+/** Belegung: Standard (oben) mit settings.pvEntities überschrieben; null schaltet einen Wert ab. */
+export function resolvePvIds(settings) {
+  const eigene = settings?.pvEntities && typeof settings.pvEntities === 'object' ? settings.pvEntities : {};
+  return { ...PV_ENTITY_IDS, ...eigene };
+}
+
+const FAKTOR = { W: 1, kW: 1000, MW: 1e6, Wh: 0.001, kWh: 1, MWh: 1000 };
+
+/** Zahlenwert in W bzw. kWh – Wh/MWh und kW werden anhand der Einheit umgerechnet. */
+export function readPv(entities, id) {
+  if (!id) return null;
+  const entity = entities?.[id];
+  const s = parseFloat(entity?.state);
+  if (!Number.isFinite(s)) return null;
+  const faktor = FAKTOR[entity?.attributes?.unit_of_measurement];
+  return faktor ? s * faktor : s;
+}
 
 function getBattSocColor(soc) {
   if (soc == null) return 'var(--text-muted)';
@@ -61,16 +82,14 @@ const GenericPvCard = memo(function GenericPvCard({
   const isUltraCompact = isTwoColMobile && settings.size !== 'small';
   const isDenseMobile = isMobile && settings.size !== 'small';
 
-  const v = (id) => {
-    const s = parseFloat(entities?.[id]?.state);
-    return Number.isFinite(s) ? s : null;
-  };
+  const ids = resolvePvIds(settings);
+  const v = (id) => readPv(entities, id);
 
-  const pvW = v(PV_ENTITY_IDS.pvW);
-  const pvDaily = v(PV_ENTITY_IDS.pvDaily);
-  const batterySoc = v(PV_ENTITY_IDS.batterySoc);
-  const gridImportW = v(PV_ENTITY_IDS.gridImportW);
-  const gridExportW = v(PV_ENTITY_IDS.gridExportW);
+  const pvW = v(ids.pvW);
+  const pvDaily = v(ids.pvDaily);
+  const batterySoc = v(ids.batterySoc);
+  const gridImportW = v(ids.gridImportW);
+  const gridExportW = v(ids.gridExportW);
 
   const isProducing = pvW != null && pvW > 10;
   const netGrid = (gridExportW ?? 0) - (gridImportW ?? 0); // positive = exporting
