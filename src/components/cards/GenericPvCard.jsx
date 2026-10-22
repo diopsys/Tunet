@@ -1,4 +1,4 @@
-import { memo } from 'react';
+import { memo, useEffect, useState } from 'react';
 import { Sun } from '../../icons';
 import { getIconComponent } from '../../icons';
 
@@ -34,6 +34,8 @@ export const PV_ENTITY_IDS = {
   // nur im Dialog: Verbraucher im Energiefluss; Speicher-Entladung (leer = aus Bilanz berechnet)
   heatPumpW: 'sensor.daikin_heizung_leistung',
   batteryOutW: null,
+  // Gesamtzähler (Liste): Monat/Jahr aus der HA-Statistik, wenn pvMonthly/pvYearly fehlen
+  pvTotals: null,
 };
 
 /** Belegung: Standard (oben) mit settings.pvEntities überschrieben; null schaltet einen Wert ab. */
@@ -43,6 +45,53 @@ export function resolvePvIds(settings) {
 }
 
 const FAKTOR = { W: 1, kW: 1000, MW: 1e6, Wh: 0.001, kWh: 1, MWh: 1000 };
+
+const STATISTIK_INTERVALL_MS = 15 * 60 * 1000;
+
+/** Änderung einer Statistik seit Beginn des Kalenderzeitraums (month | year), in kWh. */
+export async function fetchPeriodChange(conn, statisticId, period, unit) {
+  const res = await conn.sendMessagePromise({
+    type: 'recorder/statistic_during_period',
+    statistic_id: statisticId,
+    calendar: { period },
+    types: ['change'],
+  });
+  const wert = Number(res?.change);
+  if (!Number.isFinite(wert)) return null;
+  const faktor = FAKTOR[unit];
+  return faktor ? wert * faktor : wert;
+}
+
+/**
+ * Ertrag seit Monats- und Jahresbeginn als Summe der Gesamtzähler (kWh),
+ * alle 15 Minuten neu aus der Langzeitstatistik.
+ */
+export function usePvPeriodTotals(conn, totalIds, entities, active = true) {
+  const [werte, setWerte] = useState({ month: null, year: null });
+  const ids = Array.isArray(totalIds) ? totalIds.filter(Boolean) : [];
+  const key = ids.join('|');
+  const units = ids.map((id) => entities?.[id]?.attributes?.unit_of_measurement || '').join('|');
+
+  useEffect(() => {
+    if (!active || !conn || typeof conn.sendMessagePromise !== 'function' || !key) return undefined;
+    let aus = false;
+    const liste = key.split('|');
+    const einheiten = units.split('|');
+    const summe = async (period) => {
+      const teile = await Promise.all(liste.map((id, i) => fetchPeriodChange(conn, id, period, einheiten[i]).catch(() => null)));
+      return teile.some((t) => t == null) ? null : teile.reduce((a, b) => a + b, 0);
+    };
+    const laden = async () => {
+      const [month, year] = await Promise.all([summe('month'), summe('year')]);
+      if (!aus) setWerte({ month, year });
+    };
+    laden();
+    const timer = setInterval(laden, STATISTIK_INTERVALL_MS);
+    return () => { aus = true; clearInterval(timer); };
+  }, [conn, key, units, active]);
+
+  return werte;
+}
 
 /** Zahlenwert in W bzw. kWh – Wh/MWh und kW werden anhand der Einheit umgerechnet. */
 export function readPv(entities, id) {

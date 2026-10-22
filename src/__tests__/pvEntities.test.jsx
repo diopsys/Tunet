@@ -1,6 +1,12 @@
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
-import GenericPvCard, { PV_ENTITY_IDS, readPv, resolvePvIds } from '../components/cards/GenericPvCard';
+import { render, renderHook, screen, waitFor } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
+import GenericPvCard, {
+  PV_ENTITY_IDS,
+  fetchPeriodChange,
+  readPv,
+  resolvePvIds,
+  usePvPeriodTotals,
+} from '../components/cards/GenericPvCard';
 
 describe('PV-Belegung', () => {
   it('keeps the defaults and overrides single keys', () => {
@@ -46,5 +52,41 @@ describe('PV-Belegung', () => {
     };
     render(<GenericPvCard cardId="pv_card_1" entities={entities} settings={settings} />);
     expect(screen.getAllByText(/2400/).length).toBeGreaterThan(0);
+  });
+});
+
+describe('Monat/Jahr aus der Statistik', () => {
+  const changes = {
+    'sensor.mppt1': { month: 324603.2, year: 5982129.9 },
+    'sensor.mppt2': { month: 311291.4, year: 5851310.5 },
+  };
+  const conn = {
+    sendMessagePromise: vi.fn(async (msg) => ({ change: changes[msg.statistic_id][msg.calendar.period] })),
+  };
+  const entities = {
+    'sensor.mppt1': { state: '25583516', attributes: { unit_of_measurement: 'Wh' } },
+    'sensor.mppt2': { state: '24981849', attributes: { unit_of_measurement: 'Wh' } },
+  };
+
+  it('reads the change of a calendar period and converts the unit', async () => {
+    await expect(fetchPeriodChange(conn, 'sensor.mppt1', 'month', 'Wh')).resolves.toBeCloseTo(324.6, 1);
+    expect(conn.sendMessagePromise).toHaveBeenCalledWith({
+      type: 'recorder/statistic_during_period',
+      statistic_id: 'sensor.mppt1',
+      calendar: { period: 'month' },
+      types: ['change'],
+    });
+  });
+
+  it('sums all total meters for month and year', async () => {
+    const { result } = renderHook(() => usePvPeriodTotals(conn, ['sensor.mppt1', 'sensor.mppt2'], entities));
+    await waitFor(() => expect(result.current.year).not.toBeNull());
+    expect(result.current.month).toBeCloseTo(635.9, 1);
+    expect(result.current.year).toBeCloseTo(11833.4, 1);
+  });
+
+  it('stays empty without total meters or connection', () => {
+    const { result } = renderHook(() => usePvPeriodTotals(null, ['sensor.mppt1'], entities));
+    expect(result.current).toEqual({ month: null, year: null });
   });
 });

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { getHistory, getHistoryRest, canUseHistoryRest } from '../services/haClient';
 import { Sun, X } from '../icons';
-import { readPv, resolvePvIds } from '../components/cards/GenericPvCard';
+import { readPv, resolvePvIds, usePvPeriodTotals } from '../components/cards/GenericPvCard';
 import AccessibleModalShell from '../components/ui/AccessibleModalShell';
 
 const SOLAR_COLOR = '#fb923c';
@@ -417,6 +417,8 @@ export default function PvModal({
   t,
 }) {
   const ids = resolvePvIds(settings);
+  // Monat/Jahr aus der Statistik der Gesamtzähler, wenn keine eigenen Sensoren eingetragen sind
+  const periodTotals = usePvPeriodTotals(conn, ids.pvMonthly && ids.pvYearly ? null : ids.pvTotals, entities, show);
   const [mainTab, setMainTab] = useState('leistung');
   const [forecastChartDay, setForecastChartDay] = useState(0);
   const [pvHistory, setPvHistory] = useState([]);
@@ -471,8 +473,8 @@ export default function PvModal({
 
   const pvW = v(ids.pvW);
   const pvDaily = v(ids.pvDaily);
-  const pvMonthly = v(ids.pvMonthly);
-  const pvYearly = v(ids.pvYearly);
+  const pvMonthly = v(ids.pvMonthly) ?? periodTotals.month;
+  const pvYearly = v(ids.pvYearly) ?? periodTotals.year;
   const houseW = v(ids.houseW);
   const houseDaily = v(ids.houseDaily);
   const heatPumpW = v(ids.heatPumpW);
