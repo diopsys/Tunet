@@ -93,6 +93,56 @@ export function usePvPeriodTotals(conn, totalIds, entities, active = true) {
   return werte;
 }
 
+/**
+ * Prognosewerte aus einer Leistungskurve (Attribut „forecast“: [{datetime, watts}],
+ * z. B. Helios): Energie je Kalendertag (kWh, Index 0 = heute), Spitzenleistung heute (W),
+ * Energie in dieser und der nächsten vollen Stunde (kWh). Jeder Punkt gilt bis zum nächsten.
+ */
+export function forecastFromCurve(forecast, now = new Date()) {
+  const leer = { days: [], peakToday: null, thisHour: null, nextHour: null };
+  if (!Array.isArray(forecast) || forecast.length < 2) return leer;
+  const punkte = forecast
+    .map((p) => ({ t: new Date(p.datetime).getTime(), w: Number(p.watts) }))
+    .filter((p) => Number.isFinite(p.t) && Number.isFinite(p.w))
+    .sort((a, b) => a.t - b.t);
+  if (punkte.length < 2) return leer;
+
+  const tagesbeginn = new Date(now);
+  tagesbeginn.setHours(0, 0, 0, 0);
+  const stunde = new Date(now);
+  stunde.setMinutes(0, 0, 0);
+  const h0 = stunde.getTime();
+  const h1 = h0 + 3600e3;
+  const h2 = h1 + 3600e3;
+  const tagIndex = (t) => {
+    const d = new Date(t);
+    d.setHours(0, 0, 0, 0);
+    return Math.round((d - tagesbeginn) / 86400e3);
+  };
+
+  const days = [];
+  let peakToday = null;
+  let thisHour = 0;
+  let nextHour = 0;
+  let stundenAbgedeckt = false;
+  const schritt = punkte[1].t - punkte[0].t;
+  punkte.forEach((p, i) => {
+    const ende = i + 1 < punkte.length ? punkte[i + 1].t : p.t + schritt;
+    const kwh = (p.w * (ende - p.t)) / 3600e3 / 1000;
+    const tag = tagIndex(p.t);
+    if (tag >= 0) days[tag] = (days[tag] || 0) + kwh;
+    if (tag === 0) peakToday = peakToday == null ? p.w : Math.max(peakToday, p.w);
+    if (p.t >= h0 && p.t < h1) { thisHour += kwh; stundenAbgedeckt = true; }
+    if (p.t >= h1 && p.t < h2) nextHour += kwh;
+  });
+  return {
+    days: Array.from({ length: days.length }, (_, i) => (days[i] == null ? null : days[i])),
+    peakToday,
+    thisHour: stundenAbgedeckt ? thisHour : null,
+    nextHour: stundenAbgedeckt ? nextHour : null,
+  };
+}
+
 /** Zahlenwert in W bzw. kWh – Wh/MWh und kW werden anhand der Einheit umgerechnet. */
 export function readPv(entities, id) {
   if (!id) return null;

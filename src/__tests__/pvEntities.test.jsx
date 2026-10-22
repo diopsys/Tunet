@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import GenericPvCard, {
   PV_ENTITY_IDS,
   fetchPeriodChange,
+  forecastFromCurve,
   readPv,
   resolvePvIds,
   usePvPeriodTotals,
@@ -88,5 +89,30 @@ describe('Monat/Jahr aus der Statistik', () => {
   it('stays empty without total meters or connection', () => {
     const { result } = renderHook(() => usePvPeriodTotals(null, ['sensor.mppt1'], entities));
     expect(result.current).toEqual({ month: null, year: null });
+  });
+});
+
+describe('Prognose aus der Leistungskurve', () => {
+  // 3 Tage im 15-min-Raster: 10–14 Uhr 4000 W, sonst 0 W
+  const start = new Date(2026, 9, 22, 0, 0, 0);
+  const kurve = Array.from({ length: 3 * 96 }, (_, i) => {
+    const t = new Date(start.getTime() + i * 15 * 60e3);
+    const h = t.getHours();
+    return { datetime: t.toISOString(), watts: h >= 10 && h < 14 ? 4000 : 0, p10: null, p90: null };
+  });
+
+  it('sums energy per day, peak and hours', () => {
+    const r = forecastFromCurve(kurve, new Date(2026, 9, 22, 11, 20));
+    expect(r.days.map((d) => Math.round(d * 10) / 10)).toEqual([16, 16, 16]); // 4 h × 4 kW
+    expect(r.peakToday).toBe(4000);
+    expect(r.thisHour).toBeCloseTo(4, 5); // 11–12 Uhr
+    expect(r.nextHour).toBeCloseTo(4, 5); // 12–13 Uhr
+  });
+
+  it('handles the evening and missing data', () => {
+    const r = forecastFromCurve(kurve, new Date(2026, 9, 22, 13, 30));
+    expect(r.thisHour).toBeCloseTo(4, 5);
+    expect(r.nextHour).toBe(0);
+    expect(forecastFromCurve([], new Date())).toEqual({ days: [], peakToday: null, thisHour: null, nextHour: null });
   });
 });

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { getHistory, getHistoryRest, canUseHistoryRest } from '../services/haClient';
 import { Sun, X } from '../icons';
-import { readPv, resolvePvIds, usePvPeriodTotals } from '../components/cards/GenericPvCard';
+import { forecastFromCurve, readPv, resolvePvIds, usePvPeriodTotals } from '../components/cards/GenericPvCard';
 import AccessibleModalShell from '../components/ui/AccessibleModalShell';
 
 const SOLAR_COLOR = '#fb923c';
@@ -489,8 +489,16 @@ export default function PvModal({
   const pvToHouseDaily = v(ids.pvToHouseDaily);
   const batteryMaxEnergy = v(ids.batteryMaxEnergy);
   const forecastRemaining = v(ids.forecastRemaining);
-  const forecastPeakToday = v(ids.forecastPeakToday);
   const forecastData = (ids.forecastCurrent && entities?.[ids.forecastCurrent]?.attributes?.forecast) ?? [];
+  // Fehlende Prognose-Sensoren aus der Leistungskurve ableiten (Tage, Spitze, Stunden)
+  const kurve = forecastFromCurve(forecastData);
+  const AUS_KURVE = {
+    forecastToday: kurve.days[0], forecastTomorrow: kurve.days[1], forecastDay3: kurve.days[2],
+    forecastDay4: kurve.days[3], forecastDay5: kurve.days[4], forecastPeakToday: kurve.peakToday,
+    forecastThisHour: kurve.thisHour, forecastNextHour: kurve.nextHour,
+  };
+  const fv = (key) => v(ids[key]) ?? AUS_KURVE[key] ?? null;
+  const forecastPeakToday = fv('forecastPeakToday');
 
   // Compute battery discharge estimate
   // Entladung aus eigenem Sensor, sonst aus der Bilanz Haus − PV − Netzbezug
@@ -642,12 +650,12 @@ export default function PvModal({
               <div className="grid grid-cols-3 gap-3">
                 <InfoTile
                   label="Heute gesamt"
-                  value={v(ids.forecastToday) != null ? `${v(ids.forecastToday).toFixed(1)} kWh` : null}
+                  value={fv('forecastToday') != null ? `${fv('forecastToday').toFixed(1)} kWh` : null}
                   color={SOLAR_COLOR}
                 />
                 <InfoTile
                   label="Morgen"
-                  value={v(ids.forecastTomorrow) != null ? `${v(ids.forecastTomorrow).toFixed(1)} kWh` : null}
+                  value={fv('forecastTomorrow') != null ? `${fv('forecastTomorrow').toFixed(1)} kWh` : null}
                   color="#fbbf24"
                 />
                 <InfoTile
@@ -689,13 +697,13 @@ export default function PvModal({
                       <div className="flex flex-col">
                         <span className="text-[9px] font-bold tracking-wide uppercase" style={{ color: 'var(--text-muted)' }}>Diese Stunde</span>
                         <span className="text-sm font-light" style={{ color: SOLAR_COLOR }}>
-                          {v(ids.forecastThisHour) != null ? `${v(ids.forecastThisHour).toFixed(2)} kWh` : '—'}
+                          {fv('forecastThisHour') != null ? `${fv('forecastThisHour').toFixed(2)} kWh` : '—'}
                         </span>
                       </div>
                       <div className="flex flex-col">
                         <span className="text-[9px] font-bold tracking-wide uppercase" style={{ color: 'var(--text-muted)' }}>Nächste Stunde</span>
                         <span className="text-sm font-light" style={{ color: '#fbbf24' }}>
-                          {v(ids.forecastNextHour) != null ? `${v(ids.forecastNextHour).toFixed(2)} kWh` : '—'}
+                          {fv('forecastNextHour') != null ? `${fv('forecastNextHour').toFixed(2)} kWh` : '—'}
                         </span>
                       </div>
                     </div>
@@ -716,7 +724,7 @@ export default function PvModal({
                     { key: 'forecastDay4',     label: '+3' },
                     { key: 'forecastDay5',     label: '+4' },
                   ].map(({ key, label }, i) => {
-                    const val = v(ids[key]);
+                    const val = fv(key);
                     return (
                       <div key={key} className="popup-surface flex flex-col items-center justify-center gap-1 rounded-2xl p-4">
                         <p className="text-[10px] font-bold tracking-[0.15em] uppercase" style={{ color: 'var(--text-muted)' }}>{label}</p>
