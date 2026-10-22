@@ -91,7 +91,7 @@ export const PufferGraph = memo(function PufferGraph({ reihen, stunden }) {
   const min = Math.floor(Math.min(...alle) - 2);
   const max = Math.ceil(Math.max(...alle) + 2);
   const x = (t) => ((t - von) / (bis - von)) * W;
-  const y = (v) => H - ((v - min) / (max - min || 1)) * (H - 8) - 4;
+  const y = (v) => H - ((v - min) / (max - min || 1)) * (H - 12) - 6;
   const pfad = (punkte) => punkte.map((p, i) => `${i ? 'L' : 'M'}${x(p.t).toFixed(1)},${y(p.v).toFixed(1)}`).join(' ');
 
   return (
@@ -164,7 +164,8 @@ const PufferCard = ({ cardId, dragProps, controls, cardStyle, editMode, entities
           )}
         </div>
       </div>
-      <div className="mt-2 min-h-0 flex-1" title={`Verlauf der letzten ${config.stunden} h`}>
+      {/* Verlauf bis an die Kachelränder wie bei der Wetter-Kachel (Ecken schneidet overflow-hidden ab) */}
+      <div className="-mx-3.5 -mb-3.5 mt-2 min-h-0 flex-1" title={`Verlauf der letzten ${config.stunden} h`}>
         <PufferGraph reihen={reihen} stunden={config.stunden} />
       </div>
     </div>
