@@ -115,6 +115,16 @@ describe('HeizungCard', () => {
     expect(screen.getByRole('button', { name: 'Heizung öffnen' })).toBeTruthy();
   });
 
+  it('opens its own page from the valve indicator without opening the card', () => {
+    const top = { history: { pushState: vi.fn() }, dispatchEvent: vi.fn(), CustomEvent: globalThis.CustomEvent };
+    vi.spyOn(globalThis.window, 'top', 'get').mockReturnValue(top);
+    const mitUrl = { ...heizung, ventile: { ...heizung.ventile, url: '/heizung?tab=raeume' } };
+    render(<HeizungCard cardId="c" entities={entities} settings={{ heizung: mitUrl }} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Ventile öffnen' }));
+    expect(top.history.pushState).toHaveBeenCalledTimes(1);
+    expect(top.history.pushState).toHaveBeenCalledWith(null, '', '/heizung?tab=raeume');
+  });
+
   it('navigates the parent window when embedded', () => {
     const top = { history: { pushState: vi.fn() }, dispatchEvent: vi.fn(), CustomEvent: globalThis.CustomEvent };
     vi.spyOn(globalThis.window, 'top', 'get').mockReturnValue(top);

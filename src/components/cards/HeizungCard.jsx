@@ -13,7 +13,8 @@ import { getIconComponent } from '../../icons';
  *     tempEntity?, tempAlways?,            // Temperatur nur im Betrieb bzw. immer
  *   }],
  *   zustaende: [{ name, entity, warn? }],  // z. B. Notkühlung; warn = rot, solange an
- *   ventile: { name?, icon?, entities: [...] },   // Anzahl offener Ventile (Wert > 0 bzw. „on“), Symbol Standard Heizkörper
+ *   ventile: { name?, icon?, url?, entities: [...] },  // Anzahl offener Ventile (Wert > 0 bzw. „on“);
+ *                                          // Symbol Standard Heizkörper, url = eigenes Ziel beim Tippen
  *   pumpen:   [{ name, entity, above?, min? }],   // laufend = an bzw. Wert über Schwelle
  *   modi:     [{ name, entity, invert? }], // Betriebsarten (Anzeige), invert: aus = aktiv
  * }
@@ -179,15 +180,28 @@ const HeizungCard = ({ cardId, dragProps, controls, cardStyle, editMode, entitie
       {controls}
       <div className="flex items-center justify-between gap-2">
         <p className="truncate text-[10px] font-bold uppercase tracking-widest text-[var(--text-secondary)]">{titel}</p>
-        {ventile && (
-          <span
-            className={`flex flex-shrink-0 items-center gap-1 text-[10px] font-semibold ${ventile.offen > 0 ? 'text-orange-400' : 'text-[var(--text-muted)]'}`}
-            title={`${config.ventile.name || 'Ventile'}: ${ventile.offen} von ${ventile.bekannt} offen`}
-          >
-            <VentilIcon className="h-3 w-3" />
-            {ventile.offen}/{ventile.bekannt}
-          </span>
-        )}
+        {ventile && (() => {
+          const ventilUrl = !editMode && config.ventile.url ? config.ventile.url : null;
+          const inhalt = (
+            <>
+              <VentilIcon className="h-3 w-3" />
+              {ventile.offen}/{ventile.bekannt}
+            </>
+          );
+          const cls = `flex flex-shrink-0 items-center gap-1 text-[10px] font-semibold ${ventile.offen > 0 ? 'text-orange-400' : 'text-[var(--text-muted)]'}`;
+          const titel = `${config.ventile.name || 'Ventile'}: ${ventile.offen} von ${ventile.bekannt} offen`;
+          // Eigenes Ziel (z. B. Räume) – der Klick soll nicht zusätzlich die Kachel öffnen
+          return ventilUrl ? (
+            <button type="button" className={`${cls} -m-1 rounded-md p-1 hover:bg-[var(--glass-bg-hover)]`} title={titel}
+              aria-label={`${config.ventile.name || 'Ventile'} öffnen`}
+              onClick={(e) => { e.stopPropagation(); openHaPath(ventilUrl); }}
+              onKeyDown={(e) => e.stopPropagation()}>
+              {inhalt}
+            </button>
+          ) : (
+            <span className={cls} title={titel}>{inhalt}</span>
+          );
+        })()}
       </div>
 
       {leer ? (
