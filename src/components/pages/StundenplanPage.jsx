@@ -1,5 +1,12 @@
 import { memo, useCallback, useMemo, useState } from 'react';
-import EintragDialog, { setAfternoonEntry, setCellEntry } from './StundenplanEditor';
+import EintragDialog, {
+  PlanDialog,
+  addPlan,
+  removePlan,
+  setAfternoonEntry,
+  setCellEntry,
+  updatePlanMeta,
+} from './StundenplanEditor';
 
 // ── Standard-Stundenplan (ohne Seiteneinstellungen) ──────────────────────
 
@@ -224,6 +231,29 @@ function StundenplanPage({ isMobile = false, pageId, settings, editMode = false,
     setDialog(null);
   };
 
+  // Personen (Pläne) anlegen, umbenennen, entfernen
+  const [planDialog, setPlanDialog] = useState(null);
+  const closePlanDialog = useCallback(() => setPlanDialog(null), []);
+
+  const savePlanDialog = ({ name, subtitle, vorlageId }) => {
+    const base = editablePlans(settings);
+    if (planDialog.plan) {
+      onSavePlans(updatePlanMeta(base, planDialog.plan.id, { name, subtitle }));
+    } else {
+      const next = addPlan(base, { name, subtitle, vorlageId });
+      onSavePlans(next);
+      selectPlan(next[next.length - 1].id);
+    }
+    setPlanDialog(null);
+  };
+
+  const deletePlan = () => {
+    const next = removePlan(editablePlans(settings), planDialog.plan.id);
+    onSavePlans(next);
+    selectPlan(next[0].id);
+    setPlanDialog(null);
+  };
+
   const deleteDialog = () => {
     const base = editablePlans(settings);
     const next = dialog.mode === 'stunde'
@@ -259,21 +289,42 @@ function StundenplanPage({ isMobile = false, pageId, settings, editMode = false,
         <p className="sp-subtitle">{plan.subtitle ? `${plan.subtitle} · ${subtitleDate}` : subtitleDate}</p>
       </div>
 
-      {plans.length > 1 && (
-        <div className="sp-switch" role="tablist" aria-label="Stundenplan auswählen">
-          {plans.map((p) => (
-            <button
-              key={p.id}
-              type="button"
-              role="tab"
-              aria-selected={p.id === plan.id}
-              data-haptic="card"
-              onClick={() => selectPlan(p.id)}
-              className={`sp-switch-btn${p.id === plan.id ? ' sp-switch-active' : ''}`}
-            >
-              {p.name}
-            </button>
-          ))}
+      {(plans.length > 1 || canEdit) && (
+        <div className="sp-switch">
+          <div className="sp-switch" role="tablist" aria-label="Stundenplan auswählen">
+            {plans.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                role="tab"
+                aria-selected={p.id === plan.id}
+                data-haptic="card"
+                onClick={() => selectPlan(p.id)}
+                className={`sp-switch-btn${p.id === plan.id ? ' sp-switch-active' : ''}`}
+              >
+                {p.name}
+              </button>
+            ))}
+          </div>
+          {canEdit && (
+            <>
+              <button
+                type="button"
+                className="sp-switch-btn sp-switch-tool"
+                aria-label={`${plan.name} bearbeiten`}
+                onClick={() => setPlanDialog({ plan })}
+              >
+                ✎
+              </button>
+              <button
+                type="button"
+                className="sp-switch-btn sp-switch-tool"
+                onClick={() => setPlanDialog({ plan: null })}
+              >
+                + Person
+              </button>
+            </>
+          )}
         </div>
       )}
 
@@ -406,6 +457,17 @@ function StundenplanPage({ isMobile = false, pageId, settings, editMode = false,
             </tbody>
           </table>
         </div>
+      )}
+
+      {planDialog && (
+        <PlanDialog
+          plan={planDialog.plan}
+          plans={plans}
+          canDelete={plans.length > 1}
+          onSave={savePlanDialog}
+          onDelete={deletePlan}
+          onClose={closePlanDialog}
+        />
       )}
 
       {dialog && (
@@ -689,6 +751,9 @@ function StundenplanPage({ isMobile = false, pageId, settings, editMode = false,
           .sp-fach-text { align-items: center; }
           .sp-fach-info { font-size: 0.5rem; }
         }
+
+        /* Werkzeuge neben den Personen (nur im Bearbeiten-Modus) */
+        .sp-switch-tool { border-style: dashed; border-color: var(--glass-border); }
 
         /* Bearbeiten */
         .sp-editable { cursor: pointer; }

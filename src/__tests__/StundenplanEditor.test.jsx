@@ -1,6 +1,13 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { setAfternoonEntry, setCellEntry } from '../components/pages/StundenplanEditor';
+import {
+  STANDARD_STUNDEN,
+  addPlan,
+  removePlan,
+  setAfternoonEntry,
+  setCellEntry,
+  updatePlanMeta,
+} from '../components/pages/StundenplanEditor';
 import StundenplanPage from '../components/pages/StundenplanPage';
 
 const basePlans = () => [
@@ -51,6 +58,33 @@ describe('setAfternoonEntry', () => {
   });
 });
 
+describe('Personen verwalten', () => {
+  it('adds a person with copied times and empty entries', () => {
+    const next = addPlan(basePlans(), { name: 'Jörg', subtitle: ' Klasse 3b ', vorlageId: 'kind' });
+    const neu = next[2];
+    expect(neu.id).toBe('joerg');
+    expect(neu.subtitle).toBe('Klasse 3b');
+    expect(neu.stunden).toEqual(basePlans()[0].stunden);
+    expect(neu.eintraege).toEqual({});
+    expect(neu.nachmittag).toBeUndefined();
+  });
+
+  it('uses standard times without template and keeps ids unique', () => {
+    const next = addPlan(basePlans(), { name: 'Kind', vorlageId: null });
+    expect(next[2].id).toBe('kind_2');
+    expect(next[2].stunden).toEqual(STANDARD_STUNDEN);
+  });
+
+  it('renames and removes, but never the last person', () => {
+    const renamed = updatePlanMeta(basePlans(), 'kind', { name: 'Kind A', subtitle: '' });
+    expect(renamed[0].name).toBe('Kind A');
+    expect(renamed[0].subtitle).toBeUndefined();
+    expect(removePlan(renamed, 'kind').map((p) => p.id)).toEqual(['andere']);
+    const one = [basePlans()[0]];
+    expect(removePlan(one, 'kind')).toBe(one);
+  });
+});
+
 describe('StundenplanPage im Bearbeiten-Modus', () => {
   beforeEach(() => localStorage.clear());
 
@@ -85,6 +119,38 @@ describe('StundenplanPage im Bearbeiten-Modus', () => {
     fireEvent.click(screen.getAllByText('Deutsch')[0]);
     fireEvent.click(screen.getByRole('button', { name: 'Leeren' }));
     expect(onSavePlans.mock.calls[0][0][0].eintraege['1-0']).toBeUndefined();
+  });
+
+  it('adds a person via dialog and selects it', () => {
+    const onSavePlans = vi.fn();
+    const { rerender } = render(<StundenplanPage pageId="sp" settings={{ plans: basePlans() }} editMode onSavePlans={onSavePlans} />);
+    fireEvent.click(screen.getByRole('button', { name: '+ Person' }));
+    fireEvent.change(screen.getByPlaceholderText('z. B. Felizitas'), { target: { value: 'Neu' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Speichern' }));
+    const saved = onSavePlans.mock.calls[0][0];
+    expect(saved.map((p) => p.name)).toEqual(['Kind', 'Andere', 'Neu']);
+
+    rerender(<StundenplanPage pageId="sp" settings={{ plans: saved }} editMode onSavePlans={onSavePlans} />);
+    expect(screen.getByText('Stundenplan · Neu')).toBeTruthy();
+  });
+
+  it('asks before removing a person', () => {
+    const onSavePlans = vi.fn();
+    render(<StundenplanPage pageId="sp" settings={{ plans: basePlans() }} editMode onSavePlans={onSavePlans} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Kind bearbeiten' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Entfernen' }));
+    expect(onSavePlans).not.toHaveBeenCalled();
+    expect(screen.getByText('Kind mit allen Einträgen entfernen?')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Entfernen' }));
+    expect(onSavePlans.mock.calls[0][0].map((p) => p.id)).toEqual(['andere']);
+  });
+
+  it('rejects a duplicate name', () => {
+    render(<StundenplanPage pageId="sp" settings={{ plans: basePlans() }} editMode onSavePlans={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: '+ Person' }));
+    fireEvent.change(screen.getByPlaceholderText('z. B. Felizitas'), { target: { value: 'andere' } });
+    expect(screen.getByText('Diesen Namen gibt es schon.')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Speichern' }).disabled).toBe(true);
   });
 
   it('offers no editing outside edit mode', () => {
