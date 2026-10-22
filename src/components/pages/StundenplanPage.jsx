@@ -1,4 +1,5 @@
-import { memo, useMemo, useState } from 'react';
+import { memo, useCallback, useMemo, useState } from 'react';
+import EintragDialog, { setAfternoonEntry, setCellEntry } from './StundenplanEditor';
 
 // ── Standard-Stundenplan (ohne Seiteneinstellungen) ──────────────────────
 
@@ -75,14 +76,19 @@ export function resolveCell(plan, nr, dayIdx) {
   return { ...entry, ganztag: plan.ganztag?.[dayIdx] != null };
 }
 
-/** Nachmittagstermine eines Tages, nach Beginn sortiert. */
+/** Nachmittagstermine eines Tages, nach Beginn sortiert (_index = Position in den Daten). */
 export function resolveAfternoon(plan, dayIdx) {
   const raw = plan.nachmittag?.[dayIdx];
   if (!Array.isArray(raw)) return [];
   return raw
-    .map((e) => (typeof e === 'string' ? { fach: e } : e))
+    .map((e, i) => (typeof e === 'string' ? { fach: e, _index: i } : e && { ...e, _index: i }))
     .filter((e) => e && e.fach)
     .sort((a, b) => (a.von || '').localeCompare(b.von || ''));
+}
+
+/** Bearbeitbare Kopie der Pläne; der eingebaute Standardplan wird dabei zu einem normalen Plan. */
+function editablePlans(settings) {
+  return JSON.parse(JSON.stringify(resolvePlans(settings)));
 }
 
 const FALLBACK_META = { emoji: '📘', color: '#94a3b8', bg: 'rgba(148,163,184,0.13)' };
@@ -143,18 +149,29 @@ function storePlan(pageId, planId) {
 
 // ── Sub-Komponenten ──────────────────────────────────────────────────────
 
-const FachCell = memo(function FachCell({ entry, meta, isToday, isActive }) {
-  if (!entry) return <td className="sp-cell sp-empty" />;
+const FachCell = memo(function FachCell({ entry, meta, isToday, isActive, onEdit }) {
+  const editProps = onEdit
+    ? { onClick: onEdit, role: 'button', tabIndex: 0, onKeyDown: (e) => e.key === 'Enter' && onEdit() }
+    : {};
+
+  if (!entry) {
+    return (
+      <td className={`sp-cell sp-empty${onEdit ? ' sp-editable' : ''}`} {...editProps}>
+        {onEdit && <span className="sp-add" aria-label="Eintrag hinzufügen">+</span>}
+      </td>
+    );
+  }
 
   const classes = [
     'sp-cell',
     isToday ? 'sp-today' : '',
     isActive ? 'sp-active' : '',
     entry.optional || entry.ganztag ? 'sp-muted' : '',
+    onEdit ? 'sp-editable' : '',
   ].filter(Boolean).join(' ');
 
   return (
-    <td className={classes} style={{ '--fach-color': meta.color, '--fach-bg': meta.bg }}>
+    <td className={classes} style={{ '--fach-color': meta.color, '--fach-bg': meta.bg }} {...editProps}>
       <div className="sp-fach">
         <span className="sp-fach-emoji">{meta.emoji}</span>
         <span className="sp-fach-text">
@@ -179,7 +196,7 @@ const PauseRow = memo(function PauseRow({ stunde }) {
 
 // ── Haupt-Komponente ─────────────────────────────────────────────────────
 
-function StundenplanPage({ isMobile = false, pageId, settings }) {
+function StundenplanPage({ isMobile = false, pageId, settings, editMode = false, onSavePlans }) {
   const { day, minutes } = useNow();
   // day: 1=Mo,2=Di,3=Mi,4=Do,5=Fr → colIdx 0–4
   const todayColIdx = useMemo(() => (day >= 1 && day <= 5 ? day - 1 : -1), [day]);
@@ -191,6 +208,29 @@ function StundenplanPage({ isMobile = false, pageId, settings }) {
   const selectPlan = (planId) => {
     setSelectedId(planId);
     storePlan(pageId, planId);
+  };
+
+  // ── Bearbeiten (nur im Bearbeiten-Modus und wenn gespeichert werden kann) ──
+  const canEdit = editMode && typeof onSavePlans === 'function';
+  const [dialog, setDialog] = useState(null);
+  const closeDialog = useCallback(() => setDialog(null), []);
+
+  const saveDialog = (value, emoji) => {
+    const base = editablePlans(settings);
+    const next = dialog.mode === 'stunde'
+      ? setCellEntry(base, plan.id, dialog.nr, dialog.day, value, emoji)
+      : setAfternoonEntry(base, plan.id, dialog.day, dialog.index, value, emoji);
+    onSavePlans(next);
+    setDialog(null);
+  };
+
+  const deleteDialog = () => {
+    const base = editablePlans(settings);
+    const next = dialog.mode === 'stunde'
+      ? setCellEntry(base, plan.id, dialog.nr, dialog.day, null)
+      : setAfternoonEntry(base, plan.id, dialog.day, dialog.index, null);
+    onSavePlans(next);
+    setDialog(null);
   };
 
   // Legende: nur Fächer, die im Plan vorkommen
@@ -288,6 +328,16 @@ function StundenplanPage({ isMobile = false, pageId, settings }) {
                         meta={entry ? metaFor(plan, entry.fach) : null}
                         isToday={isToday}
                         isActive={isActive}
+                        onEdit={canEdit && !entry?.ganztag ? () => {
+                          const raw = plan.eintraege?.[`${stunde.nr}-${di}`];
+                          setDialog({
+                            mode: 'stunde',
+                            nr: stunde.nr,
+                            day: di,
+                            initial: typeof raw === 'string' ? { fach: raw } : raw || null,
+                            title: `${TAGE[di]}, ${stunde.nr}. Stunde`,
+                          });
+                        } : null}
                       />
                     );
                   })}
@@ -299,7 +349,7 @@ function StundenplanPage({ isMobile = false, pageId, settings }) {
       </div>
 
       {/* Nachmittag (Hobbys) – eigener Bereich, Uhrzeit steht im Eintrag */}
-      {hasAfternoon && (
+      {(hasAfternoon || canEdit) && (
         <div className="sp-table-wrap">
           <table className="sp-table">
             <tbody>
@@ -310,16 +360,25 @@ function StundenplanPage({ isMobile = false, pageId, settings }) {
                 {TAGE.map((_, di) => {
                   const termine = resolveAfternoon(plan, di);
                   const isToday = di === todayColIdx;
+                  // „Heute“ nur hervorheben, wenn es auch Termine gibt – eine leere helle Fläche wirkt wie ein Fehler
                   return (
-                    <td key={di} className={`sp-cell sp-afternoon${isToday ? ' sp-today' : ''}`}>
+                    <td key={di} className={`sp-cell sp-afternoon${isToday && termine.length > 0 ? ' sp-today' : ''}`}>
                       {termine.map((termin, ti) => {
                         const meta = metaFor(plan, termin.fach);
                         const isActive = isToday && !!termin.von && !!termin.bis && isStundeActive(termin, minutes);
+                        const openEdit = () => setDialog({
+                          mode: 'nachmittag',
+                          day: di,
+                          index: termin._index,
+                          initial: termin,
+                          title: `${TAGE[di]}, Nachmittag`,
+                        });
                         return (
                           <div
                             key={ti}
-                            className={`sp-fach sp-termin${isActive ? ' sp-termin-active' : ''}`}
+                            className={`sp-fach sp-termin${isActive ? ' sp-termin-active' : ''}${canEdit ? ' sp-editable' : ''}`}
                             style={{ '--fach-color': meta.color, '--fach-bg': meta.bg }}
+                            {...(canEdit ? { onClick: openEdit, role: 'button', tabIndex: 0, onKeyDown: (e) => e.key === 'Enter' && openEdit() } : {})}
                           >
                             <span className="sp-fach-emoji">{meta.emoji}</span>
                             <span className="sp-fach-text">
@@ -330,6 +389,16 @@ function StundenplanPage({ isMobile = false, pageId, settings }) {
                           </div>
                         );
                       })}
+                      {canEdit && (
+                        <button
+                          type="button"
+                          className="sp-add-btn"
+                          aria-label={`Termin am ${TAGE[di]} hinzufügen`}
+                          onClick={() => setDialog({ mode: 'nachmittag', day: di, index: null, initial: null, title: `${TAGE[di]}, Nachmittag` })}
+                        >
+                          +
+                        </button>
+                      )}
                     </td>
                   );
                 })}
@@ -337,6 +406,18 @@ function StundenplanPage({ isMobile = false, pageId, settings }) {
             </tbody>
           </table>
         </div>
+      )}
+
+      {dialog && (
+        <EintragDialog
+          mode={dialog.mode}
+          title={dialog.title}
+          initial={dialog.initial}
+          faecher={{ ...FACH_META, ...(plan.faecher || {}) }}
+          onSave={saveDialog}
+          onDelete={dialog.initial ? deleteDialog : null}
+          onClose={closeDialog}
+        />
       )}
 
       {/* Legende */}
@@ -608,6 +689,21 @@ function StundenplanPage({ isMobile = false, pageId, settings }) {
           .sp-fach-text { align-items: center; }
           .sp-fach-info { font-size: 0.5rem; }
         }
+
+        /* Bearbeiten */
+        .sp-editable { cursor: pointer; }
+        .sp-editable:hover .sp-fach, .sp-termin.sp-editable:hover { outline: 1.5px dashed var(--glass-border); }
+        .sp-cell.sp-empty.sp-editable:hover { background: var(--glass-bg); }
+        .sp-add {
+          display: flex; align-items: center; justify-content: center;
+          min-height: 2rem; color: var(--text-muted); opacity: 0.5; font-size: 1rem;
+        }
+        .sp-add-btn {
+          width: 100%; margin-top: 3px; padding: 0.3rem;
+          border: 1px dashed var(--glass-border); border-radius: 0.6rem;
+          background: transparent; color: var(--text-muted); cursor: pointer; font-size: 0.9rem;
+        }
+        .sp-add-btn:hover { background: var(--glass-bg); color: var(--text-primary); }
 
         /* Nachmittag: mehrere Termine je Tag untereinander */
         .sp-afternoon { vertical-align: top; }
