@@ -90,19 +90,22 @@ describe('HeizungCard', () => {
     render(<HeizungCard cardId="heizung_card_1" entities={entities} settings={{ heizung }} />);
     expect(screen.queryByText('43,2 °C')).toBeNull(); // Ofen aus → Zustand statt Temperatur
     expect(screen.getByText('51,4 °C')).toBeTruthy(); // Explorer immer mit Temperatur
-    expect(screen.getByText('Kompressor')).toBeTruthy(); // Zusatz neben der Temperatur
+    expect(screen.getAllByText('Kompressor').some((el) => el.className.includes('text-orange-400'))).toBe(true); // Zusatz beim Explorer
     expect(screen.getByText('Freigabe')).toBeTruthy();
     expect(screen.getByText('2/3')).toBeTruthy(); // offene von erreichbaren Ventilen
     expect(screen.getByLabelText('Warmwasser an')).toBeTruthy();
     expect(screen.getByLabelText('Heizkreis an')).toBeTruthy(); // invertiert: Schalter aus = an
-    expect(screen.getByText('2 Pumpen')).toBeTruthy(); // Heizkreis + Kompressor
+    // alle Pumpen gelistet, laufende grün
+    expect(screen.getByText('Pumpen')).toBeTruthy();
+    expect(screen.getAllByText('Heizkreis').some((el) => el.className.includes('text-green-400'))).toBe(true);
+    expect(screen.getByText('Zirkulation').className).not.toContain('text-green-400');
     expect(screen.queryByText(/Notkühlung/)).toBeNull(); // nur sichtbar, wenn aktiv
   });
 
   it('replaces the bottom row with a warning while emergency cooling is active', () => {
     render(<HeizungCard cardId="c" entities={{ ...entities, 'binary_sensor.notkuehlung': { state: 'on' } }} settings={{ heizung }} />);
     expect(screen.getByText('Notkühlung aktiv')).toBeTruthy();
-    expect(screen.queryByText('2 Pumpen')).toBeNull();
+    expect(screen.queryByLabelText('Warmwasser an')).toBeNull();
   });
 
   it('opens the configured page, not in edit mode', () => {

@@ -121,6 +121,10 @@ export function openProps(url, editMode, label) {
   };
 }
 
+const SectionLabel = ({ children }) => (
+  <p className="mb-0.5 text-[9px] font-bold uppercase tracking-widest text-[var(--text-secondary)] opacity-50">{children}</p>
+);
+
 const MODUS_ICON = {
   warmwasser: 'mdi:water-boiler',
   heizkreis: 'mdi:heating-coil',
@@ -140,18 +144,24 @@ const ErzeugerZeile = memo(({ item, entities }) => {
   return (
     <div className="flex min-w-0 items-center gap-2">
       <Icon className={`h-3.5 w-3.5 flex-shrink-0 stroke-[1.5px] ${status.active ? 'animate-pulse' : ''}`} style={{ color: farbe }} />
-      <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-[var(--text-primary)]">{item.name}</span>
-      {zusatz && <span className="flex-shrink-0 text-[9px] font-bold text-orange-400">{zusatz}</span>}
+      <span className="truncate text-[11px] font-medium text-[var(--text-primary)]">{item.name}</span>
       <span className="flex-shrink-0 whitespace-nowrap text-[11px] font-semibold" style={{ color: showTemp ? 'var(--text-primary)' : farbe }}>
         {showTemp ? formatTemp(temp) : status.label}
       </span>
+      {zusatz && <span className="flex-shrink-0 text-[9px] font-bold text-orange-400">{zusatz}</span>}
     </div>
   );
 });
 
+const PumpenZeile = ({ name, on }) => (
+  <div className="flex min-w-0 items-center gap-1.5">
+    <span className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${on ? 'animate-pulse bg-green-400' : 'bg-gray-500 opacity-60'}`} />
+    <span className={`truncate text-[11px] font-medium ${on ? 'text-green-400' : 'text-[var(--text-muted)] opacity-70'}`}>{name}</span>
+  </div>
+);
+
 const HeizungCard = ({ cardId, dragProps, controls, cardStyle, editMode, entities, settings, name }) => {
   const config = resolveHeizungConfig(settings);
-  const laufend = config.pumpen.filter((p) => isActive(entities[p.entity], p));
   const ventile = config.ventile ? ventileStatus(config.ventile, entities) : null;
   const warnungen = config.zustaende.filter((z) => z.warn && isActive(entities[z.entity]));
   const VentilIcon = getIconComponent(config.ventile?.icon || 'mdi:radiator', Settings);
@@ -185,8 +195,16 @@ const HeizungCard = ({ cardId, dragProps, controls, cardStyle, editMode, entitie
           <Settings className="h-4 w-4" /> Keine Entitäten eingestellt
         </div>
       ) : (
-        <div className="flex min-h-0 flex-1 flex-col justify-center gap-1.5">
-          {config.erzeuger.map((item) => <ErzeugerZeile key={item.name} item={item} entities={entities} />)}
+        <div className={`grid min-h-0 flex-1 items-center gap-3 ${config.pumpen.length > 0 ? 'grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]' : 'grid-cols-1'}`}>
+          <div className="flex min-w-0 flex-col gap-1.5">
+            {config.erzeuger.map((item) => <ErzeugerZeile key={item.name} item={item} entities={entities} />)}
+          </div>
+          {config.pumpen.length > 0 && (
+            <div className="flex min-w-0 flex-col gap-1">
+              <SectionLabel>Pumpen</SectionLabel>
+              {config.pumpen.map((p) => <PumpenZeile key={p.name} name={p.name} on={isActive(entities[p.entity], p)} />)}
+            </div>
+          )}
         </div>
       )}
 
@@ -195,28 +213,20 @@ const HeizungCard = ({ cardId, dragProps, controls, cardStyle, editMode, entitie
           <AlertTriangle className="h-3 w-3 flex-shrink-0 animate-pulse" />
           <span className="truncate">{warnungen.map((w) => w.name).join(', ')} aktiv</span>
         </div>
-      ) : (config.modi.length > 0 || config.pumpen.length > 0) && (
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex min-w-0 items-center gap-1.5">
-            {config.modi.map((m) => {
-              const e = entities[m.entity];
-              const on = isUnavailable(e) ? false : (e.state === 'on') !== !!m.invert;
-              const Icon = getIconComponent(m.icon || MODUS_ICON[m.name.toLowerCase()] || 'mdi:toggle-switch-outline', Settings);
-              return (
-                <span key={m.name} title={`${m.name}: ${on ? 'an' : 'aus'}`} aria-label={`${m.name} ${on ? 'an' : 'aus'}`}
-                  className="flex h-5 w-5 items-center justify-center rounded-md"
-                  style={on ? { backgroundColor: 'rgba(34,197,94,0.14)', color: '#4ade80' } : { backgroundColor: 'var(--glass-bg-hover)', color: 'var(--text-muted)', opacity: 0.6 }}>
-                  <Icon className="h-3 w-3" />
-                </span>
-              );
-            })}
-          </div>
-          {config.pumpen.length > 0 && (
-            <span className={`flex-shrink-0 text-[10px] font-semibold ${laufend.length ? 'text-green-400' : 'text-[var(--text-muted)] opacity-60'}`}
-              title={laufend.map((p) => p.name).join(', ') || 'Keine Pumpe aktiv'}>
-              {laufend.length ? `${laufend.length} ${laufend.length === 1 ? 'Pumpe' : 'Pumpen'}` : 'Pumpen aus'}
-            </span>
-          )}
+      ) : config.modi.length > 0 && (
+        <div className="flex items-center gap-1.5">
+          {config.modi.map((m) => {
+            const e = entities[m.entity];
+            const on = isUnavailable(e) ? false : (e.state === 'on') !== !!m.invert;
+            const Icon = getIconComponent(m.icon || MODUS_ICON[m.name.toLowerCase()] || 'mdi:toggle-switch-outline', Settings);
+            return (
+              <span key={m.name} title={`${m.name}: ${on ? 'an' : 'aus'}`} aria-label={`${m.name} ${on ? 'an' : 'aus'}`}
+                className="flex h-5 w-5 items-center justify-center rounded-md"
+                style={on ? { backgroundColor: 'rgba(34,197,94,0.14)', color: '#4ade80' } : { backgroundColor: 'var(--glass-bg-hover)', color: 'var(--text-muted)', opacity: 0.6 }}>
+                <Icon className="h-3 w-3" />
+              </span>
+            );
+          })}
         </div>
       )}
     </div>
