@@ -72,6 +72,7 @@ const SPECIAL_CARD_PREFIXES = [
   'light_panel_card_',
   'cover_panel_card_',
   'security_panel_card_',
+  'heizung_panel_card_',
   'haushaltsgeraete_card_',
   'frigate_events_card_',
   'pool_card_',

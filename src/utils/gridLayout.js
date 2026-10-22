@@ -30,6 +30,7 @@ const CARD_SPAN_RULES = [
   { prefix: 'light_panel_card_',    category: 'lightPanel'    },
   { prefix: 'cover_panel_card_',    category: 'coverPanel'    },
   { prefix: 'security_panel_card_', category: 'securityPanel' },
+  { prefix: 'heizung_panel_card_', category: 'securityPanel' }, // gleiche Regel: volle Breite, Höhe nach Inhalt
   { prefix: 'entity_card_', category: 'dualSize' },
   { prefix: 'calendar_card_', category: 'triSize' },
   { prefix: 'todo_card_', category: 'triSize' },
@@ -174,6 +175,7 @@ export const getCardColSpan = (
     cardId.startsWith('light_panel_card_') ||
     cardId.startsWith('cover_panel_card_') ||
     cardId.startsWith('security_panel_card_') ||
+    cardId.startsWith('heizung_panel_card_') ||
     cardId.startsWith('frigate_events_card_')
   ) return Number.MAX_SAFE_INTEGER;
 
