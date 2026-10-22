@@ -13,7 +13,7 @@ import { getIconComponent } from '../../icons';
  *     tempEntity?, tempAlways?,            // Temperatur nur im Betrieb bzw. immer
  *   }],
  *   zustaende: [{ name, entity, warn? }],  // z. B. Notkühlung; warn = rot, solange an
- *   ventile: { name?, entities: [...] },   // Anzahl offener Ventile (Wert > 0 bzw. „on“)
+ *   ventile: { name?, icon?, entities: [...] },   // Anzahl offener Ventile (Wert > 0 bzw. „on“), Symbol Standard Heizkörper
  *   pumpen:   [{ name, entity, above?, min? }],   // laufend = an bzw. Wert über Schwelle
  *   modi:     [{ name, entity, invert? }], // Betriebsarten (Anzeige), invert: aus = aktiv
  * }
@@ -123,7 +123,7 @@ export function openProps(url, editMode, label) {
 
 const MODUS_ICON = {
   warmwasser: 'mdi:water-boiler',
-  heizkreis: 'mdi:radiator',
+  heizkreis: 'mdi:heating-coil',
   'explorer-boost': 'mdi:rocket-launch-outline',
   boost: 'mdi:rocket-launch-outline',
   urlaub: 'mdi:palm-tree',
@@ -154,7 +154,7 @@ const HeizungCard = ({ cardId, dragProps, controls, cardStyle, editMode, entitie
   const laufend = config.pumpen.filter((p) => isActive(entities[p.entity], p));
   const ventile = config.ventile ? ventileStatus(config.ventile, entities) : null;
   const warnungen = config.zustaende.filter((z) => z.warn && isActive(entities[z.entity]));
-  const ValveIcon = getIconComponent('mdi:valve', Settings);
+  const VentilIcon = getIconComponent(config.ventile?.icon || 'mdi:radiator', Settings);
   const leer = config.erzeuger.length + config.pumpen.length + config.modi.length === 0 && !ventile;
   const titel = name || 'Heizung';
 
@@ -174,7 +174,7 @@ const HeizungCard = ({ cardId, dragProps, controls, cardStyle, editMode, entitie
             className={`flex flex-shrink-0 items-center gap-1 text-[10px] font-semibold ${ventile.offen > 0 ? 'text-orange-400' : 'text-[var(--text-muted)]'}`}
             title={`${config.ventile.name || 'Ventile'}: ${ventile.offen} von ${ventile.bekannt} offen`}
           >
-            <ValveIcon className="h-3 w-3" />
+            <VentilIcon className="h-3 w-3" />
             {ventile.offen}/{ventile.bekannt}
           </span>
         )}
