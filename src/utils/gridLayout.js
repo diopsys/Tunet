@@ -23,6 +23,8 @@ const SPAN_TABLE = {
   lightPanel:    { default: 1 }, // auto-height card, span=1 is enough (gridAutoRows: auto sizes to content)
   coverPanel:    { default: 1 }, // auto-height, same as lightPanel
   securityPanel: { default: 1 }, // auto-height, same as lightPanel
+  heizungTile: { small: 3, default: 4 }, // Heizungs-Kachel
+  pufferTile: { small: 2, default: 3 }, // Puffer-Kachel mit Verlauf
 };
 
 const CARD_SPAN_RULES = [
@@ -30,7 +32,8 @@ const CARD_SPAN_RULES = [
   { prefix: 'light_panel_card_',    category: 'lightPanel'    },
   { prefix: 'cover_panel_card_',    category: 'coverPanel'    },
   { prefix: 'security_panel_card_', category: 'securityPanel' },
-  { prefix: 'heizung_panel_card_', category: 'securityPanel' }, // gleiche Regel: volle Breite, Höhe nach Inhalt
+  { prefix: 'heizung_card_', category: 'heizungTile' },
+  { prefix: 'puffer_card_', category: 'pufferTile' },
   { prefix: 'entity_card_', category: 'dualSize' },
   { prefix: 'calendar_card_', category: 'triSize' },
   { prefix: 'todo_card_', category: 'triSize' },
@@ -175,7 +178,6 @@ export const getCardColSpan = (
     cardId.startsWith('light_panel_card_') ||
     cardId.startsWith('cover_panel_card_') ||
     cardId.startsWith('security_panel_card_') ||
-    cardId.startsWith('heizung_panel_card_') ||
     cardId.startsWith('frigate_events_card_')
   ) return Number.MAX_SAFE_INTEGER;
 
