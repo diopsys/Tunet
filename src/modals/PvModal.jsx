@@ -488,17 +488,17 @@ export default function PvModal({
   const gridExportDaily = v(ids.gridExportDaily);
   const pvToHouseDaily = v(ids.pvToHouseDaily);
   const batteryMaxEnergy = v(ids.batteryMaxEnergy);
-  const forecastRemaining = v(ids.forecastRemaining);
   const forecastData = (ids.forecastCurrent && entities?.[ids.forecastCurrent]?.attributes?.forecast) ?? [];
   // Fehlende Prognose-Sensoren aus der Leistungskurve ableiten (Tage, Spitze, Stunden)
   const kurve = forecastFromCurve(forecastData);
   const AUS_KURVE = {
     forecastToday: kurve.days[0], forecastTomorrow: kurve.days[1], forecastDay3: kurve.days[2],
     forecastDay4: kurve.days[3], forecastDay5: kurve.days[4], forecastPeakToday: kurve.peakToday,
-    forecastThisHour: kurve.thisHour, forecastNextHour: kurve.nextHour,
+    forecastThisHour: kurve.thisHour, forecastNextHour: kurve.nextHour, forecastRemaining: kurve.remainingToday,
   };
   const fv = (key) => v(ids[key]) ?? AUS_KURVE[key] ?? null;
   const forecastPeakToday = fv('forecastPeakToday');
+  const forecastRemaining = fv('forecastRemaining');
 
   // Compute battery discharge estimate
   // Entladung aus eigenem Sensor, sonst aus der Bilanz Haus − PV − Netzbezug

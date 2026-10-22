@@ -107,12 +107,14 @@ describe('Prognose aus der Leistungskurve', () => {
     expect(r.peakToday).toBe(4000);
     expect(r.thisHour).toBeCloseTo(4, 5); // 11–12 Uhr
     expect(r.nextHour).toBeCloseTo(4, 5); // 12–13 Uhr
+    expect(r.remainingToday).toBeCloseTo((2 + 40 / 60) * 4, 5); // 11:20–14:00 bei 4 kW
   });
 
   it('handles the evening and missing data', () => {
     const r = forecastFromCurve(kurve, new Date(2026, 9, 22, 13, 30));
     expect(r.thisHour).toBeCloseTo(4, 5);
     expect(r.nextHour).toBe(0);
-    expect(forecastFromCurve([], new Date())).toEqual({ days: [], peakToday: null, thisHour: null, nextHour: null });
+    expect(r.remainingToday).toBeCloseTo(0.5 * 4, 5); // 13:30–14:00
+    expect(forecastFromCurve([], new Date())).toEqual({ days: [], peakToday: null, thisHour: null, nextHour: null, remainingToday: null });
   });
 });

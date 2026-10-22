@@ -96,10 +96,11 @@ export function usePvPeriodTotals(conn, totalIds, entities, active = true) {
 /**
  * Prognosewerte aus einer Leistungskurve (Attribut „forecast“: [{datetime, watts}],
  * z. B. Helios): Energie je Kalendertag (kWh, Index 0 = heute), Spitzenleistung heute (W),
- * Energie in dieser und der nächsten vollen Stunde (kWh). Jeder Punkt gilt bis zum nächsten.
+ * Energie in dieser und der nächsten vollen Stunde und Rest des Tages ab jetzt (kWh).
+ * Jeder Punkt gilt bis zum nächsten.
  */
 export function forecastFromCurve(forecast, now = new Date()) {
-  const leer = { days: [], peakToday: null, thisHour: null, nextHour: null };
+  const leer = { days: [], peakToday: null, thisHour: null, nextHour: null, remainingToday: null };
   if (!Array.isArray(forecast) || forecast.length < 2) return leer;
   const punkte = forecast
     .map((p) => ({ t: new Date(p.datetime).getTime(), w: Number(p.watts) }))
@@ -125,6 +126,8 @@ export function forecastFromCurve(forecast, now = new Date()) {
   let thisHour = 0;
   let nextHour = 0;
   let stundenAbgedeckt = false;
+  let remainingToday = 0;
+  const jetzt = now.getTime();
   const schritt = punkte[1].t - punkte[0].t;
   punkte.forEach((p, i) => {
     const ende = i + 1 < punkte.length ? punkte[i + 1].t : p.t + schritt;
@@ -134,12 +137,18 @@ export function forecastFromCurve(forecast, now = new Date()) {
     if (tag === 0) peakToday = peakToday == null ? p.w : Math.max(peakToday, p.w);
     if (p.t >= h0 && p.t < h1) { thisHour += kwh; stundenAbgedeckt = true; }
     if (p.t >= h1 && p.t < h2) nextHour += kwh;
+    // Rest des Tages: laufendes Intervall anteilig, spätere ganz
+    if (tag === 0 && ende > jetzt) {
+      const ab = Math.max(p.t, jetzt);
+      remainingToday += (p.w * (ende - ab)) / 3600e3 / 1000;
+    }
   });
   return {
     days: Array.from({ length: days.length }, (_, i) => (days[i] == null ? null : days[i])),
     peakToday,
     thisHour: stundenAbgedeckt ? thisHour : null,
     nextHour: stundenAbgedeckt ? nextHour : null,
+    remainingToday: days[0] == null ? null : remainingToday,
   };
 }
 
