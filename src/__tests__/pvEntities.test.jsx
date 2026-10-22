@@ -1,4 +1,4 @@
-import { render, renderHook, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import GenericPvCard, {
   PV_ENTITY_IDS,
@@ -53,6 +53,17 @@ describe('PV-Belegung', () => {
     };
     render(<GenericPvCard cardId="pv_card_1" entities={entities} settings={settings} />);
     expect(screen.getAllByText(/2400/).length).toBeGreaterThan(0);
+  });
+
+  it('opens its own page from the icon without opening the popup', () => {
+    const onOpen = vi.fn();
+    const top = { history: { pushState: vi.fn() }, dispatchEvent: vi.fn(), CustomEvent: globalThis.CustomEvent };
+    const spy = vi.spyOn(globalThis.window, 'top', 'get').mockReturnValue(top);
+    render(<GenericPvCard cardId="pv_card_1" entities={{}} settings={{ iconUrl: '/energy-panel' }} onOpen={onOpen} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Solar öffnen' }));
+    expect(onOpen).not.toHaveBeenCalled();
+    expect(top.history.pushState).toHaveBeenCalledWith(null, '', '/energy-panel');
+    spy.mockRestore();
   });
 });
 

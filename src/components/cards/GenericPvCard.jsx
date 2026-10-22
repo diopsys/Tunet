@@ -1,6 +1,7 @@
 import { memo, useEffect, useState } from 'react';
 import { Sun } from '../../icons';
 import { getIconComponent } from '../../icons';
+import { openHaPath } from './HeizungCard';
 
 export const PV_ENTITY_IDS = {
   pvW: 'sensor.solar_panel_production_w',
@@ -188,6 +189,18 @@ const GenericPvCard = memo(function GenericPvCard({
   const name = customNames?.[cardId] || 'Solar';
   const Icon = customIcons?.[cardId] ? getIconComponent(customIcons[cardId]) || Sun : Sun;
   const isUltraCompact = isTwoColMobile && settings.size !== 'small';
+  // Eigenes Ziel für das Symbol (z. B. Energie-Panel) – der Klick öffnet nicht zusätzlich das Popup
+  const iconUrl = !editMode && settings.iconUrl ? settings.iconUrl : null;
+  const iconLink = iconUrl
+    ? {
+        role: 'button',
+        tabIndex: 0,
+        title: `${name} öffnen`,
+        'aria-label': `${name} öffnen`,
+        onClick: (e) => { e.stopPropagation(); openHaPath(iconUrl); },
+        onKeyDown: (e) => { e.stopPropagation(); if (e.key === 'Enter') openHaPath(iconUrl); },
+      }
+    : {};
   const isDenseMobile = isMobile && settings.size !== 'small';
 
   const ids = resolvePvIds(settings);
@@ -223,6 +236,7 @@ const GenericPvCard = memo(function GenericPvCard({
           <div
             className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl transition-transform duration-500 group-hover:scale-110"
             style={{ backgroundColor: iconBg, color: iconColor }}
+            {...iconLink}
           >
             <Icon className="h-6 w-6 stroke-[1.5px]" />
           </div>
@@ -267,6 +281,7 @@ const GenericPvCard = memo(function GenericPvCard({
           <div
             className={`transition-transform duration-500 group-hover:scale-110 ${isUltraCompact ? 'rounded-lg p-2' : isDenseMobile ? 'rounded-xl p-2.5' : 'rounded-2xl p-3'}`}
             style={{ backgroundColor: iconBg, color: iconColor }}
+            {...iconLink}
           >
             <Icon className={isUltraCompact ? 'h-3 w-3' : isDenseMobile ? 'h-4 w-4' : 'h-5 w-5'} style={{ strokeWidth: 1.5 }} />
           </div>
