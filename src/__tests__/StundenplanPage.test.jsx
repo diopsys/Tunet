@@ -1,6 +1,11 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import StundenplanPage, { isEntryActive, resolveCell, resolvePlans } from '../components/pages/StundenplanPage';
+import StundenplanPage, {
+  isEntryActive,
+  resolveAfternoon,
+  resolveCell,
+  resolvePlans,
+} from '../components/pages/StundenplanPage';
 
 const settings = {
   type: 'stundenplan',
@@ -71,6 +76,37 @@ describe('Einträge mit eigener Zeit', () => {
     render(<StundenplanPage pageId="sp" settings={{ plans: [plan] }} />);
     expect(screen.getByText('Freizeit')).toBeTruthy();
     expect(screen.getByText('16:00–17:30 · Halle')).toBeTruthy();
+  });
+});
+
+describe('Nachmittag', () => {
+  const plan = {
+    id: 'n', name: 'N',
+    stunden: [{ nr: 1, von: '08:00', bis: '08:45' }],
+    eintraege: {},
+    nachmittag: {
+      0: [
+        { fach: 'Kinderturnen', von: '17:15', bis: '18:15' },
+        { fach: 'Klavier', von: '14:30', bis: '15:00' },
+      ],
+    },
+  };
+
+  it('sorts the afternoon entries of a day by start time', () => {
+    expect(resolveAfternoon(plan, 0).map((e) => e.fach)).toEqual(['Klavier', 'Kinderturnen']);
+    expect(resolveAfternoon(plan, 1)).toEqual([]);
+  });
+
+  it('renders a separate afternoon section with times in the entries', () => {
+    render(<StundenplanPage pageId="sp" settings={{ plans: [plan] }} />);
+    expect(screen.getByText('Nachmittag')).toBeTruthy();
+    expect(screen.getByText('14:30–15:00')).toBeTruthy();
+    expect(screen.getByText('17:15–18:15')).toBeTruthy();
+  });
+
+  it('omits the section when no afternoon entries exist', () => {
+    render(<StundenplanPage pageId="sp" settings={{ plans: [{ ...plan, nachmittag: undefined }] }} />);
+    expect(screen.queryByText('Nachmittag')).toBeNull();
   });
 });
 

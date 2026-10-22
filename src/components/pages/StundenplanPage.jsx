@@ -55,6 +55,7 @@ const DEFAULT_PLAN = {
  *   stunden: [{ nr, von: 'HH:MM', bis: 'HH:MM', isPause?, label? }],   // label ersetzt die Nummer
  *   eintraege: { '<nr>-<tag 0..4>': 'Fach' | { fach, info?, optional?, von?, bis? } },  // von/bis: eigene Zeit
  *   ganztag?: { '<tag 0..4>': 'Fach' | { fach, info? } },   // gilt für alle Stunden des Tages
+ *   nachmittag?: { '<tag 0..4>': [{ fach, von, bis, info? }] },  // Hobbys, eigener Bereich unter dem Plan
  *   faecher?: { Fach: { emoji, label?, color, bg? } },
  * }
  */
@@ -72,6 +73,16 @@ export function resolveCell(plan, nr, dayIdx) {
   const entry = typeof raw === 'string' ? { fach: raw } : raw;
   if (!entry.fach) return null;
   return { ...entry, ganztag: plan.ganztag?.[dayIdx] != null };
+}
+
+/** Nachmittagstermine eines Tages, nach Beginn sortiert. */
+export function resolveAfternoon(plan, dayIdx) {
+  const raw = plan.nachmittag?.[dayIdx];
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((e) => (typeof e === 'string' ? { fach: e } : e))
+    .filter((e) => e && e.fach)
+    .sort((a, b) => (a.von || '').localeCompare(b.von || ''));
 }
 
 const FALLBACK_META = { emoji: '📘', color: '#94a3b8', bg: 'rgba(148,163,184,0.13)' };
@@ -193,8 +204,11 @@ function StundenplanPage({ isMobile = false, pageId, settings }) {
       const fach = typeof raw === 'string' ? raw : raw?.fach;
       if (fach) used.add(fach);
     });
+    TAGE.forEach((_, di) => resolveAfternoon(plan, di).forEach((e) => used.add(e.fach)));
     return [...used].map((fach) => [fach, metaFor(plan, fach)]);
   }, [plan]);
+
+  const hasAfternoon = TAGE.some((_, di) => resolveAfternoon(plan, di).length > 0);
 
   const subtitleDate = new Date().toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' });
 
@@ -283,6 +297,47 @@ function StundenplanPage({ isMobile = false, pageId, settings }) {
           </tbody>
         </table>
       </div>
+
+      {/* Nachmittag (Hobbys) – eigener Bereich, Uhrzeit steht im Eintrag */}
+      {hasAfternoon && (
+        <div className="sp-table-wrap">
+          <table className="sp-table">
+            <tbody>
+              <tr>
+                <td className="sp-time-cell sp-th-time">
+                  <span className="sp-stunde-nr sp-stunde-label">Nachmittag</span>
+                </td>
+                {TAGE.map((_, di) => {
+                  const termine = resolveAfternoon(plan, di);
+                  const isToday = di === todayColIdx;
+                  return (
+                    <td key={di} className={`sp-cell sp-afternoon${isToday ? ' sp-today' : ''}`}>
+                      {termine.map((termin, ti) => {
+                        const meta = metaFor(plan, termin.fach);
+                        const isActive = isToday && !!termin.von && !!termin.bis && isStundeActive(termin, minutes);
+                        return (
+                          <div
+                            key={ti}
+                            className={`sp-fach sp-termin${isActive ? ' sp-termin-active' : ''}`}
+                            style={{ '--fach-color': meta.color, '--fach-bg': meta.bg }}
+                          >
+                            <span className="sp-fach-emoji">{meta.emoji}</span>
+                            <span className="sp-fach-text">
+                              <span className="sp-fach-label">{meta.label}</span>
+                              {entryInfo(termin) && <span className="sp-fach-info">{entryInfo(termin)}</span>}
+                            </span>
+                            {isActive && <span className="sp-live-dot" aria-hidden="true" />}
+                          </div>
+                        );
+                      })}
+                    </td>
+                  );
+                })}
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {/* Legende */}
       <div className="sp-legend">
@@ -554,7 +609,12 @@ function StundenplanPage({ isMobile = false, pageId, settings }) {
           .sp-fach-info { font-size: 0.5rem; }
         }
 
-        /* Zeile mit Bezeichnung statt Nummer (z. B. Freizeit) */
+        /* Nachmittag: mehrere Termine je Tag untereinander */
+        .sp-afternoon { vertical-align: top; }
+        .sp-termin + .sp-termin { margin-top: 3px; }
+        .sp-termin-active { outline: 1.5px solid color-mix(in srgb, var(--fach-color, #6366f1) 50%, transparent); }
+
+        /* Zeile mit Bezeichnung statt Nummer (z. B. Ganztag) */
         .sp-stunde-label { display: block; font-size: 0.62rem; white-space: normal; }
 
         /* Freiwillige / ganztägige Einträge abgesetzt */
