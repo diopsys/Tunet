@@ -23,8 +23,8 @@ const SPAN_TABLE = {
   lightPanel:    { default: 1 }, // auto-height card, span=1 is enough (gridAutoRows: auto sizes to content)
   coverPanel:    { default: 1 }, // auto-height, same as lightPanel
   securityPanel: { default: 1 }, // auto-height, same as lightPanel
-  heizungTile: { small: 3, default: 4 }, // Heizungs-Kachel
-  pufferTile: { small: 2, default: 3 }, // Puffer-Kachel mit Verlauf
+  heizungTile: { default: 2 }, // Heizungs-Kachel, so groß wie die Wetter-Kachel
+  pufferTile: { default: 2 }, // Puffer-Kachel mit Verlauf, ebenso
 };
 
 const CARD_SPAN_RULES = [

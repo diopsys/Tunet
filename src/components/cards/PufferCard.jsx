@@ -130,46 +130,43 @@ const PufferCard = ({ cardId, dragProps, controls, cardStyle, editMode, entities
     config.unten !== config.oben && { punkte: verlauf[config.unten], farbe: '#60a5fa', flaeche: false },
   ].filter(Boolean);
 
+  const titel = name || config.name;
   return (
     <div
       key={cardId}
       {...dragProps}
-      className={`glass-texture touch-feedback relative flex h-full flex-col overflow-hidden rounded-3xl border p-4 font-sans select-none ${editMode ? 'cursor-move' : config.url ? 'cursor-pointer active:scale-[0.99]' : ''}`}
+      className={`glass-texture touch-feedback relative flex h-full flex-col overflow-hidden rounded-3xl border p-3.5 font-sans select-none ${editMode ? 'cursor-move' : config.url ? 'cursor-pointer active:scale-[0.98]' : ''}`}
       style={cardStyle}
-      {...openProps(config.url, editMode, `${name || config.name} öffnen`)}
+      {...openProps(config.url, editMode, `${titel} öffnen`)}
     >
       {controls}
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="text-xs font-bold uppercase tracking-widest text-[var(--text-secondary)]">{name || config.name}</p>
-          <p className="mt-1 text-3xl font-light leading-none text-[var(--text-primary)]">
+          <p className="truncate text-[10px] font-bold uppercase tracking-widest text-[var(--text-secondary)]">{titel}</p>
+          <p className="mt-1 whitespace-nowrap text-2xl font-light leading-none text-[var(--text-primary)]">
             {kwh == null ? '–' : kwh.toFixed(1).replace('.', ',')}
-            <span className="ml-1 text-sm text-[var(--text-secondary)]">kWh</span>
+            <span className="ml-1 text-[11px] text-[var(--text-secondary)]">kWh</span>
+            {prozent != null && <span className="ml-1.5 text-[11px] font-semibold text-[var(--text-muted)]">{prozent} %</span>}
           </p>
-          {prozent != null && <p className="mt-1 text-[10px] text-[var(--text-muted)]">{prozent} % ({config.bezug}–{config.voll} °C)</p>}
         </div>
-        <div className="flex flex-shrink-0 flex-col items-end gap-1 text-[11px]">
+        <div className="flex flex-shrink-0 flex-col items-end gap-0.5 text-[10px] text-[var(--text-secondary)]">
           {config.oben && (
-            <span className="flex items-center gap-1.5 text-[var(--text-secondary)]">
-              <span className="h-2 w-2 rounded-full" style={{ background: '#fb923c' }} />oben <b className="text-[var(--text-primary)]">{formatTemp(entities[config.oben])}</b>
+            <span className="flex items-center gap-1 whitespace-nowrap" title="oben">
+              <span className="h-1.5 w-1.5 rounded-full" style={{ background: '#fb923c' }} />
+              <b className="font-semibold text-[var(--text-primary)]">{formatTemp(entities[config.oben])}</b>
             </span>
           )}
           {config.unten && config.unten !== config.oben && (
-            <span className="flex items-center gap-1.5 text-[var(--text-secondary)]">
-              <span className="h-2 w-2 rounded-full" style={{ background: '#60a5fa' }} />unten <b className="text-[var(--text-primary)]">{formatTemp(entities[config.unten])}</b>
+            <span className="flex items-center gap-1 whitespace-nowrap" title="unten">
+              <span className="h-1.5 w-1.5 rounded-full" style={{ background: '#60a5fa' }} />
+              <b className="font-semibold text-[var(--text-primary)]">{formatTemp(entities[config.unten])}</b>
             </span>
           )}
         </div>
       </div>
-      {prozent != null && (
-        <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-[var(--glass-bg-hover)]">
-          <div className="h-full rounded-full" style={{ width: `${prozent}%`, background: 'linear-gradient(90deg, #60a5fa, #fb923c)' }} />
-        </div>
-      )}
-      <div className="mt-3 min-h-0 flex-1">
+      <div className="mt-2 min-h-0 flex-1" title={`Verlauf der letzten ${config.stunden} h`}>
         <PufferGraph reihen={reihen} stunden={config.stunden} />
       </div>
-      <p className="mt-1 text-right text-[9px] text-[var(--text-muted)] opacity-60">letzte {config.stunden} h</p>
     </div>
   );
 };

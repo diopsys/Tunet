@@ -86,19 +86,23 @@ describe('Heizung – Logik', () => {
 describe('HeizungCard', () => {
   afterEach(() => vi.restoreAllMocks());
 
-  it('shows producers, emergency cooling, valves, pumps and modes', () => {
+  it('shows producers, valves, modes and running pumps compactly', () => {
     render(<HeizungCard cardId="heizung_card_1" entities={entities} settings={{ heizung }} />);
-    expect(screen.queryByText('43,2 °C')).toBeNull(); // Ofen aus
-    expect(screen.getByText('51,4 °C')).toBeTruthy(); // Explorer immer
+    expect(screen.queryByText('43,2 °C')).toBeNull(); // Ofen aus → Zustand statt Temperatur
+    expect(screen.getByText('51,4 °C')).toBeTruthy(); // Explorer immer mit Temperatur
+    expect(screen.getByText('Kompressor')).toBeTruthy(); // Zusatz neben der Temperatur
     expect(screen.getByText('Freigabe')).toBeTruthy();
-    expect(screen.getByText('Notkühlung')).toBeTruthy();
-    expect(screen.getByText('2 / 3 offen')).toBeTruthy();
-    expect(screen.queryByText('Zirkulation')).toBeNull();
+    expect(screen.getByText('2/3')).toBeTruthy(); // offene von erreichbaren Ventilen
+    expect(screen.getByLabelText('Warmwasser an')).toBeTruthy();
+    expect(screen.getByLabelText('Heizkreis an')).toBeTruthy(); // invertiert: Schalter aus = an
+    expect(screen.getByText('2 Pumpen')).toBeTruthy(); // Heizkreis + Kompressor
+    expect(screen.queryByText(/Notkühlung/)).toBeNull(); // nur sichtbar, wenn aktiv
   });
 
-  it('flags active emergency cooling', () => {
+  it('replaces the bottom row with a warning while emergency cooling is active', () => {
     render(<HeizungCard cardId="c" entities={{ ...entities, 'binary_sensor.notkuehlung': { state: 'on' } }} settings={{ heizung }} />);
-    expect(screen.getByText('aktiv').className).toContain('text-red-400');
+    expect(screen.getByText('Notkühlung aktiv')).toBeTruthy();
+    expect(screen.queryByText('2 Pumpen')).toBeNull();
   });
 
   it('opens the configured page, not in edit mode', () => {
@@ -140,9 +144,8 @@ describe('PufferCard', () => {
       return { [id]: [{ start: now - 3600e3, mean: 60 }, { start: now - 600e3, mean: id === 'sensor.s1' ? 73 : 70 }] };
     });
     const { container } = render(<PufferCard cardId="puffer_card_1" entities={temps} conn={{ sendMessagePromise }} settings={{ puffer }} />);
-    expect(screen.getByText((_, el) => el?.tagName === 'P' && el.textContent === '37,7kWh')).toBeTruthy();
-    // 37,67 kWh von 52,27 kWh (749 l × 1,163 × 60 K)
-    expect(screen.getByText('72 % (30–90 °C)')).toBeTruthy();
+    expect(screen.getByText((_, el) => el?.tagName === 'P' && el.textContent === '37,7kWh72 %')).toBeTruthy();
+    // 37,67 kWh von 52,27 kWh (749 l × 1,163 × 60 K) = 72 %
     expect(screen.getByText('73,8 °C')).toBeTruthy();
     expect(screen.getByText('72,7 °C')).toBeTruthy();
     await waitFor(() => expect(container.querySelectorAll('svg path[stroke]').length).toBe(2));
