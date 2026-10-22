@@ -1,11 +1,18 @@
 import { memo, useCallback, useMemo, useState } from 'react';
 import EintragDialog, {
+  FaecherDialog,
   PlanDialog,
+  StundeDialog,
   addPlan,
+  nextRowTimes,
   removePlan,
   setAfternoonEntry,
   setCellEntry,
+  setRow,
+  setWholeDay,
+  updateFach,
   updatePlanMeta,
+  usedFaecher,
 } from './StundenplanEditor';
 
 // ── Standard-Stundenplan (ohne Seiteneinstellungen) ──────────────────────
@@ -100,10 +107,28 @@ function editablePlans(settings) {
 
 const FALLBACK_META = { emoji: '📘', color: '#94a3b8', bg: 'rgba(148,163,184,0.13)' };
 
+// Übliche Schul-Kürzel für die schmale (mobile) Ansicht
+const KUERZEL = {
+  Deutsch: 'De', Mathematik: 'Ma', Mathe: 'Ma', Englisch: 'En', Französisch: 'Frz', Latein: 'La',
+  Spanisch: 'Spa', Musik: 'Mu', Sport: 'Sp', Kunst: 'Ku', Religion: 'Re', Sachunterricht: 'SU',
+  Erdkunde: 'Ek', Geschichte: 'Ge', Physik: 'Ph', Chemie: 'Ch', Biologie: 'Bio', Informatik: 'Inf',
+  Politik: 'Po', 'Werte und Normen': 'WuN', Verfügungsstunde: 'Verf', Lernzeit: 'LZ',
+  SichBasis: 'SB', 'Sichere Basis': 'SB', Frühbetreuung: 'Früh', 'Chor/Frühbetreuung': 'Chor',
+  Ganztag: 'GT', Schulband: 'Band', Studientag: 'Studientag',
+};
+
+/** Abkürzung: eigene (kurz), bekannte, sonst gekürzt auf 4 Zeichen. */
+export function kurzName(fach, meta) {
+  if (meta?.kurz) return meta.kurz;
+  if (KUERZEL[fach]) return KUERZEL[fach];
+  const label = meta?.label || fach;
+  return label.length <= 5 ? label : `${label.slice(0, 4)}.`;
+}
+
 function metaFor(plan, fach) {
   const meta = plan.faecher?.[fach] || FACH_META[fach] || FALLBACK_META;
   const bg = meta.bg || `color-mix(in srgb, ${meta.color} 13%, transparent)`;
-  return { ...meta, label: meta.label || fach, bg };
+  return { ...meta, label: meta.label || fach, kurz: kurzName(fach, meta), bg };
 }
 
 // ── Hilfsfunktionen ──────────────────────────────────────────────────────
@@ -183,6 +208,7 @@ const FachCell = memo(function FachCell({ entry, meta, isToday, isActive, onEdit
         <span className="sp-fach-emoji">{meta.emoji}</span>
         <span className="sp-fach-text">
           <span className="sp-fach-label">{meta.label}</span>
+          <span className="sp-fach-kurz">{meta.kurz}</span>
           {entryInfo(entry) && <span className="sp-fach-info">{entryInfo(entry)}</span>}
         </span>
         {isActive && <span className="sp-live-dot" aria-hidden="true" />}
@@ -191,11 +217,17 @@ const FachCell = memo(function FachCell({ entry, meta, isToday, isActive, onEdit
   );
 });
 
-const PauseRow = memo(function PauseRow({ stunde }) {
+const PauseRow = memo(function PauseRow({ stunde, onEdit }) {
+  const editProps = onEdit
+    ? { onClick: onEdit, role: 'button', tabIndex: 0, onKeyDown: (e) => e.key === 'Enter' && onEdit() }
+    : {};
   return (
     <tr className="sp-pause-row">
-      <td colSpan={6} className="sp-pause-bar-cell">
-        <span className="sp-pause-badge">{stunde.label || 'Pause'}</span>
+      <td colSpan={6} className={`sp-pause-bar-cell${onEdit ? ' sp-editable' : ''}`} {...editProps}>
+        <span className="sp-pause-badge">
+          {stunde.label || 'Pause'}
+          {onEdit && ` · ${stunde.von}–${stunde.bis}`}
+        </span>
       </td>
     </tr>
   );
@@ -224,11 +256,43 @@ function StundenplanPage({ isMobile = false, pageId, settings, editMode = false,
 
   const saveDialog = (value, emoji) => {
     const base = editablePlans(settings);
-    const next = dialog.mode === 'stunde'
-      ? setCellEntry(base, plan.id, dialog.nr, dialog.day, value, emoji)
-      : setAfternoonEntry(base, plan.id, dialog.day, dialog.index, value, emoji);
+    let next;
+    if (dialog.mode === 'stunde') next = setCellEntry(base, plan.id, dialog.nr, dialog.day, value, emoji);
+    else if (dialog.mode === 'ganztag') next = setWholeDay(base, plan.id, dialog.day, value, emoji);
+    else next = setAfternoonEntry(base, plan.id, dialog.day, dialog.index, value, emoji);
     onSavePlans(next);
     setDialog(null);
+  };
+
+  // Zeilen (Zeiten) und Fächer
+  const [rowDialog, setRowDialog] = useState(null);
+  const closeRowDialog = useCallback(() => setRowDialog(null), []);
+  const saveRow = (row) => {
+    onSavePlans(setRow(editablePlans(settings), plan.id, rowDialog.index, row));
+    setRowDialog(null);
+  };
+  const deleteRow = () => {
+    onSavePlans(setRow(editablePlans(settings), plan.id, rowDialog.index, null));
+    setRowDialog(null);
+  };
+  const newRow = (isPause) => setRowDialog({
+    index: null,
+    row: null,
+    vorschlag: { ...nextRowTimes(plan, isPause), art: isPause ? 'pause' : 'stunde' },
+  });
+
+  const [faecherOpen, setFaecherOpen] = useState(false);
+  const closeFaecher = useCallback(() => setFaecherOpen(false), []);
+  const saveFach = (alt, werte) => onSavePlans(updateFach(editablePlans(settings), plan.id, alt, werte));
+
+  const openWholeDay = (di) => {
+    const raw = plan.ganztag?.[di];
+    setDialog({
+      mode: 'ganztag',
+      day: di,
+      initial: typeof raw === 'string' ? { fach: raw } : raw || null,
+      title: `${TAGE[di]} – ganzer Tag`,
+    });
   };
 
   // Personen (Pläne) anlegen, umbenennen, entfernen
@@ -256,9 +320,10 @@ function StundenplanPage({ isMobile = false, pageId, settings, editMode = false,
 
   const deleteDialog = () => {
     const base = editablePlans(settings);
-    const next = dialog.mode === 'stunde'
-      ? setCellEntry(base, plan.id, dialog.nr, dialog.day, null)
-      : setAfternoonEntry(base, plan.id, dialog.day, dialog.index, null);
+    let next;
+    if (dialog.mode === 'stunde') next = setCellEntry(base, plan.id, dialog.nr, dialog.day, null);
+    else if (dialog.mode === 'ganztag') next = setWholeDay(base, plan.id, dialog.day, null);
+    else next = setAfternoonEntry(base, plan.id, dialog.day, dialog.index, null);
     onSavePlans(next);
     setDialog(null);
   };
@@ -323,6 +388,13 @@ function StundenplanPage({ isMobile = false, pageId, settings, editMode = false,
               >
                 + Person
               </button>
+              <button
+                type="button"
+                className="sp-switch-btn sp-switch-tool"
+                onClick={() => setFaecherOpen(true)}
+              >
+                Fächer
+              </button>
             </>
           )}
         </div>
@@ -336,7 +408,14 @@ function StundenplanPage({ isMobile = false, pageId, settings, editMode = false,
               {TAGE.map((tag, di) => (
                 <th
                   key={tag}
-                  className={`sp-th${di === todayColIdx ? ' sp-th-today' : ''}`}
+                  className={`sp-th${di === todayColIdx ? ' sp-th-today' : ''}${canEdit ? ' sp-editable' : ''}`}
+                  {...(canEdit ? {
+                    onClick: () => openWholeDay(di),
+                    role: 'button',
+                    tabIndex: 0,
+                    'aria-label': `${tag} – ganzer Tag`,
+                    onKeyDown: (e) => e.key === 'Enter' && openWholeDay(di),
+                  } : {})}
                 >
                   <span className="sp-day-full">{tag}</span>
                   <span className="sp-day-short">{tag.slice(0, 2)}</span>
@@ -346,16 +425,26 @@ function StundenplanPage({ isMobile = false, pageId, settings, editMode = false,
           </thead>
 
           <tbody>
-            {plan.stunden.map((stunde) => {
+            {plan.stunden.map((stunde, rowIndex) => {
+              const editRow = canEdit ? () => setRowDialog({ index: rowIndex, row: stunde }) : null;
               if (stunde.isPause) {
-                return <PauseRow key={stunde.nr} stunde={stunde} />;
+                return <PauseRow key={stunde.nr} stunde={stunde} onEdit={editRow} />;
               }
 
               const isRowActive = isStundeActive(stunde, minutes);
 
               return (
                 <tr key={stunde.nr} className={`sp-row${isRowActive ? ' sp-row-active' : ''}`}>
-                  <td className="sp-time-cell">
+                  <td
+                    className={`sp-time-cell${canEdit ? ' sp-editable' : ''}`}
+                    {...(editRow ? {
+                      onClick: editRow,
+                      role: 'button',
+                      tabIndex: 0,
+                      'aria-label': `Zeit ${stunde.label || `${stunde.nr}. Stunde`} bearbeiten`,
+                      onKeyDown: (e) => e.key === 'Enter' && editRow(),
+                    } : {})}
+                  >
                     {stunde.label ? (
                       <span className="sp-stunde-nr sp-stunde-label">{stunde.label}</span>
                     ) : isMobile ? (
@@ -397,6 +486,12 @@ function StundenplanPage({ isMobile = false, pageId, settings, editMode = false,
             })}
           </tbody>
         </table>
+        {canEdit && (
+          <div className="sp-row-tools">
+            <button type="button" className="sp-add-btn" onClick={() => newRow(false)}>+ Stunde</button>
+            <button type="button" className="sp-add-btn" onClick={() => newRow(true)}>+ Pause</button>
+          </div>
+        )}
       </div>
 
       {/* Nachmittag (Hobbys) – eigener Bereich, Uhrzeit steht im Eintrag */}
@@ -434,6 +529,7 @@ function StundenplanPage({ isMobile = false, pageId, settings, editMode = false,
                             <span className="sp-fach-emoji">{meta.emoji}</span>
                             <span className="sp-fach-text">
                               <span className="sp-fach-label">{meta.label}</span>
+                              <span className="sp-fach-kurz">{meta.kurz}</span>
                               {entryInfo(termin) && <span className="sp-fach-info">{entryInfo(termin)}</span>}
                             </span>
                             {isActive && <span className="sp-live-dot" aria-hidden="true" />}
@@ -457,6 +553,25 @@ function StundenplanPage({ isMobile = false, pageId, settings, editMode = false,
             </tbody>
           </table>
         </div>
+      )}
+
+      {rowDialog && (
+        <StundeDialog
+          row={rowDialog.row}
+          vorschlag={rowDialog.vorschlag}
+          onSave={saveRow}
+          onDelete={rowDialog.row && plan.stunden.length > 1 ? deleteRow : null}
+          onClose={closeRowDialog}
+        />
+      )}
+
+      {faecherOpen && (
+        <FaecherDialog
+          faecher={usedFaecher(plan)}
+          metaFor={(fach) => metaFor(plan, fach)}
+          onSave={saveFach}
+          onClose={closeFaecher}
+        />
       )}
 
       {planDialog && (
@@ -751,6 +866,37 @@ function StundenplanPage({ isMobile = false, pageId, settings, editMode = false,
           .sp-fach-text { align-items: center; }
           .sp-fach-info { font-size: 0.5rem; }
         }
+
+        /* Abkürzung nur in der schmalen Ansicht */
+        .sp-fach-kurz { display: none; }
+        @media (max-width: 768px) {
+          .sp-root { padding: 0.75rem 0; gap: 1rem; }
+          .sp-table-wrap { padding: 0.2rem; border-radius: 0.9rem; }
+          .sp-table { border-spacing: 2px; }
+          .sp-th { padding: 0.45rem 0.1rem; font-size: 0.6rem; letter-spacing: 0.04em; }
+          .sp-th-time { width: 40px; }
+          .sp-time-cell { padding: 0.3rem 0.15rem; }
+          .sp-cell { padding: 0.1rem; border-radius: 0.5rem; }
+          .sp-fach { padding: 0.3rem 0.1rem; min-height: 2.6rem; gap: 0.1rem; border-radius: 0.45rem; }
+          .sp-fach-emoji { font-size: 0.75rem; }
+          .sp-fach-kurz {
+            display: block;
+            font-size: 0.66rem;
+            font-weight: 700;
+            color: var(--fach-color, var(--text-secondary));
+            line-height: 1.15;
+            text-align: center;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+          }
+          .sp-fach-info { font-size: 0.48rem; text-align: center; max-width: 100%; }
+          .sp-live-dot { display: none; }
+        }
+
+        /* Zeilen hinzufügen */
+        .sp-row-tools { display: flex; gap: 0.5rem; padding: 0.25rem 3px 0; }
+        .sp-row-tools .sp-add-btn { width: auto; flex: 1; margin-top: 0; }
 
         /* Werkzeuge neben den Personen (nur im Bearbeiten-Modus) */
         .sp-switch-tool { border-style: dashed; border-color: var(--glass-border); }

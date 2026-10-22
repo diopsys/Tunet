@@ -61,6 +61,157 @@ export function setAfternoonEntry(plans, planId, dayIdx, index, termin, emoji) {
   });
 }
 
+// ── Zeilen (Stunden, Pausen, benannte Zeilen) ────────────────────────────
+
+export function addMinutes(hhmm, minutes) {
+  const [h, m] = hhmm.split(':').map(Number);
+  const total = Math.min(Math.max(h * 60 + m + minutes, 0), 23 * 60 + 59);
+  return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
+}
+
+const isLesson = (row) => !row.isPause && !row.label;
+
+/**
+ * Zeilen nach Beginn sortieren, Stunden 1…n und Pausen P1…n neu nummerieren
+ * und die Einträge auf die neuen Nummern umhängen. Einträge gelöschter
+ * Zeilen fallen weg; benannte Zeilen behalten ihre Kennung.
+ */
+export function sortAndRenumber(plan) {
+  const rows = (plan.stunden || []).map((row, i) => ({ row, i }))
+    .sort((a, b) => a.row.von.localeCompare(b.row.von) || a.i - b.i)
+    .map(({ row }) => row);
+
+  const mapping = {};
+  let lesson = 0;
+  let pause = 0;
+  const used = new Set(rows.filter((r) => r.label && !r.isPause).map((r) => String(r.nr)));
+  const stunden = rows.map((row) => {
+    if (row.isPause) {
+      pause += 1;
+      return { ...row, nr: `P${pause}` };
+    }
+    if (row.label) {
+      return row;
+    }
+    lesson += 1;
+    while (used.has(String(lesson))) lesson += 1;
+    if (row.nr != null) mapping[String(row.nr)] = lesson;
+    return { ...row, nr: lesson };
+  });
+
+  const keep = new Set(stunden.filter((r) => r.label && !r.isPause).map((r) => String(r.nr)));
+  const eintraege = {};
+  Object.entries(plan.eintraege || {}).forEach(([key, value]) => {
+    const cut = key.lastIndexOf('-');
+    const nr = key.slice(0, cut);
+    const day = key.slice(cut + 1);
+    if (mapping[nr] != null) eintraege[`${mapping[nr]}-${day}`] = value;
+    else if (keep.has(nr)) eintraege[key] = value;
+  });
+  return { ...plan, stunden, eintraege };
+}
+
+/**
+ * Zeile ändern (index), anhängen (index = null) oder löschen (row = null).
+ * Neue Zeilen ohne Kennung bekommen eine vorläufige; die Nummern vergibt sortAndRenumber.
+ */
+export function setRow(plans, planId, index, row) {
+  return updatePlan(plans, planId, (plan) => {
+    const stunden = [...(plan.stunden || [])];
+    if (row == null) {
+      stunden.splice(index, 1);
+    } else {
+      const clean = { von: row.von, bis: row.bis };
+      if (row.isPause) {
+        clean.isPause = true;
+        clean.label = row.label?.trim() || 'Pause';
+      } else if (row.label?.trim()) {
+        clean.label = row.label.trim();
+      }
+      const before = index == null ? null : stunden[index];
+      // Kennung behalten, solange die Art gleich bleibt (Einträge hängen daran)
+      if (before && !!before.isPause === !!clean.isPause && !!before.label === !!clean.label && !clean.isPause) {
+        clean.nr = before.nr;
+      } else if (clean.label && !clean.isPause) {
+        const ids = new Set(stunden.map((s) => String(s.nr)));
+        let id = clean.label.slice(0, 1).toUpperCase();
+        for (let i = 2; ids.has(id); i += 1) id = `${clean.label.slice(0, 1).toUpperCase()}${i}`;
+        clean.nr = id;
+      } else if (before && isLesson(before) && isLesson(clean)) {
+        clean.nr = before.nr;
+      }
+      if (index == null) stunden.push(clean);
+      else stunden[index] = clean;
+    }
+    return sortAndRenumber({ ...plan, stunden });
+  });
+}
+
+/** Vorschlag für eine neue Zeile direkt nach der letzten. */
+export function nextRowTimes(plan, isPause) {
+  const last = [...(plan.stunden || [])].sort((a, b) => a.bis.localeCompare(b.bis)).pop();
+  const von = last ? addMinutes(last.bis, isPause ? 0 : 5) : '08:00';
+  return { von, bis: addMinutes(von, isPause ? 15 : 45) };
+}
+
+/** Ganztägigen Eintrag eines Wochentags setzen oder (entry = null) entfernen. */
+export function setWholeDay(plans, planId, dayIdx, entry, emoji) {
+  return updatePlan(plans, planId, (plan) => {
+    const ganztag = { ...(plan.ganztag || {}) };
+    if (!entry || !entry.fach?.trim()) {
+      delete ganztag[dayIdx];
+      const next = { ...plan, ganztag };
+      if (Object.keys(ganztag).length === 0) delete next.ganztag;
+      return next;
+    }
+    const clean = { fach: entry.fach.trim() };
+    if (entry.info?.trim()) clean.info = entry.info.trim();
+    ganztag[dayIdx] = Object.keys(clean).length === 1 ? clean.fach : clean;
+    return ensureFach({ ...plan, ganztag }, clean.fach, emoji);
+  });
+}
+
+/** Fach ändern: Symbol, Farbe, Abkürzung; ein neuer Name wird in allen Einträgen des Plans übernommen. */
+export function updateFach(plans, planId, alt, { name, emoji, color, kurz }) {
+  return updatePlan(plans, planId, (plan) => {
+    const neu = name.trim();
+    const rename = (value) => {
+      if (typeof value === 'string') return value === alt ? neu : value;
+      return value && value.fach === alt ? { ...value, fach: neu } : value;
+    };
+    const eintraege = Object.fromEntries(Object.entries(plan.eintraege || {}).map(([k, v]) => [k, rename(v)]));
+    const next = { ...plan, eintraege };
+    if (plan.ganztag) next.ganztag = Object.fromEntries(Object.entries(plan.ganztag).map(([k, v]) => [k, rename(v)]));
+    if (plan.nachmittag) {
+      next.nachmittag = Object.fromEntries(Object.entries(plan.nachmittag).map(([k, v]) => [k, v.map(rename)]));
+    }
+    const faecher = { ...(plan.faecher || {}) };
+    const meta = { ...(faecher[alt] || {}) };
+    delete faecher[alt];
+    if (emoji?.trim()) meta.emoji = emoji.trim();
+    if (color) meta.color = color;
+    if (kurz?.trim()) meta.kurz = kurz.trim();
+    else delete meta.kurz;
+    delete meta.label;
+    faecher[neu] = meta;
+    next.faecher = faecher;
+    return next;
+  });
+}
+
+/** Alle im Plan verwendeten Fächer (für die Fächerliste). */
+export function usedFaecher(plan) {
+  const used = new Set();
+  const add = (v) => {
+    const fach = typeof v === 'string' ? v : v?.fach;
+    if (fach) used.add(fach);
+  };
+  Object.values(plan.eintraege || {}).forEach(add);
+  Object.values(plan.ganztag || {}).forEach(add);
+  Object.values(plan.nachmittag || {}).forEach((termine) => termine.forEach(add));
+  return [...used].sort((a, b) => a.localeCompare(b, 'de'));
+}
+
 // ── Pläne (Personen) verwalten ───────────────────────────────────────────
 
 /** Generische Zeiten für eine neue Person ohne Vorlage. */
@@ -229,6 +380,194 @@ export const PlanDialog = memo(function PlanDialog({ plan, plans, canDelete, onS
         )}
       </form>
       <style>{DIALOG_CSS}</style>
+    </div>
+  );
+});
+
+// ── Dialog für Zeilen ────────────────────────────────────────────────────
+
+const ARTEN = [
+  ['stunde', 'Stunde'],
+  ['pause', 'Pause'],
+  ['zeile', 'Benannte Zeile (z. B. Ganztag)'],
+];
+
+/** Zeile bearbeiten (row) oder neu anlegen (row = null, vorschlag = {von, bis, art}). */
+export const StundeDialog = memo(function StundeDialog({ row, vorschlag, onSave, onDelete, onClose }) {
+  const startArt = row ? (row.isPause ? 'pause' : row.label ? 'zeile' : 'stunde') : vorschlag?.art || 'stunde';
+  const [art, setArt] = useState(startArt);
+  const [label, setLabel] = useState(row?.label || (startArt === 'pause' ? 'Pause' : ''));
+  const [von, setVon] = useState(row?.von || vorschlag?.von || '');
+  const [bis, setBis] = useState(row?.bis || vorschlag?.bis || '');
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  useEscape(onClose);
+
+  const zeitFalsch = von && bis && bis <= von;
+  const kannSpeichern = von && bis && !zeitFalsch && (art !== 'zeile' || label.trim());
+
+  const submit = (e) => {
+    e.preventDefault();
+    if (!kannSpeichern) return;
+    onSave({ von, bis, isPause: art === 'pause', label: art === 'stunde' ? '' : label });
+  };
+
+  return (
+    <div className="spe-backdrop" onClick={onClose} role="presentation">
+      <form className="spe-dialog" role="dialog" aria-modal="true" aria-label={row ? 'Zeile bearbeiten' : 'Zeile hinzufügen'}
+        onClick={(e) => e.stopPropagation()} onSubmit={submit}>
+        <h3 className="spe-title">{row ? 'Zeile bearbeiten' : 'Zeile hinzufügen'}</h3>
+
+        <label className="spe-field">
+          <span>Art</span>
+          <select value={art} onChange={(e) => {
+            setArt(e.target.value);
+            if (e.target.value === 'pause' && !label) setLabel('Pause');
+          }}>
+            {ARTEN.map(([id, text]) => <option key={id} value={id}>{text}</option>)}
+          </select>
+        </label>
+
+        {art !== 'stunde' && (
+          <label className="spe-field">
+            <span>Bezeichnung</span>
+            <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder={art === 'pause' ? 'z. B. Mittagspause' : 'z. B. Ganztag'} />
+          </label>
+        )}
+
+        <div className="spe-row">
+          <label className="spe-field">
+            <span>von</span>
+            <input type="time" value={von} onChange={(e) => setVon(e.target.value)} />
+          </label>
+          <label className="spe-field">
+            <span>bis</span>
+            <input type="time" value={bis} onChange={(e) => setBis(e.target.value)} />
+          </label>
+        </div>
+        {zeitFalsch && <p className="spe-hint">„bis“ muss nach „von“ liegen.</p>}
+        {row && art !== startArt && startArt === 'stunde' && (
+          <p className="spe-hint">Die Einträge dieser Stunde gehen dabei verloren.</p>
+        )}
+
+        {confirmDelete ? (
+          <div className="spe-actions">
+            <span className="spe-hint" style={{ alignSelf: 'center' }}>Zeile mit ihren Einträgen löschen?</span>
+            <span className="spe-spacer" />
+            <button type="button" className="spe-btn" onClick={() => setConfirmDelete(false)}>Nein</button>
+            <button type="button" className="spe-btn spe-btn-danger" onClick={onDelete}>Löschen</button>
+          </div>
+        ) : (
+          <div className="spe-actions">
+            {row && onDelete && (
+              <button type="button" className="spe-btn spe-btn-danger" onClick={() => setConfirmDelete(true)}>Löschen</button>
+            )}
+            <span className="spe-spacer" />
+            <button type="button" className="spe-btn" onClick={onClose}>Abbrechen</button>
+            <button type="submit" className="spe-btn spe-btn-primary" disabled={!kannSpeichern}>Speichern</button>
+          </div>
+        )}
+      </form>
+      <style>{DIALOG_CSS}</style>
+    </div>
+  );
+});
+
+// ── Dialog für Fächer ────────────────────────────────────────────────────
+
+/** Liste der Fächer eines Plans; ein Fach nach dem anderen bearbeiten. */
+export const FaecherDialog = memo(function FaecherDialog({ faecher, metaFor, onSave, onClose }) {
+  const [auswahl, setAuswahl] = useState(null);
+  const [name, setName] = useState('');
+  const [emoji, setEmoji] = useState('');
+  const [color, setColor] = useState('#6366f1');
+  const [kurz, setKurz] = useState('');
+  useEscape(onClose);
+
+  const waehle = (fach) => {
+    const meta = metaFor(fach);
+    setAuswahl(fach);
+    setName(fach);
+    setEmoji(meta.emoji || '');
+    setColor(/^#[0-9a-f]{6}$/i.test(meta.color || '') ? meta.color : '#6366f1');
+    setKurz(meta.kurz || '');
+  };
+
+  const nameVergeben = auswahl && name.trim() !== auswahl && faecher.includes(name.trim());
+
+  const submit = (e) => {
+    e.preventDefault();
+    if (!auswahl || !name.trim() || nameVergeben) return;
+    onSave(auswahl, { name, emoji, color, kurz });
+    setAuswahl(null);
+  };
+
+  return (
+    <div className="spe-backdrop" onClick={onClose} role="presentation">
+      <form className="spe-dialog" role="dialog" aria-modal="true" aria-label="Fächer"
+        onClick={(e) => e.stopPropagation()} onSubmit={submit}>
+        <h3 className="spe-title">Fächer</h3>
+
+        {!auswahl ? (
+          <>
+            {faecher.length === 0 && <p className="spe-hint" style={{ color: 'var(--text-muted)' }}>Noch keine Fächer eingetragen.</p>}
+            <div className="spe-list">
+              {faecher.map((fach) => {
+                const meta = metaFor(fach);
+                return (
+                  <button key={fach} type="button" className="spe-list-item" onClick={() => waehle(fach)}>
+                    <span>{meta.emoji}</span>
+                    <span className="spe-list-name" style={{ color: meta.color }}>{fach}</span>
+                    <span className="spe-list-kurz">{meta.kurz}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <div className="spe-actions">
+              <span className="spe-spacer" />
+              <button type="button" className="spe-btn" onClick={onClose}>Fertig</button>
+            </div>
+          </>
+        ) : (
+          <>
+            <label className="spe-field">
+              <span>Name (wird in allen Einträgen geändert)</span>
+              <input autoFocus value={name} onChange={(e) => setName(e.target.value)} />
+            </label>
+            {nameVergeben && <p className="spe-hint">Dieses Fach gibt es schon.</p>}
+            <div className="spe-row">
+              <label className="spe-field">
+                <span>Symbol</span>
+                <input value={emoji} onChange={(e) => setEmoji(e.target.value)} maxLength={8} />
+              </label>
+              <label className="spe-field">
+                <span>Abkürzung</span>
+                <input value={kurz} onChange={(e) => setKurz(e.target.value)} maxLength={10} placeholder="z. B. Ma" />
+              </label>
+              <label className="spe-field">
+                <span>Farbe</span>
+                <input type="color" value={color} onChange={(e) => setColor(e.target.value)} style={{ padding: 2, height: 38 }} />
+              </label>
+            </div>
+            <div className="spe-actions">
+              <span className="spe-spacer" />
+              <button type="button" className="spe-btn" onClick={() => setAuswahl(null)}>Zurück</button>
+              <button type="submit" className="spe-btn spe-btn-primary" disabled={!name.trim() || nameVergeben}>Speichern</button>
+            </div>
+          </>
+        )}
+      </form>
+      <style>{`${DIALOG_CSS}
+        .spe-list { display: flex; flex-direction: column; gap: 4px; max-height: 50vh; overflow-y: auto; }
+        .spe-list-item {
+          display: flex; align-items: center; gap: 0.6rem;
+          padding: 0.5rem 0.65rem; border-radius: 0.6rem;
+          background: var(--glass-bg); border: 1px solid transparent;
+          color: var(--text-primary); cursor: pointer; text-align: left; font-size: 0.8rem;
+        }
+        .spe-list-item:hover { border-color: var(--glass-border); }
+        .spe-list-name { flex: 1; font-weight: 600; }
+        .spe-list-kurz { font-size: 0.65rem; color: var(--text-muted); }
+      `}</style>
     </div>
   );
 });
