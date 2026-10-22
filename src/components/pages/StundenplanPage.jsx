@@ -52,8 +52,8 @@ const DEFAULT_PLAN = {
  * Standardplan. Ein Plan:
  * {
  *   id, name, subtitle?,
- *   stunden: [{ nr, von: 'HH:MM', bis: 'HH:MM', isPause?, label? }],
- *   eintraege: { '<nr>-<tag 0..4>': 'Fach' | { fach, info?, optional? } },
+ *   stunden: [{ nr, von: 'HH:MM', bis: 'HH:MM', isPause?, label? }],   // label ersetzt die Nummer
+ *   eintraege: { '<nr>-<tag 0..4>': 'Fach' | { fach, info?, optional?, von?, bis? } },  // von/bis: eigene Zeit
  *   ganztag?: { '<tag 0..4>': 'Fach' | { fach, info? } },   // gilt für alle Stunden des Tages
  *   faecher?: { Fach: { emoji, label?, color, bg? } },
  * }
@@ -101,6 +101,17 @@ function isStundeActive(stunde, minutes) {
   return minutes >= timeToMinutes(stunde.von) && minutes < timeToMinutes(stunde.bis);
 }
 
+/** Eintrag mit eigener Zeit (z. B. Freizeit) läuft nach seiner Zeit, sonst nach der Zeile. */
+export function isEntryActive(entry, stunde, minutes) {
+  if (entry?.von && entry?.bis) return isStundeActive(entry, minutes);
+  return isStundeActive(stunde, minutes);
+}
+
+function entryInfo(entry) {
+  const zeit = entry.von && entry.bis ? `${entry.von}–${entry.bis}` : null;
+  return [zeit, entry.info].filter(Boolean).join(' · ') || null;
+}
+
 const storageKey = (pageId) => `tunet_stundenplan_plan_${pageId || 'default'}`;
 
 function readStoredPlan(pageId) {
@@ -137,7 +148,7 @@ const FachCell = memo(function FachCell({ entry, meta, isToday, isActive }) {
         <span className="sp-fach-emoji">{meta.emoji}</span>
         <span className="sp-fach-text">
           <span className="sp-fach-label">{meta.label}</span>
-          {entry.info && <span className="sp-fach-info">{entry.info}</span>}
+          {entryInfo(entry) && <span className="sp-fach-info">{entryInfo(entry)}</span>}
         </span>
         {isActive && <span className="sp-live-dot" aria-hidden="true" />}
       </div>
@@ -240,7 +251,9 @@ function StundenplanPage({ isMobile = false, pageId, settings }) {
               return (
                 <tr key={stunde.nr} className={`sp-row${isRowActive ? ' sp-row-active' : ''}`}>
                   <td className="sp-time-cell">
-                    {isMobile ? (
+                    {stunde.label ? (
+                      <span className="sp-stunde-nr sp-stunde-label">{stunde.label}</span>
+                    ) : isMobile ? (
                       <>
                         <span className="sp-stunde-nr sp-stunde-nr-block">{stunde.nr}.</span>
                         <span className="sp-time-stacked">{stunde.von}</span>
@@ -253,7 +266,7 @@ function StundenplanPage({ isMobile = false, pageId, settings }) {
                   {TAGE.map((_, di) => {
                     const entry = resolveCell(plan, stunde.nr, di);
                     const isToday = di === todayColIdx;
-                    const isActive = isToday && isRowActive && !!entry && !entry.ganztag;
+                    const isActive = isToday && !!entry && !entry.ganztag && isEntryActive(entry, stunde, minutes);
                     return (
                       <FachCell
                         key={di}
@@ -540,6 +553,9 @@ function StundenplanPage({ isMobile = false, pageId, settings }) {
           .sp-fach-text { align-items: center; }
           .sp-fach-info { font-size: 0.5rem; }
         }
+
+        /* Zeile mit Bezeichnung statt Nummer (z. B. Freizeit) */
+        .sp-stunde-label { display: block; font-size: 0.62rem; white-space: normal; }
 
         /* Freiwillige / ganztägige Einträge abgesetzt */
         .sp-cell.sp-muted .sp-fach { opacity: 0.55; }

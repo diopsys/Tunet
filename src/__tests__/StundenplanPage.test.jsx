@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import StundenplanPage, { resolveCell, resolvePlans } from '../components/pages/StundenplanPage';
+import StundenplanPage, { isEntryActive, resolveCell, resolvePlans } from '../components/pages/StundenplanPage';
 
 const settings = {
   type: 'stundenplan',
@@ -48,6 +48,29 @@ describe('resolvePlans / resolveCell', () => {
     expect(resolveCell(kind, 2, 1)).toEqual({ fach: 'Deutsch', info: 'Raum 06', ganztag: false });
     expect(resolveCell(kind, 2, 4)).toBeNull();
     expect(resolveCell(lehrerin, 1, 0)).toEqual({ fach: 'Studientag', ganztag: true });
+  });
+});
+
+describe('Einträge mit eigener Zeit', () => {
+  const zeile = { nr: 'F', label: 'Freizeit', von: '13:30', bis: '17:30' };
+  const tennis = { fach: 'Tennis', von: '16:00', bis: '17:30' };
+  const minutes = (hhmm) => Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3));
+
+  it('uses the entry time instead of the row time', () => {
+    expect(isEntryActive(tennis, zeile, minutes('15:00'))).toBe(false);
+    expect(isEntryActive(tennis, zeile, minutes('16:30'))).toBe(true);
+    expect(isEntryActive({ fach: 'Deutsch' }, zeile, minutes('15:00'))).toBe(true);
+  });
+
+  it('shows the row label and the entry time', () => {
+    const plan = {
+      id: 'x', name: 'X',
+      stunden: [{ nr: 1, von: '08:00', bis: '08:45' }, zeile],
+      eintraege: { 'F-0': { ...tennis, info: 'Halle' } },
+    };
+    render(<StundenplanPage pageId="sp" settings={{ plans: [plan] }} />);
+    expect(screen.getByText('Freizeit')).toBeTruthy();
+    expect(screen.getByText('16:00–17:30 · Halle')).toBeTruthy();
   });
 });
 
