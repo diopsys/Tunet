@@ -152,6 +152,14 @@ describe('PufferCard', () => {
     expect(sendMessagePromise).toHaveBeenCalledWith(expect.objectContaining({ type: 'recorder/statistics_during_period', period: '5minute' }));
   });
 
+  it('shows emergency cooling only while it is active', () => {
+    const mit = { ...puffer, zustaende: [{ name: 'Notkühlung', entity: 'binary_sensor.notk' }] };
+    const { rerender } = render(<PufferCard cardId="p" entities={{ ...temps, 'binary_sensor.notk': { state: 'off' } }} settings={{ puffer: mit }} />);
+    expect(screen.queryByText('Notkühlung aktiv')).toBeNull();
+    rerender(<PufferCard cardId="p" entities={{ ...temps, 'binary_sensor.notk': { state: 'on' } }} settings={{ puffer: mit }} />);
+    expect(screen.getByText('Notkühlung aktiv')).toBeTruthy();
+  });
+
   it('opens the configured page', () => {
     render(<PufferCard cardId="p" entities={temps} settings={{ puffer: { ...puffer, url: '/heizung' } }} />);
     fireEvent.keyDown(screen.getByRole('button', { name: 'Puffer öffnen' }), { key: 'Escape' });

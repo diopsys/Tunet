@@ -1,6 +1,7 @@
 import { memo, useEffect, useId, useMemo, useState } from 'react';
 import { getHistory, getStatistics } from '../../services';
-import { formatTemp, num, openProps } from './HeizungCard';
+import { AlertTriangle } from '../../icons';
+import { formatTemp, isActive, num, openProps } from './HeizungCard';
 
 /*
  * Puffer-Kachel (settings.puffer):
@@ -10,6 +11,7 @@ import { formatTemp, num, openProps } from './HeizungCard';
  *   oben?, unten?,                 // Verlauf und Anzeige; Standard: erste/letzte Schicht
  *   liter: 749, bezug: 30, voll: 90,   // Energie über „bezug“, 100 % bei „voll“
  *   stunden?: 24, url?: '/heizung?tab=anlage',
+ *   zustaende?: [{ name, entity }],   // z. B. Notkühlung: roter Hinweis, solange an
  * }
  */
 
@@ -37,6 +39,7 @@ export function resolvePufferConfig(settings) {
     voll: zahl(p.voll, 90),
     stunden: zahl(p.stunden, 24),
     url: typeof p.url === 'string' && p.url.trim() ? p.url.trim() : null,
+    zustaende: Array.isArray(p.zustaende) ? p.zustaende.filter((z) => z && z.entity) : [],
   };
 }
 
@@ -131,6 +134,7 @@ const PufferCard = ({ cardId, dragProps, controls, cardStyle, editMode, entities
   ].filter(Boolean);
 
   const titel = name || config.name;
+  const aktiv = config.zustaende.filter((z) => isActive(entities[z.entity]));
   return (
     <div
       key={cardId}
@@ -164,6 +168,12 @@ const PufferCard = ({ cardId, dragProps, controls, cardStyle, editMode, entities
           )}
         </div>
       </div>
+      {aktiv.length > 0 && (
+        <div className="mt-1.5 flex items-center gap-1.5 self-start rounded-lg px-2 py-0.5 text-[10px] font-bold text-red-400" style={{ backgroundColor: 'rgba(239,68,68,0.14)' }}>
+          <AlertTriangle className="h-3 w-3 flex-shrink-0 animate-pulse" />
+          <span className="truncate">{aktiv.map((z) => z.name).join(', ')} aktiv</span>
+        </div>
+      )}
       {/* Verlauf bis an die Kachelränder wie bei der Wetter-Kachel (Ecken schneidet overflow-hidden ab) */}
       <div className="-mx-3.5 -mb-3.5 mt-2 min-h-0 flex-1" title={`Verlauf der letzten ${config.stunden} h`}>
         <PufferGraph reihen={reihen} stunden={config.stunden} />
