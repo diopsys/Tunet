@@ -446,7 +446,7 @@ function StundenplanPage({ isMobile = false, pageId, settings, editMode = false,
                     } : {})}
                   >
                     {stunde.label ? (
-                      <span className="sp-stunde-nr sp-stunde-label">{stunde.label}</span>
+                      <span className="sp-stunde-nr sp-stunde-label" lang="de">{stunde.label}</span>
                     ) : isMobile ? (
                       <>
                         <span className="sp-stunde-nr sp-stunde-nr-block">{stunde.nr}.</span>
@@ -501,7 +501,7 @@ function StundenplanPage({ isMobile = false, pageId, settings, editMode = false,
             <tbody>
               <tr>
                 <td className="sp-time-cell sp-th-time">
-                  <span className="sp-stunde-nr sp-stunde-label">Nachmittag</span>
+                  <span className="sp-stunde-nr sp-stunde-label" lang="de">Nachmittag</span>
                 </td>
                 {TAGE.map((_, di) => {
                   const termine = resolveAfternoon(plan, di);
@@ -923,6 +923,18 @@ function StundenplanPage({ isMobile = false, pageId, settings, editMode = false,
 
         /* Zeile mit Bezeichnung statt Nummer (z. B. Ganztag) */
         .sp-stunde-label { display: block; font-size: 0.62rem; white-space: normal; }
+        @media (max-width: 768px) {
+          /* schmale Zeitspalte: Bezeichnung mit Silbentrennung umbrechen, nie in die Felder ragen */
+          .sp-time-cell { overflow: hidden; }
+          .sp-stunde-label {
+            font-size: 0.52rem;
+            line-height: 1.15;
+            letter-spacing: 0;
+            hyphens: auto;
+            -webkit-hyphens: auto;
+            overflow-wrap: anywhere;
+          }
+        }
 
         /* Freiwillige / ganztägige Einträge abgesetzt */
         .sp-cell.sp-muted .sp-fach { opacity: 0.55; }
