@@ -113,6 +113,21 @@ export const STATUS_GROUP_PRESETS = [
       id.startsWith('cover.') && !isUnavailable(entity) && entity?.state !== 'closed',
   },
   {
+    id: 'heating_on',
+    labelKey: 'statusPills.groupPresetHeatingOn',
+    fallbackLabel: 'Heating on',
+    emptyLabelKey: 'statusPills.groupPresetHeatingOnEmpty',
+    fallbackEmptyLabel: 'No heating active',
+    icon: 'mdi:radiator',
+    iconBgColor: 'rgba(249, 115, 22, 0.14)',
+    iconColor: 'text-orange-300',
+    // Dialog listet alle Thermostate, heizende zuerst und hervorgehoben
+    listAll: true,
+    candidates: (id) => id.startsWith('climate.'),
+    matches: (id, entity) =>
+      id.startsWith('climate.') && !isUnavailable(entity) && entity?.attributes?.hvac_action === 'heating',
+  },
+  {
     id: 'low_battery',
     labelKey: 'statusPills.groupPresetLowBattery',
     fallbackLabel: 'Low battery',
@@ -179,6 +194,44 @@ export function resolveStatusGroupCandidates(presetId, entities) {
   );
   candidates.sort(sortByFriendlyName);
   return candidates;
+}
+
+/**
+ * Einträge für den Dialog: bei Vorlagen mit `listAll` alle passenden Kandidaten
+ * (aktive zuerst, `active` markiert), sonst nur die aktiven.
+ */
+export function resolveStatusGroupListItems(pill, entities) {
+  const preset = getStatusGroupPreset(pill?.groupPreset);
+  const rows = preset.listAll
+    ? toEntityRows(entities).filter(
+        ({ id, entity }) => preset.candidates(id, entity) && isAllowedBySelection(pill, id)
+      )
+    : toEntityRows(entities).filter(
+        ({ id, entity }) => preset.matches(id, entity, pill) && isAllowedBySelection(pill, id)
+      );
+  return rows
+    .map((row) => ({ ...row, active: Boolean(preset.matches(row.id, row.entity, pill)) }))
+    .sort((a, b) => Number(b.active) - Number(a.active) || sortByFriendlyName(a, b));
+}
+
+/**
+ * Soll-/Ist-Temperatur und Ventilöffnung eines Thermostats. Das Ventil kommt aus
+ * dem Attribut `valve_position` oder einem Begleitsensor
+ * `sensor.<objekt-id><pill.valveEntitySuffix>` (z. B. „_ventilzustand“).
+ */
+export function getHeatingDetails(id, entity, entities, pill) {
+  const attrs = entity?.attributes || {};
+  const zahl = (v) => {
+    const n = Number.parseFloat(v);
+    return Number.isFinite(n) ? n : null;
+  };
+  let valve = zahl(attrs.valve_position);
+  const suffix = typeof pill?.valveEntitySuffix === 'string' ? pill.valveEntitySuffix.trim() : '';
+  if (valve === null && suffix) {
+    const sensor = entities?.[`sensor.${id.split('.')[1]}${suffix}`];
+    if (sensor && !isUnavailable(sensor)) valve = zahl(sensor.state);
+  }
+  return { target: zahl(attrs.temperature), current: zahl(attrs.current_temperature), valve };
 }
 
 export function resolveStatusGroupPill(pill, entities, t) {

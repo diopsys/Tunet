@@ -2,7 +2,11 @@ import { useMemo } from 'react';
 import PropTypes from 'prop-types';
 import { Check, X, getIconComponent } from '../icons';
 import AccessibleModalShell from '../components/ui/AccessibleModalShell';
-import { resolveStatusGroupPill } from '../utils/statusGroupPills';
+import {
+  getHeatingDetails,
+  resolveStatusGroupListItems,
+  resolveStatusGroupPill,
+} from '../utils/statusGroupPills';
 
 const translate = (t, key, fallback) => {
   const value = typeof t === 'function' ? t(key) : key;
@@ -35,7 +39,9 @@ export default function StatusGroupPillModal({
     [entities, pill, t]
   );
   const preset = groupData?.preset || null;
-  const items = groupData?.matchedEntities || [];
+  const items = useMemo(() => (pill ? resolveStatusGroupListItems(pill, entities) : []), [entities, pill]);
+  const isHeating = preset?.id === 'heating_on';
+  const activeCount = groupData?.count ?? 0;
   const title = groupData?.syntheticEntity?.attributes?.friendly_name || '';
   const Icon =
     getIconComponent(pill?.icon || preset?.icon || 'Activity') || getIconComponent('Activity');
@@ -96,7 +102,7 @@ export default function StatusGroupPillModal({
                 </h2>
                 <div className="mt-2 flex flex-wrap items-center gap-2">
                   <span className="inline-flex items-center rounded-full border border-[var(--glass-border)] bg-[var(--glass-bg)] px-2.5 py-1 text-[10px] font-bold tracking-widest text-[var(--text-secondary)] uppercase">
-                    {items.length} {translate(t, 'statusPills.groupMatchedEntities', 'matching')}
+                    {activeCount} {translate(t, 'statusPills.groupMatchedEntities', 'matching')}
                   </span>
                   <span className="text-xs text-[var(--text-muted)]">
                     {groupData.syntheticEntity.attributes.statusPillSublabel}
@@ -106,10 +112,10 @@ export default function StatusGroupPillModal({
             </div>
           </div>
 
-          {hasAction && items.length > 0 && (
+          {hasAction && activeCount > 0 && (
             <div className="mt-5">
               <button
-                onClick={() => runAction(items.map(({ id }) => id))}
+                onClick={() => runAction(items.filter((item) => item.active).map(({ id }) => id))}
                 className="flex w-full items-center justify-center gap-2 rounded-2xl border border-[var(--status-success-border)] bg-[var(--status-success-bg)] px-4 py-3 text-sm font-bold text-[var(--status-success-fg)] transition-opacity hover:opacity-90"
               >
                 <Check className="h-4 w-4" />
@@ -121,32 +127,54 @@ export default function StatusGroupPillModal({
           <div className="custom-scrollbar -mx-1 mt-5 min-h-0 flex-1 overflow-y-auto px-1">
             {items.length > 0 ? (
               <div className="space-y-2">
-                {items.map(({ id, entity }) => (
-                  <div
-                    key={id}
-                    className="popup-surface flex items-center justify-between gap-3 rounded-2xl px-3.5 py-3"
-                  >
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-bold text-[var(--text-primary)]">
-                        {getEntityName(id, entity)}
-                      </p>
-                      <p className="truncate text-xs text-[var(--text-muted)]">{id}</p>
+                {items.map(({ id, entity, active }) => {
+                  const details = isHeating ? getHeatingDetails(id, entity, entities, pill) : null;
+                  const grad = (v) => (v == null ? '–' : `${v.toFixed(1).replace('.', ',')} °C`);
+                  return (
+                    <div
+                      key={id}
+                      className={`popup-surface flex items-center justify-between gap-3 rounded-2xl px-3.5 py-3 ${isHeating && active ? 'ring-1 ring-orange-400/50' : ''} ${isHeating && !active ? 'opacity-60' : ''}`}
+                      style={isHeating && active ? { backgroundColor: 'rgba(249,115,22,0.10)' } : undefined}
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-bold text-[var(--text-primary)]">
+                          {getEntityName(id, entity)}
+                        </p>
+                        {details ? (
+                          <p className="truncate text-xs text-[var(--text-muted)]">
+                            {translate(t, 'statusPills.groupHeatingTarget', 'Target')} {grad(details.target)} ·{' '}
+                            {translate(t, 'statusPills.groupHeatingCurrent', 'Current')} {grad(details.current)}
+                          </p>
+                        ) : (
+                          <p className="truncate text-xs text-[var(--text-muted)]">{id}</p>
+                        )}
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2">
+                        {details ? (
+                          <span
+                            className={`rounded-full px-2 py-1 text-[10px] font-bold ${active ? 'text-orange-300' : 'text-[var(--text-secondary)]'}`}
+                            style={{ backgroundColor: active ? 'rgba(249,115,22,0.18)' : 'var(--glass-bg)' }}
+                            title={translate(t, 'statusPills.groupHeatingValve', 'Valve')}
+                          >
+                            {translate(t, 'statusPills.groupHeatingValve', 'Valve')} {details.valve == null ? '–' : `${Math.round(details.valve)} %`}
+                          </span>
+                        ) : (
+                          <span className="rounded-full bg-[var(--glass-bg)] px-2 py-1 text-[10px] font-bold text-[var(--text-secondary)] uppercase">
+                            {getStateLabel({ ...entity, entity_id: id }, t)}
+                          </span>
+                        )}
+                        {hasAction && rowActionLabel && active && (
+                          <button
+                            onClick={() => runAction([id])}
+                            className="rounded-full bg-[var(--accent-bg)] px-3 py-1.5 text-[10px] font-bold text-[var(--accent-color)] transition-opacity hover:opacity-90"
+                          >
+                            {rowActionLabel}
+                          </button>
+                        )}
+                      </div>
                     </div>
-                    <div className="flex shrink-0 items-center gap-2">
-                      <span className="rounded-full bg-[var(--glass-bg)] px-2 py-1 text-[10px] font-bold text-[var(--text-secondary)] uppercase">
-                        {getStateLabel({ ...entity, entity_id: id }, t)}
-                      </span>
-                      {hasAction && rowActionLabel && (
-                        <button
-                          onClick={() => runAction([id])}
-                          className="rounded-full bg-[var(--accent-bg)] px-3 py-1.5 text-[10px] font-bold text-[var(--accent-color)] transition-opacity hover:opacity-90"
-                        >
-                          {rowActionLabel}
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             ) : (
               <div className="popup-surface rounded-2xl p-6 text-center text-sm text-[var(--text-muted)]">
