@@ -1,6 +1,6 @@
-import { memo, useMemo } from 'react';
+import { memo, useMemo, useState } from 'react';
 
-// ── Stundenplan-Daten ────────────────────────────────────────────────────
+// ── Standard-Stundenplan (ohne Seiteneinstellungen) ──────────────────────
 
 const STUNDEN = [
   { nr: 1, von: '07:51', bis: '08:40' },
@@ -38,6 +38,50 @@ const FACH_META = {
   SichBasis:      { emoji: '🤝', label: 'Sichere Basis',   color: '#14b8a6', bg: 'rgba(20,184,166,0.13)'  },
 };
 
+const DEFAULT_PLAN = {
+  id: 'standard',
+  name: 'Stundenplan',
+  subtitle: 'Grundschule',
+  stunden: STUNDEN,
+  eintraege: FAECHER,
+  faecher: FACH_META,
+};
+
+/**
+ * Pläne aus den Seiteneinstellungen (`pageSettings[page].plans`), sonst der
+ * Standardplan. Ein Plan:
+ * {
+ *   id, name, subtitle?,
+ *   stunden: [{ nr, von: 'HH:MM', bis: 'HH:MM', isPause?, label? }],
+ *   eintraege: { '<nr>-<tag 0..4>': 'Fach' | { fach, info?, optional? } },
+ *   ganztag?: { '<tag 0..4>': 'Fach' | { fach, info? } },   // gilt für alle Stunden des Tages
+ *   faecher?: { Fach: { emoji, label?, color, bg? } },
+ * }
+ */
+export function resolvePlans(settings) {
+  const plans = Array.isArray(settings?.plans)
+    ? settings.plans.filter((plan) => plan && Array.isArray(plan.stunden) && plan.stunden.length > 0)
+    : [];
+  return plans.length > 0 ? plans.map((plan, i) => ({ id: plan.id || `plan_${i}`, ...plan })) : [DEFAULT_PLAN];
+}
+
+/** Zelleninhalt: ganztägiger Eintrag vor Einzelstunde; leer = null. */
+export function resolveCell(plan, nr, dayIdx) {
+  const raw = plan.ganztag?.[dayIdx] ?? plan.eintraege?.[`${nr}-${dayIdx}`] ?? null;
+  if (!raw) return null;
+  const entry = typeof raw === 'string' ? { fach: raw } : raw;
+  if (!entry.fach) return null;
+  return { ...entry, ganztag: plan.ganztag?.[dayIdx] != null };
+}
+
+const FALLBACK_META = { emoji: '📘', color: '#94a3b8', bg: 'rgba(148,163,184,0.13)' };
+
+function metaFor(plan, fach) {
+  const meta = plan.faecher?.[fach] || FACH_META[fach] || FALLBACK_META;
+  const bg = meta.bg || `color-mix(in srgb, ${meta.color} 13%, transparent)`;
+  return { ...meta, label: meta.label || fach, bg };
+}
+
 // ── Hilfsfunktionen ──────────────────────────────────────────────────────
 
 function timeToMinutes(t) {
@@ -57,21 +101,44 @@ function isStundeActive(stunde, minutes) {
   return minutes >= timeToMinutes(stunde.von) && minutes < timeToMinutes(stunde.bis);
 }
 
+const storageKey = (pageId) => `tunet_stundenplan_plan_${pageId || 'default'}`;
+
+function readStoredPlan(pageId) {
+  try {
+    return localStorage.getItem(storageKey(pageId));
+  } catch {
+    return null;
+  }
+}
+
+function storePlan(pageId, planId) {
+  try {
+    localStorage.setItem(storageKey(pageId), planId);
+  } catch {
+    // Speicher nicht verfügbar – Auswahl gilt dann nur für diese Sitzung
+  }
+}
+
 // ── Sub-Komponenten ──────────────────────────────────────────────────────
 
-const FachCell = memo(function FachCell({ fach, isToday, isActive }) {
-  if (!fach) return <td className="sp-cell sp-empty" />;
-  const meta = FACH_META[fach];
-  if (!meta) return <td className="sp-cell"><span className="sp-fach-label">{fach}</span></td>;
+const FachCell = memo(function FachCell({ entry, meta, isToday, isActive }) {
+  if (!entry) return <td className="sp-cell sp-empty" />;
+
+  const classes = [
+    'sp-cell',
+    isToday ? 'sp-today' : '',
+    isActive ? 'sp-active' : '',
+    entry.optional || entry.ganztag ? 'sp-muted' : '',
+  ].filter(Boolean).join(' ');
 
   return (
-    <td
-      className={`sp-cell${isToday ? ' sp-today' : ''}${isActive ? ' sp-active' : ''}`}
-      style={{ '--fach-color': meta.color, '--fach-bg': meta.bg }}
-    >
+    <td className={classes} style={{ '--fach-color': meta.color, '--fach-bg': meta.bg }}>
       <div className="sp-fach">
         <span className="sp-fach-emoji">{meta.emoji}</span>
-        <span className="sp-fach-label">{meta.label}</span>
+        <span className="sp-fach-text">
+          <span className="sp-fach-label">{meta.label}</span>
+          {entry.info && <span className="sp-fach-info">{entry.info}</span>}
+        </span>
         {isActive && <span className="sp-live-dot" aria-hidden="true" />}
       </div>
     </td>
@@ -82,7 +149,7 @@ const PauseRow = memo(function PauseRow({ stunde }) {
   return (
     <tr className="sp-pause-row">
       <td colSpan={6} className="sp-pause-bar-cell">
-        <span className="sp-pause-badge">Pause</span>
+        <span className="sp-pause-badge">{stunde.label || 'Pause'}</span>
       </td>
     </tr>
   );
@@ -90,17 +157,60 @@ const PauseRow = memo(function PauseRow({ stunde }) {
 
 // ── Haupt-Komponente ─────────────────────────────────────────────────────
 
-function StundenplanPage({ isMobile = false }) {
+function StundenplanPage({ isMobile = false, pageId, settings }) {
   const { day, minutes } = useNow();
   // day: 1=Mo,2=Di,3=Mi,4=Do,5=Fr → colIdx 0–4
   const todayColIdx = useMemo(() => (day >= 1 && day <= 5 ? day - 1 : -1), [day]);
 
+  const plans = useMemo(() => resolvePlans(settings), [settings]);
+  const [selectedId, setSelectedId] = useState(() => readStoredPlan(pageId));
+  const plan = plans.find((p) => p.id === selectedId) || plans[0];
+
+  const selectPlan = (planId) => {
+    setSelectedId(planId);
+    storePlan(pageId, planId);
+  };
+
+  // Legende: nur Fächer, die im Plan vorkommen
+  const legend = useMemo(() => {
+    const used = new Set();
+    Object.values(plan.eintraege || {}).forEach((raw) => {
+      const fach = typeof raw === 'string' ? raw : raw?.fach;
+      if (fach) used.add(fach);
+    });
+    Object.values(plan.ganztag || {}).forEach((raw) => {
+      const fach = typeof raw === 'string' ? raw : raw?.fach;
+      if (fach) used.add(fach);
+    });
+    return [...used].map((fach) => [fach, metaFor(plan, fach)]);
+  }, [plan]);
+
+  const subtitleDate = new Date().toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' });
+
   return (
     <div className="sp-root">
       <div className="sp-header">
-        <h2 className="sp-title">Stundenplan</h2>
-        <p className="sp-subtitle">Grundschule · {new Date().toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
+        <h2 className="sp-title">{plans.length > 1 ? `Stundenplan · ${plan.name}` : 'Stundenplan'}</h2>
+        <p className="sp-subtitle">{plan.subtitle ? `${plan.subtitle} · ${subtitleDate}` : subtitleDate}</p>
       </div>
+
+      {plans.length > 1 && (
+        <div className="sp-switch" role="tablist" aria-label="Stundenplan auswählen">
+          {plans.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              role="tab"
+              aria-selected={p.id === plan.id}
+              data-haptic="card"
+              onClick={() => selectPlan(p.id)}
+              className={`sp-switch-btn${p.id === plan.id ? ' sp-switch-active' : ''}`}
+            >
+              {p.name}
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="sp-table-wrap">
         <table className="sp-table">
@@ -120,9 +230,9 @@ function StundenplanPage({ isMobile = false }) {
           </thead>
 
           <tbody>
-            {STUNDEN.map((stunde) => {
+            {plan.stunden.map((stunde) => {
               if (stunde.isPause) {
-                return <PauseRow key={stunde.nr} stunde={stunde} todayColIdx={todayColIdx} />;
+                return <PauseRow key={stunde.nr} stunde={stunde} />;
               }
 
               const isRowActive = isStundeActive(stunde, minutes);
@@ -141,14 +251,14 @@ function StundenplanPage({ isMobile = false }) {
                     )}
                   </td>
                   {TAGE.map((_, di) => {
-                    const key = `${stunde.nr}-${di}`;
-                    const fach = FAECHER[key] ?? null;
+                    const entry = resolveCell(plan, stunde.nr, di);
                     const isToday = di === todayColIdx;
-                    const isActive = isToday && isRowActive;
+                    const isActive = isToday && isRowActive && !!entry && !entry.ganztag;
                     return (
                       <FachCell
                         key={di}
-                        fach={fach}
+                        entry={entry}
+                        meta={entry ? metaFor(plan, entry.fach) : null}
                         isToday={isToday}
                         isActive={isActive}
                       />
@@ -163,7 +273,7 @@ function StundenplanPage({ isMobile = false }) {
 
       {/* Legende */}
       <div className="sp-legend">
-        {Object.entries(FACH_META).map(([key, meta]) => (
+        {legend.map(([key, meta]) => (
           <div
             key={key}
             className="sp-legend-item"
@@ -390,6 +500,50 @@ function StundenplanPage({ isMobile = false }) {
           color: var(--fach-color);
           letter-spacing: 0.04em;
         }
+
+        /* Plan-Umschalter */
+        .sp-switch { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+        .sp-switch-btn {
+          border-radius: 999px;
+          border: 1px solid transparent;
+          background: var(--glass-bg);
+          color: var(--text-secondary);
+          padding: 0.45rem 1rem;
+          font-size: 0.7rem;
+          font-weight: 700;
+          letter-spacing: 0.1em;
+          text-transform: uppercase;
+          cursor: pointer;
+          transition: background 0.2s, color 0.2s;
+          touch-action: manipulation;
+        }
+        .sp-switch-btn:hover { background: var(--glass-bg-hover); color: var(--text-primary); }
+        .sp-switch-active {
+          border-color: var(--glass-border);
+          background: var(--glass-bg-hover);
+          color: var(--text-primary);
+        }
+
+        /* Fach mit Zusatzangabe (Klasse, Raum) */
+        .sp-fach-text { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+        .sp-fach-info {
+          font-size: 0.55rem;
+          color: var(--text-muted);
+          letter-spacing: 0.02em;
+          line-height: 1.2;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        @media (max-width: 768px) {
+          .sp-fach { flex-direction: column; gap: 0.15rem; }
+          .sp-fach-text { align-items: center; }
+          .sp-fach-info { font-size: 0.5rem; }
+        }
+
+        /* Freiwillige / ganztägige Einträge abgesetzt */
+        .sp-cell.sp-muted .sp-fach { opacity: 0.55; }
+        .sp-cell.sp-muted .sp-fach-label { font-style: italic; }
       `}</style>
     </div>
   );
