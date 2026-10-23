@@ -3,12 +3,17 @@ import { useCallback, useEffect, useState } from 'react';
 const KAMERA = /^camera\.[a-z0-9_]+$/;
 const EREIGNIS = /^[A-Za-z0-9._-]+$/;
 
-/** Liest `?kamera=camera.x[&clip=<frigate-ereignis>]` aus dem Query-Teil einer Adresse. */
+/**
+ * Liest `?kamera=camera.x[:<frigate-ereignis>]` aus dem Query-Teil einer Adresse. Der Clip
+ * hängt mit `:` am selben Parameter, weil die iPhone-App bei mehreren Parametern aus einer
+ * Nachricht das `&` verfälscht (`&amp;`) und die Adresse dann im Browser öffnet.
+ * `&clip=<ereignis>` wird ebenfalls verstanden.
+ */
 export function leseKameraLink(search) {
   const p = new URLSearchParams(search || '');
-  const kamera = p.get('kamera');
+  const [kamera, angehaengt] = (p.get('kamera') || p.get('amp;kamera') || '').split(':', 2);
   if (!kamera || !KAMERA.test(kamera)) return null;
-  const clip = p.get('clip');
+  const clip = angehaengt || p.get('clip') || p.get('amp;clip');
   return { kamera, clip: clip && EREIGNIS.test(clip) ? clip : null };
 }
 
@@ -31,7 +36,7 @@ function adressFenster() {
 
 /**
  * Öffnet das Kamera-Fenster aus der Adresse, z. B. beim Tippen auf eine Klingel-Nachricht:
- * `/local_tunet_casa?kamera=camera.haustuer&clip=<frigate-ereignis>`. Die Parameter werden
+ * `/local_tunet_casa?kamera=camera.haustuer:<frigate-ereignis>`. Die Parameter werden
  * danach aus der Adresse entfernt. HA verwendet das Panel beim erneuten Aufruf wieder,
  * deshalb wird auch auf Adresswechsel im HA-Fenster gehört.
  * Rückgabe: [{ kamera, clip, basis } | null, schliessen]
@@ -50,6 +55,8 @@ export function useKameraLink() {
         const url = new URL(win.location.href);
         url.searchParams.delete('kamera');
         url.searchParams.delete('clip');
+        url.searchParams.delete('amp;clip');
+        url.searchParams.delete('amp;kamera');
         win.history.replaceState(win.history.state, '', `${url.pathname}${url.search}${url.hash}`);
       } catch {
         // Adresse bleibt stehen – schadet nicht

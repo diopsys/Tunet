@@ -12,6 +12,9 @@ describe('Kamera-Link aus der Adresse', () => {
     expect(leseKameraLink('?kamera=camera.haustuer_klingel_2&clip=1729.5-abc')).toEqual({ kamera: 'camera.haustuer_klingel_2', clip: '1729.5-abc' });
     expect(leseKameraLink('?kamera=camera.garten')).toEqual({ kamera: 'camera.garten', clip: null });
     expect(leseKameraLink('?kamera=camera.garten&clip=../x')).toEqual({ kamera: 'camera.garten', clip: null });
+    // ein Parameter (iPhone-App), auch mit verfälschtem &amp;
+    expect(leseKameraLink('?kamera=camera.haustuer_klingel_2:1792769141.572681-ez5tz3')).toEqual({ kamera: 'camera.haustuer_klingel_2', clip: '1792769141.572681-ez5tz3' });
+    expect(leseKameraLink('?external_auth=1&amp;kamera=camera.haustuer&amp;clip=ev2')).toEqual({ kamera: 'camera.haustuer', clip: 'ev2' });
     expect(leseKameraLink('?kamera=light.flur')).toBeNull();
     expect(leseKameraLink('')).toBeNull();
   });
