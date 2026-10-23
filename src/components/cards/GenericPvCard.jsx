@@ -1,7 +1,7 @@
 import { memo, useEffect, useState } from 'react';
 import { Sun } from '../../icons';
 import { getIconComponent } from '../../icons';
-import { openHaPath } from './HeizungCard';
+import { openHaPath, safeHaUrl } from './HeizungCard';
 
 export const PV_ENTITY_IDS = {
   pvW: 'sensor.solar_panel_production_w',
@@ -190,7 +190,7 @@ const GenericPvCard = memo(function GenericPvCard({
   const Icon = customIcons?.[cardId] ? getIconComponent(customIcons[cardId]) || Sun : Sun;
   const isUltraCompact = isTwoColMobile && settings.size !== 'small';
   // Eigenes Ziel für das Symbol (z. B. Energie-Panel) – der Klick öffnet nicht zusätzlich das Popup
-  const iconUrl = !editMode && settings.iconUrl ? settings.iconUrl : null;
+  const iconUrl = !editMode ? safeHaUrl(settings.iconUrl) : null;
   const iconLink = iconUrl
     ? {
         role: 'button',

@@ -4,6 +4,7 @@ import HeizungCard, {
   erzeugerStatus,
   isActive,
   openHaPath,
+  safeHaUrl,
   resolveHeizungConfig,
   ventileStatus,
 } from '../components/cards/HeizungCard';
@@ -187,5 +188,31 @@ describe('PufferCard', () => {
     render(<PufferCard cardId="p" entities={temps} settings={{ puffer: { ...puffer, url: '/heizung' } }} />);
     fireEvent.keyDown(screen.getByRole('button', { name: 'Puffer öffnen' }), { key: 'Escape' });
     expect(screen.getByRole('button', { name: 'Puffer öffnen' })).toBeTruthy();
+  });
+});
+
+describe('Link-Ziele aus den Karteneinstellungen', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it('accepts HA paths and http(s) only', () => {
+    expect(safeHaUrl('/heizung?tab=anlage')).toBe('/heizung?tab=anlage');
+    expect(safeHaUrl('  /energy-panel ')).toBe('/energy-panel');
+    expect(safeHaUrl('https://example.org/x')).toBe('https://example.org/x');
+    expect(safeHaUrl('javascript:alert(1)')).toBeNull();
+    expect(safeHaUrl('JavaScript:alert(1)')).toBeNull();
+    expect(safeHaUrl('data:text/html,x')).toBeNull();
+    expect(safeHaUrl('//example.org')).toBeNull();
+    expect(safeHaUrl('heizung')).toBeNull();
+    expect(safeHaUrl(null)).toBeNull();
+  });
+
+  it('does not navigate or offer a link for rejected targets', () => {
+    const top = { history: { pushState: vi.fn() }, dispatchEvent: vi.fn(), CustomEvent: globalThis.CustomEvent };
+    vi.spyOn(globalThis.window, 'top', 'get').mockReturnValue(top);
+    openHaPath('javascript:alert(1)');
+    openHaPath('//example.org');
+    expect(top.history.pushState).not.toHaveBeenCalled();
+    render(<HeizungCard cardId="c" entities={entities} settings={{ heizung: { ...heizung, url: 'javascript:alert(1)' } }} />);
+    expect(screen.queryByRole('button', { name: 'Heizung öffnen' })).toBeNull();
   });
 });

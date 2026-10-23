@@ -77,7 +77,7 @@ export function resolveHeizungConfig(settings) {
   const list = (value) => (Array.isArray(value) ? value.filter((e) => e && (e.entity || e.stufen)) : []);
   const ventile = h.ventile && Array.isArray(h.ventile.entities) && h.ventile.entities.length > 0 ? h.ventile : null;
   return {
-    url: typeof h.url === 'string' && h.url.trim() ? h.url.trim() : null,
+    url: safeHaUrl(h.url),
     erzeuger: list(h.erzeuger),
     zustaende: list(h.zustaende),
     ventile,
@@ -86,8 +86,19 @@ export function resolveHeizungConfig(settings) {
   };
 }
 
+/**
+ * Zulässiges Ziel aus den Karteneinstellungen oder null: HA-Pfad (/…, nicht //…) oder
+ * http(s)-Adresse. Alles andere (javascript:, data:, relative Angaben) wird verworfen.
+ */
+export function safeHaUrl(url) {
+  if (typeof url !== 'string') return null;
+  const u = url.trim();
+  return /^\/(?!\/)/.test(u) || /^https?:\/\//i.test(u) ? u : null;
+}
+
 /** Öffnet eine HA-Seite; im HA-Rahmen (Ingress) ohne Neuladen über das Elternfenster. */
-export function openHaPath(url) {
+export function openHaPath(ziel) {
+  const url = safeHaUrl(ziel);
   if (!url) return;
   const win = globalThis.window;
   if (!win) return;
@@ -109,7 +120,8 @@ export function openHaPath(url) {
 }
 
 /** Klick-Eigenschaften für eine Kachel, die eine HA-Seite öffnet. */
-export function openProps(url, editMode, label) {
+export function openProps(ziel, editMode, label) {
+  const url = safeHaUrl(ziel);
   if (editMode || !url) return {};
   const open = () => openHaPath(url);
   return {
@@ -206,7 +218,7 @@ const HeizungCard = ({ cardId, dragProps, controls, cardStyle, editMode, entitie
       <div className="flex items-center justify-between gap-2">
         <p className="truncate text-[10px] font-bold uppercase tracking-widest text-[var(--text-secondary)]">{titel}</p>
         {ventile && (() => {
-          const ventilUrl = !editMode && config.ventile.url ? config.ventile.url : null;
+          const ventilUrl = !editMode ? safeHaUrl(config.ventile.url) : null;
           const inhalt = (
             <>
               <VentilIcon className="h-3 w-3" />
