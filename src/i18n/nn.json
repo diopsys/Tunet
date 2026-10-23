@@ -1550,6 +1550,7 @@
   "luftungsanlage.state.fanOnly": "Vifte",
   "addCard.type.luftungsanlage": "Ventilasjon",
   "addCard.type.stundenplan": "Stundenplan",
+  "addCard.type.hydraulik": "Wärmepumpe",
   "sensor.custom.content": "Innhald",
   "sensor.custom.status": "Status",
   "sensor.custom.action": "Handling",

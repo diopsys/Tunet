@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Plus, LayoutGrid, Music, Speaker, Lightbulb, Battery, Home, BookOpen } from 'lucide-react';
+import { X, Plus, LayoutGrid, Music, Speaker, Lightbulb, Battery, Home, BookOpen, Flame } from 'lucide-react';
 import IconPicker from '../components/ui/IconPicker';
 import AccessibleModalShell from '../components/ui/AccessibleModalShell';
 
@@ -31,6 +31,7 @@ export default function AddPageModal({
   onCreateBattery,
   onCreateRoomExplorer,
   onCreateStundenplan,
+  onCreateHydraulik,
 }) {
   const [activeTab, setActiveTab] = useState('standard');
   const modalTitleId = 'add-page-modal-title';
@@ -122,6 +123,13 @@ export default function AddPageModal({
               icon={BookOpen}
               label="Stundenplan"
               isActive={activeTab === 'stundenplan'}
+              onSelect={setActiveTab}
+            />
+            <PageTypeButton
+              type="hydraulik"
+              icon={Flame}
+              label="Wärmepumpe"
+              isActive={activeTab === 'hydraulik'}
               onSelect={setActiveTab}
             />
           </div>
@@ -249,6 +257,21 @@ export default function AddPageModal({
               </div>
               <button
                 onClick={onCreateStundenplan}
+                className="flex w-full items-center justify-center gap-2 rounded-2xl border border-[var(--accent-color)] bg-[var(--accent-bg)] py-4 font-bold tracking-widest text-[var(--accent-color)] uppercase transition-colors hover:opacity-90"
+              >
+                <Plus className="h-5 w-5" /> {t('page.create')}
+              </button>
+            </>
+          ) : activeTab === 'hydraulik' ? (
+            <>
+              <div className="popup-surface rounded-2xl p-4 text-sm text-[var(--text-secondary)]">
+                <p className="mb-2 text-[10px] font-bold tracking-widest text-[var(--text-muted)] uppercase">
+                  Wärmepumpe
+                </p>
+                <p className="leading-relaxed">Animiertes Hydraulikschema der Daikin Altherma 3 R ECH₂O mit Live-Werten.</p>
+              </div>
+              <button
+                onClick={onCreateHydraulik}
                 className="flex w-full items-center justify-center gap-2 rounded-2xl border border-[var(--accent-color)] bg-[var(--accent-bg)] py-4 font-bold tracking-widest text-[var(--accent-color)] uppercase transition-colors hover:opacity-90"
               >
                 <Plus className="h-5 w-5" /> {t('page.create')}

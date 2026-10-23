@@ -9,6 +9,7 @@ import {
   isBatteryPage as _isBatteryPage,
   isRoomExplorerPage as _isRoomExplorerPage,
   isStundenplanPage as _isStundenplanPage,
+  isHydraulikPage as _isHydraulikPage,
 } from '../utils/cardUtils';
 
 /** @param {any} deps */
@@ -230,6 +231,7 @@ export function useDashboardStateCoordinator(deps) {
   const isBatteryPage = (pageId) => _isBatteryPage(pageId, pageSettings);
   const isRoomExplorerPage = (pageId) => _isRoomExplorerPage(pageId, pageSettings);
   const isStundenplanPage = (pageId) => _isStundenplanPage(pageId, pageSettings);
+  const isHydraulikPage = (pageId) => _isHydraulikPage(pageId, pageSettings);
   const hasEnabledPopupTriggers = useMemo(
     () =>
       Object.values(cardSettings || {}).some(
@@ -253,6 +255,7 @@ export function useDashboardStateCoordinator(deps) {
     isBatteryPage,
     isRoomExplorerPage,
     isStundenplanPage,
+    isHydraulikPage,
     hasEnabledPopupTriggers,
   };
 }

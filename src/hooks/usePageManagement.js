@@ -166,6 +166,15 @@ export function usePageManagement({
       defaultSlug: 'stundenplan',
     });
 
+  const createHydraulikPage = () =>
+    createTypedPage({
+      labelKey: 'addCard.type.hydraulik',
+      fallbackLabel: 'Wärmepumpe',
+      defaultIcon: 'Flame',
+      defaultType: 'hydraulik',
+      defaultSlug: 'hydraulik',
+    });
+
   // ── Delete a page ──────────────────────────────────────────────────────
   const deletePage = (pageId) => {
     if (!pageId || pageId === 'home') return;
@@ -212,6 +221,7 @@ export function usePageManagement({
     createBatteryPage,
     createRoomExplorerPage,
     createStundenplanPage,
+    createHydraulikPage,
     deletePage,
     removeCard,
   };

@@ -9,11 +9,12 @@ const LightsPage = lazy(() => import('../components/pages/LightsPage'));
 const BatteryPage = lazy(() => import('../components/pages/BatteryPage'));
 const RoomExplorerPage = lazy(() => import('../components/pages/RoomExplorerPage'));
 const StundenplanPage = lazy(() => import('../components/pages/StundenplanPage'));
+const HydraulikPage = lazy(() => import('../components/pages/HydraulikPage'));
 
 const pageFallback = <div className="page-transition min-h-[40vh]" aria-hidden="true" />;
 
 export default function DashboardGrid({ page, media, grid, cards, actions, t }) {
-  const { activePage, pagesConfig, pageSettings, editMode, isMediaPage, isSonosPage, isLightsPage, isBatteryPage, isRoomExplorerPage, isStundenplanPage } = page;
+  const { activePage, pagesConfig, pageSettings, editMode, isMediaPage, isSonosPage, isLightsPage, isBatteryPage, isRoomExplorerPage, isStundenplanPage, isHydraulikPage = () => false } = page;
   const {
     entities,
     conn,
@@ -139,6 +140,16 @@ export default function DashboardGrid({ page, media, grid, cards, actions, t }) 
       <div key={activePage} className="page-transition">
         <Suspense fallback={pageFallback}>
           <StundenplanPage isMobile={isMobile} />
+        </Suspense>
+      </div>
+    );
+  }
+
+  if (isHydraulikPage(activePage)) {
+    return (
+      <div key={activePage} className="page-transition">
+        <Suspense fallback={pageFallback}>
+          <HydraulikPage entities={entities} isMobile={isMobile} />
         </Suspense>
       </div>
     );

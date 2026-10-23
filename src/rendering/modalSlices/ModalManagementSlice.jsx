@@ -60,6 +60,7 @@ export function ModalManagementSlice({
     createBatteryPage,
     createRoomExplorerPage,
     createStundenplanPage,
+    createHydraulikPage,
     deletePage,
     pageSettings,
     savePageSetting,
@@ -226,6 +227,7 @@ export function ModalManagementSlice({
             onCreateBattery={createBatteryPage}
             onCreateRoomExplorer={createRoomExplorerPage}
             onCreateStundenplan={createStundenplanPage}
+            onCreateHydraulik={createHydraulikPage}
           />
         </ModalSuspense>
       )}

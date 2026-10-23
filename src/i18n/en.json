@@ -86,6 +86,7 @@
   "addCard.type.battery": "Battery",
   "addCard.type.roomExplorer": "Rooms",
   "addCard.type.stundenplan": "Stundenplan",
+  "addCard.type.hydraulik": "Heat pump",
   "addCard.type.media": "Media",
   "addCard.type.nordpool": "Nordpool",
   "nordpool.graphLine": "Line",

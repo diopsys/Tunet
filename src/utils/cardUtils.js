@@ -227,3 +227,12 @@ export function isStundenplanPage(pageId, pageSettings) {
   const settings = pageSettings[pageId];
   return settings?.type === 'stundenplan' || pageId.startsWith('stundenplan');
 }
+
+/**
+ * Check if a page is a heat pump hydraulic schema page.
+ */
+export function isHydraulikPage(pageId, pageSettings) {
+  if (!pageId) return false;
+  const settings = pageSettings[pageId];
+  return settings?.type === 'hydraulik' || pageId.startsWith('hydraulik');
+}

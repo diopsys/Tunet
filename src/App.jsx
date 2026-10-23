@@ -295,6 +295,7 @@ export function AppContent({ showOnboarding, setShowOnboarding }) {
     createBatteryPage,
     createRoomExplorerPage,
     createStundenplanPage,
+    createHydraulikPage,
     deletePage,
     removeCard,
   } = usePageManagement({
@@ -328,6 +329,7 @@ export function AppContent({ showOnboarding, setShowOnboarding }) {
     isBatteryPage,
     isRoomExplorerPage,
     isStundenplanPage,
+    isHydraulikPage,
     hasEnabledPopupTriggers,
   } = useDashboardStateCoordinator({
     entities,
@@ -589,6 +591,7 @@ export function AppContent({ showOnboarding, setShowOnboarding }) {
     isBatteryPage,
     isRoomExplorerPage,
     isStundenplanPage,
+    isHydraulikPage,
     entities,
     conn,
     isSonosActive,
@@ -705,6 +708,7 @@ export function AppContent({ showOnboarding, setShowOnboarding }) {
     createBatteryPage,
     createRoomExplorerPage,
     createStundenplanPage,
+    createHydraulikPage,
     deletePage,
     removeCard,
     persistPageSettings,

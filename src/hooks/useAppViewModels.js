@@ -13,6 +13,7 @@ export function useAppViewModels(params) {
     isBatteryPage,
     isRoomExplorerPage,
     isStundenplanPage,
+    isHydraulikPage,
     entities,
     conn,
     isSonosActive,
@@ -118,6 +119,7 @@ export function useAppViewModels(params) {
     createBatteryPage,
     createRoomExplorerPage,
     createStundenplanPage,
+    createHydraulikPage,
     deletePage,
     removeCard,
     persistPageSettings,
@@ -190,6 +192,7 @@ export function useAppViewModels(params) {
       isBatteryPage,
       isRoomExplorerPage,
       isStundenplanPage,
+      isHydraulikPage,
     }),
     [
       activePage,
@@ -202,6 +205,7 @@ export function useAppViewModels(params) {
       isBatteryPage,
       isRoomExplorerPage,
       isStundenplanPage,
+      isHydraulikPage,
     ]
   );
 
@@ -438,6 +442,7 @@ export function useAppViewModels(params) {
       createBatteryPage,
       createRoomExplorerPage,
       createStundenplanPage,
+      createHydraulikPage,
       deletePage,
       removeCard,
       pageSettings,
@@ -462,6 +467,7 @@ export function useAppViewModels(params) {
       createBatteryPage,
       createRoomExplorerPage,
       createStundenplanPage,
+      createHydraulikPage,
       deletePage,
       removeCard,
       pageSettings,

@@ -1539,6 +1539,7 @@
   "luftungsanlage.state.fanOnly": "Fläkt",
   "addCard.type.luftungsanlage": "Ventilation",
   "addCard.type.stundenplan": "Stundenplan",
+  "addCard.type.hydraulik": "Wärmepumpe",
   "addCard.type.appletv": "Apple TV",
   "appletv.linkedSpeakers": "Länkade högtalare",
   "appletv.searchPlayers": "Sök mediaspelare...",
