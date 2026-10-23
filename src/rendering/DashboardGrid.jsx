@@ -139,7 +139,13 @@ export default function DashboardGrid({ page, media, grid, cards, actions, t }) 
     return (
       <div key={activePage} className="page-transition">
         <Suspense fallback={pageFallback}>
-          <StundenplanPage isMobile={isMobile} />
+          <StundenplanPage
+            isMobile={isMobile}
+            pageId={activePage}
+            settings={pageSettings?.[activePage]}
+            editMode={editMode}
+            onSavePlans={savePageSetting ? (plans) => savePageSetting(activePage, 'plans', plans) : undefined}
+          />
         </Suspense>
       </div>
     );

@@ -521,7 +521,12 @@ const LightPanelCard = ({
   const activeTab = tabs.find((t) => t.id === resolvedActiveTabId) || tabs[0];
 
   const cols = isMobile ? 2 : 3;
-  const entities_ = activeTab?.entities || [];
+  // Entries flagged hideWhenUnavailable (e.g. seasonal plugs) only show while reachable
+  const entities_ = (activeTab?.entities || []).filter(({ entityId, hideWhenUnavailable }) => {
+    if (!hideWhenUnavailable) return true;
+    const state = entities[entityId]?.state;
+    return !!state && state !== 'unavailable' && state !== 'unknown';
+  });
   const schedulerEntities = entities_.filter(({ entityId }) => !!entities[entityId]?.attributes?.timeslots);
   const regularEntities = entities_.filter(({ entityId }) => !entities[entityId]?.attributes?.timeslots);
   const hasBothGroups = schedulerEntities.length > 0 && regularEntities.length > 0;

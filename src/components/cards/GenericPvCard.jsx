@@ -1,6 +1,7 @@
-import { memo } from 'react';
+import { memo, useEffect, useState } from 'react';
 import { Sun } from '../../icons';
 import { getIconComponent } from '../../icons';
+import { openHaPath } from './HeizungCard';
 
 export const PV_ENTITY_IDS = {
   pvW: 'sensor.solar_panel_production_w',
@@ -31,7 +32,136 @@ export const PV_ENTITY_IDS = {
   forecastNextHour: 'sensor.pv_anlage_energy_next_hour',
   pvToHouseDaily: 'sensor.solar_panel_to_house_daily',
   batteryMaxEnergy: 'sensor.solaredge_b1_maximum_energy',
+  // nur im Dialog: Verbraucher im Energiefluss; Speicher-Entladung (leer = aus Bilanz berechnet)
+  heatPumpW: 'sensor.daikin_heizung_leistung',
+  batteryOutW: null,
+  // Gesamtzähler (Liste): Monat/Jahr aus der HA-Statistik, wenn pvMonthly/pvYearly fehlen
+  pvTotals: null,
 };
+
+/** Belegung: Standard (oben) mit settings.pvEntities überschrieben; null schaltet einen Wert ab. */
+export function resolvePvIds(settings) {
+  const eigene = settings?.pvEntities && typeof settings.pvEntities === 'object' ? settings.pvEntities : {};
+  return { ...PV_ENTITY_IDS, ...eigene };
+}
+
+const FAKTOR = { W: 1, kW: 1000, MW: 1e6, Wh: 0.001, kWh: 1, MWh: 1000 };
+
+const STATISTIK_INTERVALL_MS = 15 * 60 * 1000;
+
+/** Änderung einer Statistik seit Beginn des Kalenderzeitraums (month | year), in kWh. */
+export async function fetchPeriodChange(conn, statisticId, period, unit) {
+  const res = await conn.sendMessagePromise({
+    type: 'recorder/statistic_during_period',
+    statistic_id: statisticId,
+    calendar: { period },
+    types: ['change'],
+  });
+  const wert = Number(res?.change);
+  if (!Number.isFinite(wert)) return null;
+  const faktor = FAKTOR[unit];
+  return faktor ? wert * faktor : wert;
+}
+
+/**
+ * Ertrag seit Monats- und Jahresbeginn als Summe der Gesamtzähler (kWh),
+ * alle 15 Minuten neu aus der Langzeitstatistik.
+ */
+export function usePvPeriodTotals(conn, totalIds, entities, active = true) {
+  const [werte, setWerte] = useState({ month: null, year: null });
+  const ids = Array.isArray(totalIds) ? totalIds.filter(Boolean) : [];
+  const key = ids.join('|');
+  const units = ids.map((id) => entities?.[id]?.attributes?.unit_of_measurement || '').join('|');
+
+  useEffect(() => {
+    if (!active || !conn || typeof conn.sendMessagePromise !== 'function' || !key) return undefined;
+    let aus = false;
+    const liste = key.split('|');
+    const einheiten = units.split('|');
+    const summe = async (period) => {
+      const teile = await Promise.all(liste.map((id, i) => fetchPeriodChange(conn, id, period, einheiten[i]).catch(() => null)));
+      return teile.some((t) => t == null) ? null : teile.reduce((a, b) => a + b, 0);
+    };
+    const laden = async () => {
+      const [month, year] = await Promise.all([summe('month'), summe('year')]);
+      if (!aus) setWerte({ month, year });
+    };
+    laden();
+    const timer = setInterval(laden, STATISTIK_INTERVALL_MS);
+    return () => { aus = true; clearInterval(timer); };
+  }, [conn, key, units, active]);
+
+  return werte;
+}
+
+/**
+ * Prognosewerte aus einer Leistungskurve (Attribut „forecast“: [{datetime, watts}],
+ * z. B. Helios): Energie je Kalendertag (kWh, Index 0 = heute), Spitzenleistung heute (W),
+ * Energie in dieser und der nächsten vollen Stunde und Rest des Tages ab jetzt (kWh).
+ * Jeder Punkt gilt bis zum nächsten.
+ */
+export function forecastFromCurve(forecast, now = new Date()) {
+  const leer = { days: [], peakToday: null, thisHour: null, nextHour: null, remainingToday: null };
+  if (!Array.isArray(forecast) || forecast.length < 2) return leer;
+  const punkte = forecast
+    .map((p) => ({ t: new Date(p.datetime).getTime(), w: Number(p.watts) }))
+    .filter((p) => Number.isFinite(p.t) && Number.isFinite(p.w))
+    .sort((a, b) => a.t - b.t);
+  if (punkte.length < 2) return leer;
+
+  const tagesbeginn = new Date(now);
+  tagesbeginn.setHours(0, 0, 0, 0);
+  const stunde = new Date(now);
+  stunde.setMinutes(0, 0, 0);
+  const h0 = stunde.getTime();
+  const h1 = h0 + 3600e3;
+  const h2 = h1 + 3600e3;
+  const tagIndex = (t) => {
+    const d = new Date(t);
+    d.setHours(0, 0, 0, 0);
+    return Math.round((d - tagesbeginn) / 86400e3);
+  };
+
+  const days = [];
+  let peakToday = null;
+  let thisHour = 0;
+  let nextHour = 0;
+  let stundenAbgedeckt = false;
+  let remainingToday = 0;
+  const jetzt = now.getTime();
+  const schritt = punkte[1].t - punkte[0].t;
+  punkte.forEach((p, i) => {
+    const ende = i + 1 < punkte.length ? punkte[i + 1].t : p.t + schritt;
+    const kwh = (p.w * (ende - p.t)) / 3600e3 / 1000;
+    const tag = tagIndex(p.t);
+    if (tag >= 0) days[tag] = (days[tag] || 0) + kwh;
+    if (tag === 0) peakToday = peakToday == null ? p.w : Math.max(peakToday, p.w);
+    if (p.t >= h0 && p.t < h1) { thisHour += kwh; stundenAbgedeckt = true; }
+    if (p.t >= h1 && p.t < h2) nextHour += kwh;
+    // Rest des Tages: laufendes Intervall anteilig, spätere ganz
+    if (tag === 0 && ende > jetzt) {
+      const ab = Math.max(p.t, jetzt);
+      remainingToday += (p.w * (ende - ab)) / 3600e3 / 1000;
+    }
+  });
+  return {
+    days: Array.from({ length: days.length }, (_, i) => (days[i] == null ? null : days[i])),
+    peakToday,
+    thisHour: stundenAbgedeckt ? thisHour : null,
+    nextHour: stundenAbgedeckt ? nextHour : null,
+    remainingToday: days[0] == null ? null : remainingToday,
+  };
+}
+
+/** Zahlenwert in W bzw. kWh – Wh/MWh und kW werden anhand der Einheit umgerechnet. */
+export function readPv(entities, id) {
+  if (!id) return null;
+  const entity = entities?.[id];
+  const s = parseFloat(entity?.state);
+  if (!Number.isFinite(s)) return null;
+  const faktor = FAKTOR[entity?.attributes?.unit_of_measurement];
+  return faktor ? s * faktor : s;
+}
 
 function getBattSocColor(soc) {
   if (soc == null) return 'var(--text-muted)';
@@ -59,18 +189,28 @@ const GenericPvCard = memo(function GenericPvCard({
   const name = customNames?.[cardId] || 'Solar';
   const Icon = customIcons?.[cardId] ? getIconComponent(customIcons[cardId]) || Sun : Sun;
   const isUltraCompact = isTwoColMobile && settings.size !== 'small';
+  // Eigenes Ziel für das Symbol (z. B. Energie-Panel) – der Klick öffnet nicht zusätzlich das Popup
+  const iconUrl = !editMode && settings.iconUrl ? settings.iconUrl : null;
+  const iconLink = iconUrl
+    ? {
+        role: 'button',
+        tabIndex: 0,
+        title: `${name} öffnen`,
+        'aria-label': `${name} öffnen`,
+        onClick: (e) => { e.stopPropagation(); openHaPath(iconUrl); },
+        onKeyDown: (e) => { e.stopPropagation(); if (e.key === 'Enter') openHaPath(iconUrl); },
+      }
+    : {};
   const isDenseMobile = isMobile && settings.size !== 'small';
 
-  const v = (id) => {
-    const s = parseFloat(entities?.[id]?.state);
-    return Number.isFinite(s) ? s : null;
-  };
+  const ids = resolvePvIds(settings);
+  const v = (id) => readPv(entities, id);
 
-  const pvW = v(PV_ENTITY_IDS.pvW);
-  const pvDaily = v(PV_ENTITY_IDS.pvDaily);
-  const batterySoc = v(PV_ENTITY_IDS.batterySoc);
-  const gridImportW = v(PV_ENTITY_IDS.gridImportW);
-  const gridExportW = v(PV_ENTITY_IDS.gridExportW);
+  const pvW = v(ids.pvW);
+  const pvDaily = v(ids.pvDaily);
+  const batterySoc = v(ids.batterySoc);
+  const gridImportW = v(ids.gridImportW);
+  const gridExportW = v(ids.gridExportW);
 
   const isProducing = pvW != null && pvW > 10;
   const netGrid = (gridExportW ?? 0) - (gridImportW ?? 0); // positive = exporting
@@ -96,6 +236,7 @@ const GenericPvCard = memo(function GenericPvCard({
           <div
             className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl transition-transform duration-500 group-hover:scale-110"
             style={{ backgroundColor: iconBg, color: iconColor }}
+            {...iconLink}
           >
             <Icon className="h-6 w-6 stroke-[1.5px]" />
           </div>
@@ -140,6 +281,7 @@ const GenericPvCard = memo(function GenericPvCard({
           <div
             className={`transition-transform duration-500 group-hover:scale-110 ${isUltraCompact ? 'rounded-lg p-2' : isDenseMobile ? 'rounded-xl p-2.5' : 'rounded-2xl p-3'}`}
             style={{ backgroundColor: iconBg, color: iconColor }}
+            {...iconLink}
           >
             <Icon className={isUltraCompact ? 'h-3 w-3' : isDenseMobile ? 'h-4 w-4' : 'h-5 w-5'} style={{ strokeWidth: 1.5 }} />
           </div>

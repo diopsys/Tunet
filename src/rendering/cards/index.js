@@ -30,6 +30,7 @@ export { renderBeregnungCard } from './beregnungRenderer';
 export { renderLightPanelCard } from './lightPanelRenderer';
 export { renderCoverPanelCard } from './coverPanelRenderer';
 export { renderSecurityPanelCard } from './securityPanelRenderer';
+export { renderHeizungCard, renderPufferCard } from './heizungRenderer';
 export { renderHaushaltsgeraeteCard } from './haushaltsgeraeteRenderer';
 export { renderFrigateEventsCard } from './frigateEventsRenderer';
 export { renderPoolCard } from './poolRenderer';

@@ -4,6 +4,9 @@ cd /app
 export NODE_ENV=production
 export PORT=3002
 export TUNET_TRUST_SUPERVISOR_INGRESS=1
+# Keep the settings database in the app's persistent /data folder;
+# /app/data lives in the container and is lost on every update
+export DATA_DIR=/data
 
 if bashio::config.has_value 'ha_url'; then
 	export HA_URL="$(bashio::config 'ha_url')"

@@ -33,6 +33,8 @@ const rendererMocks = vi.hoisted(() => ({
   renderLightPanelCard: vi.fn(() => ({ renderer: 'light_panel' })),
   renderCoverPanelCard: vi.fn(() => ({ renderer: 'cover_panel' })),
   renderSecurityPanelCard: vi.fn(() => ({ renderer: 'security_panel' })),
+  renderHeizungCard: vi.fn(() => ({ renderer: 'heizung' })),
+  renderPufferCard: vi.fn(() => ({ renderer: 'puffer' })),
   renderHaushaltsgeraeteCard: vi.fn(() => ({ renderer: 'haushaltsgeraete' })),
   renderFrigateEventsCard: vi.fn(() => ({ renderer: 'frigate_events' })),
   renderPoolCard: vi.fn(() => ({ renderer: 'pool' })),

@@ -1,7 +1,7 @@
 import { memo, useCallback } from 'react';
 import { Shield, Lock, Unlock, AlertTriangle, Camera, Activity, Bell, Home, LogOut, Moon, Sun, UserCheck } from '../../icons';
 
-/* ── Entity config ───────────────────────────────────────────────────── */
+/* ── Entity config (defaults, overridable via card settings) ─────────── */
 
 const DETECTION_SWITCH    = 'switch.sicherheit_detection';
 const SIMULATION_SWITCH   = 'switch.anwesenheitssimulation';
@@ -46,6 +46,61 @@ const MOTION_SENSORS = [
   { entityId: 'binary_sensor.fp300_schuppen_presence',                    name: 'Schuppen'    },
 ];
 
+/**
+ * Resolve the panel configuration from card settings (`settings.security`).
+ * Every key is optional; a missing key keeps the built-in default. An empty
+ * list or `null` hides the matching section.
+ *
+ * settings.security = {
+ *   detectionSwitches: ['switch.a', 'switch.b'],   // toggled together; on = any on
+ *   simulationSwitch: 'switch.x' | null,
+ *   alarmEntity: 'alarm_control_panel.x' | null,
+ *   locks: [{ entityId, contactId?, name }],
+ *   doorContacts: [{ entityId, name }], doorSummaryId: 'binary_sensor.x' | null,
+ *   windowContacts: [{ entityId, name }], windowSummaryId: 'binary_sensor.x' | null,
+ *   motionSensors: [{ entityId, name }],
+ * }
+ */
+export function resolveSecurityConfig(settings) {
+  const s = settings?.security && typeof settings.security === 'object' ? settings.security : {};
+  const pick = (key, fallback) => (key in s ? s[key] : fallback);
+  const list = (value) => (Array.isArray(value) ? value.filter((e) => e && e.entityId) : []);
+  const detection = pick('detectionSwitches', [DETECTION_SWITCH]);
+  return {
+    detectionSwitches: (Array.isArray(detection) ? detection : [detection]).filter(Boolean),
+    simulationSwitch: pick('simulationSwitch', SIMULATION_SWITCH) || null,
+    alarmEntity: pick('alarmEntity', ALARM_ENTITY) || null,
+    locks: list(pick('locks', LOCKS)),
+    doorContacts: list(pick('doorContacts', TUR_KONTAKTE)),
+    doorSummaryId: pick('doorSummaryId', 'doorContacts' in s ? null : TUR_SUMMARY_ID) || null,
+    windowContacts: list(pick('windowContacts', FENSTER_KONTAKTE)),
+    windowSummaryId: pick('windowSummaryId', 'windowContacts' in s ? null : FENSTER_SUMMARY_ID) || null,
+    motionSensors: list(pick('motionSensors', MOTION_SENSORS)),
+  };
+}
+
+const isUnavailableState = (state) => !state || state === 'unavailable' || state === 'unknown';
+
+/** On = any switch on; unavailable = all switches unavailable. */
+function detectionStatus(ids, entities) {
+  const states = ids.map((id) => entities[id]?.state);
+  return {
+    isOn: states.some((st) => st === 'on'),
+    isUnavailable: states.length === 0 || states.every(isUnavailableState),
+  };
+}
+
+/** Uses the summary sensor when configured, otherwise the contacts themselves. */
+function contactStatus(contacts, summaryId, entities) {
+  const openCount = contacts.filter(({ entityId }) => entities[entityId]?.state === 'on').length;
+  if (summaryId) {
+    const summary = entities[summaryId]?.state;
+    return { openCount, isOpen: summary === 'on', isUnavailable: !summary || summary === 'unavailable' };
+  }
+  const unavailable = contacts.length > 0 && contacts.every(({ entityId }) => isUnavailableState(entities[entityId]?.state));
+  return { openCount, isOpen: openCount > 0, isUnavailable: unavailable };
+}
+
 /* ── Alarm state helpers ─────────────────────────────────────────────── */
 
 const ALARM_STATES = {
@@ -68,26 +123,15 @@ const SectionLabel = ({ children }) => (
   </p>
 );
 
-/* Section wrapper — handles borders in flex (desktop) and grid (mobile) */
-const Section = ({ children, px = 'px-4', py = 'py-3', flex = false, borderRight = true, borderBottom = false, className = '' }) => (
-  <div
-    className={`flex flex-col justify-start ${px} ${py} ${borderRight ? 'border-r border-[var(--glass-border)]' : ''} ${borderBottom ? 'border-b border-[var(--glass-border)]' : ''} ${flex ? 'flex-1' : ''} ${className}`}
-  >
-    {children}
-  </div>
-);
-
 /* ── Detection section ───────────────────────────────────────────────── */
 
-const DetectionSection = memo(({ entity, callService, mobile }) => {
-  const state = entity?.state;
-  const isOn = state === 'on';
-  const isUnavailable = !state || state === 'unavailable' || state === 'unknown';
+const DetectionSection = memo(({ switchIds, entities, callService }) => {
+  const { isOn, isUnavailable } = detectionStatus(switchIds, entities);
 
   const toggle = useCallback(() => {
     if (isUnavailable) return;
-    callService('switch', isOn ? 'turn_off' : 'turn_on', { entity_id: DETECTION_SWITCH });
-  }, [isOn, isUnavailable, callService]);
+    callService('switch', isOn ? 'turn_off' : 'turn_on', { entity_id: switchIds });
+  }, [isOn, isUnavailable, callService, switchIds]);
 
   return (
     <button
@@ -120,12 +164,12 @@ const DetectionSection = memo(({ entity, callService, mobile }) => {
 
 const LockRow = memo(({ entityId, contactId, name, entities, onOpen }) => {
   const entity  = entities[entityId];
-  const contact = entities[contactId];
+  const contact = contactId ? entities[contactId] : null;
   const state = entity?.state;
   const isLocked     = state === 'locked';
   const isJammed     = state === 'jammed';
   const isTransition = state === 'locking' || state === 'unlocking';
-  const isUnavailable = !state || state === 'unavailable' || state === 'unknown';
+  const isUnavailable = isUnavailableState(state);
   const isDoorOpen = contact?.state === 'on';
 
   const iconStyle = isUnavailable || isJammed
@@ -165,10 +209,7 @@ const LockRow = memo(({ entityId, contactId, name, entities, onOpen }) => {
 /* ── Contact summary row ─────────────────────────────────────────────── */
 
 const ContactRow = memo(({ label, summaryId, contacts, entities, onClick }) => {
-  const summary = entities[summaryId];
-  const isOpen = summary?.state === 'on';
-  const isUnavailable = !summary?.state || summary.state === 'unavailable';
-  const openCount = contacts.filter(({ entityId }) => entities[entityId]?.state === 'on').length;
+  const { openCount, isOpen, isUnavailable } = contactStatus(contacts, summaryId, entities);
 
   const dotColor = isUnavailable ? 'bg-gray-500' : isOpen ? 'bg-red-500' : 'bg-green-500';
   const stateLabel = isUnavailable ? '⚠' : isOpen ? `${openCount} offen` : 'Alle zu';
@@ -200,8 +241,8 @@ const ContactRow = memo(({ label, summaryId, contacts, entities, onClick }) => {
 
 /* ── Motion summary row ──────────────────────────────────────────────── */
 
-const MotionRow = memo(({ entities, onClick }) => {
-  const activeCount = MOTION_SENSORS.filter(({ entityId }) => entities[entityId]?.state === 'on').length;
+const MotionRow = memo(({ sensors, entities, onClick }) => {
+  const activeCount = sensors.filter(({ entityId }) => entities[entityId]?.state === 'on').length;
   const isActive = activeCount > 0;
 
   return (
@@ -234,7 +275,7 @@ const MotionRow = memo(({ entities, onClick }) => {
 
 const AlarmRow = memo(({ entity, onOpen }) => {
   const state = entity?.state;
-  const isUnavailable = !state || state === 'unavailable' || state === 'unknown';
+  const isUnavailable = isUnavailableState(state);
   const cfg = (!isUnavailable && ALARM_STATES[state]) || ALARM_STATES.disarmed;
   const { label, color, Icon, bg, fg } = cfg;
 
@@ -265,15 +306,15 @@ const AlarmRow = memo(({ entity, onOpen }) => {
 
 /* ── Simulation switch row ───────────────────────────────────────────── */
 
-const SimulationRow = memo(({ entity, callService }) => {
+const SimulationRow = memo(({ entityId, entity, callService }) => {
   const state = entity?.state;
   const isOn = state === 'on';
-  const isUnavailable = !state || state === 'unavailable' || state === 'unknown';
+  const isUnavailable = isUnavailableState(state);
 
   const toggle = useCallback(() => {
     if (isUnavailable) return;
-    callService('switch', isOn ? 'turn_off' : 'turn_on', { entity_id: SIMULATION_SWITCH });
-  }, [isOn, isUnavailable, callService]);
+    callService('switch', isOn ? 'turn_off' : 'turn_on', { entity_id: entityId });
+  }, [isOn, isUnavailable, callService, entityId]);
 
   return (
     <button
@@ -299,6 +340,25 @@ const SimulationRow = memo(({ entity, callService }) => {
   );
 });
 
+/* ── Mobile tile ─────────────────────────────────────────────────────── */
+
+const Tile = ({ icon: Icon, label, state, iconBg, iconFg, stateCls, onClick, pulse = false }) => (
+  <button
+    type="button"
+    data-haptic="card"
+    onClick={onClick}
+    style={{ touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent' }}
+    className="flex flex-col items-center justify-center gap-0.5 py-2 px-1 w-full h-full transition-all active:scale-[0.95] cursor-pointer"
+  >
+    <div className="flex h-7 w-7 items-center justify-center rounded-lg flex-shrink-0"
+      style={{ backgroundColor: iconBg, color: iconFg }}>
+      <Icon className={`h-3 w-3 stroke-[1.5px] ${pulse ? 'animate-pulse' : ''}`} />
+    </div>
+    <span className="text-[9px] font-semibold text-[var(--text-primary)] text-center leading-tight w-full truncate px-0.5 mt-0.5">{label}</span>
+    <span className={`text-[9px] font-bold text-center truncate w-full px-0.5 ${stateCls}`}>{state}</span>
+  </button>
+);
+
 /* ── Security Panel Card ─────────────────────────────────────────────── */
 
 const SecurityPanelCard = ({
@@ -309,11 +369,18 @@ const SecurityPanelCard = ({
   editMode,
   entities,
   callService,
+  settings,
   isMobile,
   setShowSecurityLockModal,
   setShowSecurityContactsModal,
   setShowAlarmModal,
 }) => {
+  const config = resolveSecurityConfig(settings);
+  const {
+    detectionSwitches, simulationSwitch, alarmEntity, locks,
+    doorContacts, doorSummaryId, windowContacts, windowSummaryId, motionSensors,
+  } = config;
+
   const layoutStyle = cardStyle ? {
     transform: cardStyle.transform,
     opacity: cardStyle.opacity,
@@ -325,190 +392,169 @@ const SecurityPanelCard = ({
   const p = isMobile ? 'px-3 py-3' : 'px-4 py-3';
 
   if (isMobile) {
-    // Mobile: 4×2 compact icon tiles
-    const tiles = [
-      // Row 1: Detection, Haustür, HWR Tür, Türkontakte
-      // Row 2: Fensterkontakte, Bewegung, Alarm, Anwesenheit
-    ];
-
-    const alarmState = entities[ALARM_ENTITY]?.state;
+    const alarmState = alarmEntity ? entities[alarmEntity]?.state : undefined;
     const alarmCfg = (alarmState && ALARM_STATES[alarmState]) || ALARM_STATES.disarmed;
+    const det = detectionStatus(detectionSwitches, entities);
+    const simOn = simulationSwitch ? entities[simulationSwitch]?.state === 'on' : false;
+    const tur = contactStatus(doorContacts, doorSummaryId, entities);
+    const fen = contactStatus(windowContacts, windowSummaryId, entities);
+    const motCount = motionSensors.filter(({ entityId }) => entities[entityId]?.state === 'on').length;
+    const motActive = motCount > 0;
 
-    const detState   = entities[DETECTION_SWITCH]?.state;
-    const detOn      = detState === 'on';
-    const detUnavail = !detState || detState === 'unavailable' || detState === 'unknown';
-
-    const simState   = entities[SIMULATION_SWITCH]?.state;
-    const simOn      = simState === 'on';
-
-    const turSummary = entities[TUR_SUMMARY_ID]?.state;
-    const turOpen    = TUR_KONTAKTE.filter(({ entityId }) => entities[entityId]?.state === 'on').length;
-    const turBad     = turSummary === 'on';
-
-    const fenSummary = entities[FENSTER_SUMMARY_ID]?.state;
-    const fenOpen    = FENSTER_KONTAKTE.filter(({ entityId }) => entities[entityId]?.state === 'on').length;
-    const fenBad     = fenSummary === 'on';
-
-    const motCount   = MOTION_SENSORS.filter(({ entityId }) => entities[entityId]?.state === 'on').length;
-    const motActive  = motCount > 0;
-
-    const b = 'border-[var(--glass-border)]';
-
-    const Tile = ({ icon: Icon, label, state, iconBg, iconFg, stateCls, onClick, pulse = false }) => (
-      <button
-        type="button"
-        data-haptic="card"
-        onClick={onClick}
-        style={{ touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent' }}
-        className="flex flex-col items-center justify-center gap-0.5 py-2 px-1 w-full h-full transition-all active:scale-[0.95] cursor-pointer"
-      >
-        <div className="flex h-7 w-7 items-center justify-center rounded-lg flex-shrink-0"
-          style={{ backgroundColor: iconBg, color: iconFg }}>
-          <Icon className={`h-3 w-3 stroke-[1.5px] ${pulse ? 'animate-pulse' : ''}`} />
-        </div>
-        <span className="text-[9px] font-semibold text-[var(--text-primary)] text-center leading-tight w-full truncate px-0.5 mt-0.5">{label}</span>
-        <span className={`text-[9px] font-bold text-center truncate w-full px-0.5 ${stateCls}`}>{state}</span>
-      </button>
-    );
-
-    // Lock helper
     const lockTile = (lock) => {
-      const e = entities[lock.entityId];
-      const c = entities[lock.contactId];
-      const s = e?.state;
+      const s = entities[lock.entityId]?.state;
       const locked = s === 'locked';
       const jammed = s === 'jammed';
       const transit = s === 'locking' || s === 'unlocking';
-      const unavail = !s || s === 'unavailable' || s === 'unknown';
-      const doorOpen = c?.state === 'on';
+      const unavail = isUnavailableState(s);
+      const doorOpen = lock.contactId ? entities[lock.contactId]?.state === 'on' : false;
       const Icon = locked || s === 'locking' ? Lock : (unavail || jammed ? AlertTriangle : Unlock);
       const bg = unavail || jammed ? 'rgba(239,68,68,0.1)' : locked ? 'rgba(34,197,94,0.1)' : transit ? 'rgba(96,165,250,0.1)' : 'rgba(251,146,60,0.1)';
       const fg = unavail || jammed ? '#ef4444' : locked ? '#22c55e' : transit ? '#60a5fa' : '#fb923c';
       const stLabel = unavail ? '⚠' : jammed ? 'Blockiert' : transit ? '…' : locked ? 'Gesperrt' : (doorOpen ? 'Tür auf' : 'Offen');
       const stCls = unavail || jammed ? 'text-red-400' : transit ? 'text-blue-400' : locked ? 'text-green-400' : 'text-orange-400';
       return (
-        <Tile key={lock.entityId} icon={Icon} label={lock.name} state={stLabel}
+        <Tile icon={Icon} label={lock.name} state={stLabel}
           iconBg={bg} iconFg={fg} stateCls={stCls} pulse={transit}
           onClick={() => setShowSecurityLockModal?.({ entityId: lock.entityId, contactId: lock.contactId, name: lock.name })} />
       );
     };
+
+    const contactTile = (key, label, status, type, contacts) => (
+      <Tile key={key} icon={Shield} label={label}
+        iconBg={status.isOpen ? 'rgba(239,68,68,0.1)' : 'rgba(34,197,94,0.1)'}
+        iconFg={status.isOpen ? '#ef4444' : '#22c55e'}
+        state={status.isOpen ? `${status.openCount} offen` : 'Alle zu'}
+        stateCls={status.isOpen ? 'text-red-400' : 'text-green-400'}
+        onClick={() => setShowSecurityContactsModal?.({ type, contacts })}
+      />
+    );
+
+    // Tiles in display order; sections without entities are left out.
+    const tiles = [];
+    if (detectionSwitches.length > 0) {
+      tiles.push(
+        <Tile key="detection" icon={Camera} label="Detection"
+          iconBg={det.isUnavailable ? 'rgba(239,68,68,0.1)' : det.isOn ? 'rgba(96,165,250,0.12)' : 'var(--glass-bg-hover)'}
+          iconFg={det.isUnavailable ? '#ef4444' : det.isOn ? '#60a5fa' : 'var(--text-muted)'}
+          state={det.isUnavailable ? '⚠' : det.isOn ? 'Aktiv' : 'Inaktiv'}
+          stateCls={det.isUnavailable ? 'text-red-400' : det.isOn ? 'text-blue-400' : 'text-[var(--text-muted)] opacity-60'}
+          onClick={() => !det.isUnavailable && callService('switch', det.isOn ? 'turn_off' : 'turn_on', { entity_id: detectionSwitches })}
+        />
+      );
+    }
+    locks.forEach((lock) => tiles.push(<div key={lock.entityId} className="h-full">{lockTile(lock)}</div>));
+    if (doorContacts.length > 0) tiles.push(contactTile('doors', 'Türen', tur, 'tür', doorContacts));
+    if (windowContacts.length > 0) tiles.push(contactTile('windows', 'Fenster', fen, 'fenster', windowContacts));
+    if (motionSensors.length > 0) {
+      tiles.push(
+        <Tile key="motion" icon={Activity} label="Bewegung"
+          iconBg={motActive ? 'rgba(234,179,8,0.12)' : 'rgba(34,197,94,0.1)'}
+          iconFg={motActive ? '#facc15' : '#22c55e'}
+          state={motActive ? `${motCount} aktiv` : 'Keine'}
+          stateCls={motActive ? 'text-yellow-400' : 'text-green-400'}
+          pulse={motActive}
+          onClick={() => setShowSecurityContactsModal?.({ type: 'bewegung', contacts: motionSensors })}
+        />
+      );
+    }
+    if (alarmEntity) {
+      tiles.push(
+        <Tile key="alarm" icon={alarmCfg.Icon} label="Alarm"
+          iconBg={alarmState === 'unavailable' ? 'rgba(239,68,68,0.1)' : alarmCfg.bg}
+          iconFg={alarmState === 'unavailable' ? '#ef4444' : alarmCfg.fg}
+          state={alarmState === 'unavailable' ? '⚠' : alarmCfg.label}
+          stateCls={alarmState === 'unavailable' ? 'text-red-400' : alarmCfg.color}
+          pulse={alarmState === 'triggered'}
+          onClick={() => setShowAlarmModal?.(alarmEntity)}
+        />
+      );
+    }
+    if (simulationSwitch) {
+      tiles.push(
+        <Tile key="simulation" icon={UserCheck} label="Simulation"
+          iconBg={simOn ? 'rgba(96,165,250,0.12)' : 'var(--glass-bg-hover)'}
+          iconFg={simOn ? '#60a5fa' : 'var(--text-muted)'}
+          state={simOn ? 'Aktiv' : 'Inaktiv'}
+          stateCls={simOn ? 'text-blue-400' : 'text-[var(--text-muted)] opacity-60'}
+          onClick={() => callService('switch', simOn ? 'turn_off' : 'turn_on', { entity_id: simulationSwitch })}
+        />
+      );
+    }
+
+    const columns = 4;
+    const rows = Math.ceil(tiles.length / columns);
+    const b = 'border-[var(--glass-border)]';
 
     return (
       <div key={cardId} {...dragProps} className={`relative font-sans select-none ${editMode ? 'cursor-move' : ''}`} style={layoutStyle}>
         {controls}
         <div className="glass-texture rounded-2xl border border-[var(--glass-border)] bg-[var(--card-bg)] overflow-hidden">
           <div className="grid grid-cols-4">
-            {/* Row 1 */}
-            <div className={`border-r border-b ${b}`}>
-              <Tile icon={Camera} label="Detection"
-                iconBg={detUnavail ? 'rgba(239,68,68,0.1)' : detOn ? 'rgba(96,165,250,0.12)' : 'var(--glass-bg-hover)'}
-                iconFg={detUnavail ? '#ef4444' : detOn ? '#60a5fa' : 'var(--text-muted)'}
-                state={detUnavail ? '⚠' : detOn ? 'Aktiv' : 'Inaktiv'}
-                stateCls={detUnavail ? 'text-red-400' : detOn ? 'text-blue-400' : 'text-[var(--text-muted)] opacity-60'}
-                onClick={() => !detUnavail && callService('switch', detOn ? 'turn_off' : 'turn_on', { entity_id: DETECTION_SWITCH })}
-              />
-            </div>
-            {LOCKS.map((lock, i) => (
-              <div key={lock.entityId} className={`border-r border-b ${b}`}>{lockTile(lock)}</div>
-            ))}
-            <div className={`border-b ${b}`}>
-              <Tile icon={turBad ? Shield : Shield} label="Türen"
-                iconBg={turBad ? 'rgba(239,68,68,0.1)' : 'rgba(34,197,94,0.1)'}
-                iconFg={turBad ? '#ef4444' : '#22c55e'}
-                state={turBad ? `${turOpen} offen` : 'Alle zu'}
-                stateCls={turBad ? 'text-red-400' : 'text-green-400'}
-                onClick={() => setShowSecurityContactsModal?.({ type: 'tür', contacts: TUR_KONTAKTE })}
-              />
-            </div>
-            {/* Row 2 */}
-            <div className={`border-r ${b}`}>
-              <Tile icon={Shield} label="Fenster"
-                iconBg={fenBad ? 'rgba(239,68,68,0.1)' : 'rgba(34,197,94,0.1)'}
-                iconFg={fenBad ? '#ef4444' : '#22c55e'}
-                state={fenBad ? `${fenOpen} offen` : 'Alle zu'}
-                stateCls={fenBad ? 'text-red-400' : 'text-green-400'}
-                onClick={() => setShowSecurityContactsModal?.({ type: 'fenster', contacts: FENSTER_KONTAKTE })}
-              />
-            </div>
-            <div className={`border-r ${b}`}>
-              <Tile icon={Activity} label="Bewegung"
-                iconBg={motActive ? 'rgba(234,179,8,0.12)' : 'rgba(34,197,94,0.1)'}
-                iconFg={motActive ? '#facc15' : '#22c55e'}
-                state={motActive ? `${motCount} aktiv` : 'Keine'}
-                stateCls={motActive ? 'text-yellow-400' : 'text-green-400'}
-                pulse={motActive}
-                onClick={() => setShowSecurityContactsModal?.({ type: 'bewegung', contacts: MOTION_SENSORS })}
-              />
-            </div>
-            <div className={`border-r ${b}`}>
-              <Tile icon={alarmCfg.Icon} label="Alarm"
-                iconBg={alarmState === 'unavailable' ? 'rgba(239,68,68,0.1)' : alarmCfg.bg}
-                iconFg={alarmState === 'unavailable' ? '#ef4444' : alarmCfg.fg}
-                state={alarmState === 'unavailable' ? '⚠' : alarmCfg.label}
-                stateCls={alarmState === 'unavailable' ? 'text-red-400' : alarmCfg.color}
-                pulse={alarmState === 'triggered'}
-                onClick={() => setShowAlarmModal?.(ALARM_ENTITY)}
-              />
-            </div>
-            <div>
-              <Tile icon={UserCheck} label="Simulation"
-                iconBg={simOn ? 'rgba(96,165,250,0.12)' : 'var(--glass-bg-hover)'}
-                iconFg={simOn ? '#60a5fa' : 'var(--text-muted)'}
-                state={simOn ? 'Aktiv' : 'Inaktiv'}
-                stateCls={simOn ? 'text-blue-400' : 'text-[var(--text-muted)] opacity-60'}
-                onClick={() => callService('switch', simOn ? 'turn_off' : 'turn_on', { entity_id: SIMULATION_SWITCH })}
-              />
-            </div>
+            {tiles.map((tile, i) => {
+              const lastInRow = i % columns === columns - 1;
+              const lastRow = Math.floor(i / columns) === rows - 1;
+              return (
+                <div key={tile.key ?? i} className={`${lastInRow ? '' : 'border-r'} ${lastRow ? '' : 'border-b'} ${b}`}>
+                  {tile}
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>
     );
   }
 
-  // Desktop: single flex row
+  // Desktop: single flex row; sections without entities are left out.
+  const sections = [];
+  if (detectionSwitches.length > 0) {
+    sections.push(['detection', 'Detection',
+      <DetectionSection key="d" switchIds={detectionSwitches} entities={entities} callService={callService} />]);
+  }
+  if (locks.length > 0) {
+    sections.push(['locks', 'Schlösser', locks.map((lock) => (
+      <LockRow key={lock.entityId} {...lock} entities={entities} onOpen={setShowSecurityLockModal} />
+    ))]);
+  }
+  if (doorContacts.length > 0 || windowContacts.length > 0) {
+    sections.push(['contacts', 'Kontakte', [
+      doorContacts.length > 0 && (
+        <ContactRow key="tur" label="Türkontakte" summaryId={doorSummaryId} contacts={doorContacts} entities={entities}
+          onClick={() => setShowSecurityContactsModal?.({ type: 'tür', contacts: doorContacts })} />
+      ),
+      windowContacts.length > 0 && (
+        <ContactRow key="fenster" label="Fensterkontakte" summaryId={windowSummaryId} contacts={windowContacts} entities={entities}
+          onClick={() => setShowSecurityContactsModal?.({ type: 'fenster', contacts: windowContacts })} />
+      ),
+    ]]);
+  }
+  if (motionSensors.length > 0) {
+    sections.push(['motion', 'Bewegung',
+      <MotionRow key="m" sensors={motionSensors} entities={entities}
+        onClick={() => setShowSecurityContactsModal?.({ type: 'bewegung', contacts: motionSensors })} />]);
+  }
+  if (alarmEntity || simulationSwitch) {
+    sections.push(['alarm', 'Alarm', [
+      alarmEntity && <AlarmRow key="a" entity={entities[alarmEntity]} onOpen={() => setShowAlarmModal?.(alarmEntity)} />,
+      simulationSwitch && <SimulationRow key="s" entityId={simulationSwitch} entity={entities[simulationSwitch]} callService={callService} />,
+    ]]);
+  }
+
   return (
     <div key={cardId} {...dragProps} className={`relative font-sans select-none ${editMode ? 'cursor-move' : ''}`} style={layoutStyle}>
       {controls}
       <div className="glass-texture rounded-2xl border border-[var(--glass-border)] bg-[var(--card-bg)] overflow-hidden">
         <div className="flex items-stretch">
-
-          {/* Detection */}
-          <div className={`${p} flex flex-col gap-2 border-r border-[var(--glass-border)]`} style={{ minWidth: 180 }}>
-            <SectionLabel>Detection</SectionLabel>
-            <DetectionSection entity={entities[DETECTION_SWITCH]} callService={callService} />
-          </div>
-
-          {/* Schlösser */}
-          <div className={`${p} flex flex-col gap-2 border-r border-[var(--glass-border)]`} style={{ minWidth: 180 }}>
-            <SectionLabel>Schlösser</SectionLabel>
-            {LOCKS.map((lock) => (
-              <LockRow key={lock.entityId} {...lock} entities={entities} onOpen={setShowSecurityLockModal} />
-            ))}
-          </div>
-
-          {/* Kontakte */}
-          <div className={`${p} flex flex-col gap-2 border-r border-[var(--glass-border)]`} style={{ minWidth: 180 }}>
-            <SectionLabel>Kontakte</SectionLabel>
-            <ContactRow label="Türkontakte" summaryId={TUR_SUMMARY_ID} contacts={TUR_KONTAKTE} entities={entities}
-              onClick={() => setShowSecurityContactsModal?.({ type: 'tür', contacts: TUR_KONTAKTE })} />
-            <ContactRow label="Fensterkontakte" summaryId={FENSTER_SUMMARY_ID} contacts={FENSTER_KONTAKTE} entities={entities}
-              onClick={() => setShowSecurityContactsModal?.({ type: 'fenster', contacts: FENSTER_KONTAKTE })} />
-          </div>
-
-          {/* Bewegung */}
-          <div className={`${p} flex flex-col gap-2 border-r border-[var(--glass-border)]`} style={{ minWidth: 180 }}>
-            <SectionLabel>Bewegung</SectionLabel>
-            <MotionRow entities={entities}
-              onClick={() => setShowSecurityContactsModal?.({ type: 'bewegung', contacts: MOTION_SENSORS })} />
-          </div>
-
-          {/* Alarm */}
-          <div className={`${p} flex flex-col gap-2 flex-1`} style={{ minWidth: 180 }}>
-            <SectionLabel>Alarm</SectionLabel>
-            <AlarmRow entity={entities[ALARM_ENTITY]} onOpen={() => setShowAlarmModal?.(ALARM_ENTITY)} />
-            <SimulationRow entity={entities[SIMULATION_SWITCH]} callService={callService} />
-          </div>
-
+          {sections.map(([key, label, content], i) => {
+            const last = i === sections.length - 1;
+            return (
+              <div key={key} className={`${p} flex flex-col gap-2 ${last ? 'flex-1' : 'border-r border-[var(--glass-border)]'}`} style={{ minWidth: 180 }}>
+                <SectionLabel>{label}</SectionLabel>
+                {content}
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>

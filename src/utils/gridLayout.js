@@ -23,6 +23,8 @@ const SPAN_TABLE = {
   lightPanel:    { default: 1 }, // auto-height card, span=1 is enough (gridAutoRows: auto sizes to content)
   coverPanel:    { default: 1 }, // auto-height, same as lightPanel
   securityPanel: { default: 1 }, // auto-height, same as lightPanel
+  heizungTile: { default: 2 }, // Heizungs-Kachel, so groß wie die Wetter-Kachel
+  pufferTile: { default: 2 }, // Puffer-Kachel mit Verlauf, ebenso
 };
 
 const CARD_SPAN_RULES = [
@@ -30,6 +32,8 @@ const CARD_SPAN_RULES = [
   { prefix: 'light_panel_card_',    category: 'lightPanel'    },
   { prefix: 'cover_panel_card_',    category: 'coverPanel'    },
   { prefix: 'security_panel_card_', category: 'securityPanel' },
+  { prefix: 'heizung_card_', category: 'heizungTile' },
+  { prefix: 'puffer_card_', category: 'pufferTile' },
   { prefix: 'entity_card_', category: 'dualSize' },
   { prefix: 'calendar_card_', category: 'triSize' },
   { prefix: 'todo_card_', category: 'triSize' },
