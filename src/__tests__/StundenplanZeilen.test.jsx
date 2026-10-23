@@ -131,6 +131,16 @@ describe('Bearbeiten im Plan', () => {
     expect(onSavePlans.mock.calls[0][0][0].ganztag).toEqual({ 0: 'Studientag' });
   });
 
+  it('opens the whole-day dialog from a whole-day cell and clears the day', () => {
+    const onSavePlans = vi.fn();
+    const mitTag = { ...plan(), ganztag: { 0: 'Studientag' } };
+    render(<StundenplanPage pageId="sp" settings={{ plans: [mitTag] }} editMode onSavePlans={onSavePlans} />);
+    fireEvent.click(screen.getAllByText('Studientag')[0].closest('[role="button"]'));
+    expect(screen.getByText('Montag – ganzer Tag')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Leeren' }));
+    expect(onSavePlans.mock.calls[0][0][0].ganztag).toBeUndefined();
+  });
+
   it('shows abbreviations for the narrow view', () => {
     render(<StundenplanPage pageId="sp" settings={{ plans: [plan()] }} isMobile />);
     expect(screen.getAllByText('Ma').length).toBeGreaterThan(0);

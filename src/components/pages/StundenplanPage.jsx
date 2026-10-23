@@ -468,7 +468,8 @@ function StundenplanPage({ isMobile = false, pageId, settings, editMode = false,
                         meta={entry ? metaFor(plan, entry.fach) : null}
                         isToday={isToday}
                         isActive={isActive}
-                        onEdit={canEdit && !entry?.ganztag ? () => {
+                        // Ganzer Tag (z. B. Studientag): Tippen öffnet den Tagesdialog
+                        onEdit={canEdit && entry?.ganztag ? () => openWholeDay(di) : canEdit ? () => {
                           const raw = plan.eintraege?.[`${stunde.nr}-${di}`];
                           setDialog({
                             mode: 'stunde',

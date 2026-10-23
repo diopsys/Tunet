@@ -390,6 +390,8 @@ export default function StatusBar({
             if (pill.type === STATUS_GROUP_PILL_TYPE) {
               const groupData = resolveStatusGroupPill(pill, entities, t);
               if (!groupData.shouldRender) return null;
+              // Nichts trifft zu (z. B. keine Heizung an): grau statt in der Farbe der Gruppe
+              const leer = groupData.count === 0;
 
               return (
                 <StatusPill
@@ -398,8 +400,8 @@ export default function StatusBar({
                   pill={{
                     ...pill,
                     icon: pill.icon || groupData.preset.icon,
-                    iconBgColor: pill.iconBgColor || groupData.preset.iconBgColor,
-                    iconColor: pill.iconColor || groupData.preset.iconColor,
+                    iconBgColor: leer ? 'rgba(127, 127, 127, 0.1)' : pill.iconBgColor || groupData.preset.iconBgColor,
+                    iconColor: leer ? 'text-[var(--text-muted)]' : pill.iconColor || groupData.preset.iconColor,
                   }}
                   getA={getA}
                   t={t}
