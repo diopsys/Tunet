@@ -20,7 +20,7 @@ import {
   usePages,
 } from './contexts';
 import ModalManager from './rendering/ModalManager';
-import { clipAdresse, useKameraLink } from './hooks/useKameraLink';
+import { clipAdresse, seiteFuerKamera, useKameraLink } from './hooks/useKameraLink';
 
 import {
   useSmartTheme,
@@ -228,8 +228,13 @@ export function AppContent({ showOnboarding, setShowOnboarding }) {
   const visibleEditMode = cardsOnlyMode ? false : editMode;
 
   const { activePage, setActivePage } = usePageRouting();
-  // ?kamera=…[&clip=…] in der Adresse (z. B. Klingel-Nachricht) öffnet das Kamera-Fenster
+  // ?kamera=…[&clip=…] in der Adresse (z. B. Klingel-Nachricht) öffnet das Kamera-Fenster;
+  // dahinter wechselt das Dashboard auf die Seite mit dieser Kamera (nach dem Schließen dort)
   const [kameraLink, schliesseKameraLink] = useKameraLink();
+  const kameraSeite = kameraLink ? seiteFuerKamera(kameraLink.kamera, cardSettings, pagesConfig) : null;
+  useEffect(() => {
+    if (kameraSeite) setActivePage(kameraSeite);
+  }, [kameraLink, kameraSeite, setActivePage]);
 
   const [tempHistoryById, _setTempHistoryById] = useTempHistory(conn, cardSettings);
   const [forecastsById, _setForecastsById] = useWeatherForecast(conn, cardSettings);

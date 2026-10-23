@@ -1,6 +1,6 @@
 import { act, fireEvent, render, renderHook, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { clipAdresse, leseKameraLink, useKameraLink } from '../hooks/useKameraLink';
+import { clipAdresse, leseKameraLink, seiteFuerKamera, useKameraLink } from '../hooks/useKameraLink';
 import CameraModal from '../modals/CameraModal';
 
 vi.mock('../components/camera/CameraFeed', () => ({ default: () => <div data-testid="feed" /> }));
@@ -14,6 +14,14 @@ describe('Kamera-Link aus der Adresse', () => {
     expect(leseKameraLink('?kamera=camera.garten&clip=../x')).toEqual({ kamera: 'camera.garten', clip: null });
     expect(leseKameraLink('?kamera=light.flur')).toBeNull();
     expect(leseKameraLink('')).toBeNull();
+  });
+
+  it('finds the page with a card for this camera', () => {
+    const cardSettings = { 'sicherheit::cam_1': { cameraId: 'camera.haustuer' }, 'alt::cam_2': { cameraId: 'camera.garten' } };
+    const pagesConfig = { sicherheit: ['cam_1'], alt: [] };
+    expect(seiteFuerKamera('camera.haustuer', cardSettings, pagesConfig)).toBe('sicherheit');
+    expect(seiteFuerKamera('camera.garten', cardSettings, pagesConfig)).toBeNull(); // Karte nicht mehr auf der Seite
+    expect(seiteFuerKamera('camera.hof', cardSettings, pagesConfig)).toBeNull();
   });
 
   it('builds the clip address', () => {

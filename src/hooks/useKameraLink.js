@@ -67,3 +67,16 @@ export function useKameraLink() {
   const schliessen = useCallback(() => setLink(null), []);
   return [link, schliessen];
 }
+
+/**
+ * Seite mit einer Kamera-Karte für diese Kamera (z. B. „sicherheit“) oder null –
+ * dorthin wechselt das Dashboard hinter dem Fenster, damit man nach dem Schließen dort ist.
+ */
+export function seiteFuerKamera(kamera, cardSettings, pagesConfig) {
+  for (const [schluessel, werte] of Object.entries(cardSettings || {})) {
+    if (werte?.cameraId !== kamera || !schluessel.includes('::')) continue;
+    const [seite, karte] = schluessel.split('::');
+    if (Array.isArray(pagesConfig?.[seite]) && pagesConfig[seite].includes(karte)) return seite;
+  }
+  return null;
+}
