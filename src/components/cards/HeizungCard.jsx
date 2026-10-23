@@ -161,6 +161,18 @@ const PumpenZeile = ({ name, on }) => (
   </div>
 );
 
+const PumpenKurz = ({ pumpen, entities }) => {
+  const laufen = pumpen.filter((p) => isActive(entities[p.entity], p)).map((p) => p.name);
+  return (
+    <div className="flex min-w-0 items-center gap-1.5 @min-[15rem]:hidden">
+      <span className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${laufen.length ? 'animate-pulse bg-green-400' : 'bg-gray-500 opacity-60'}`} />
+      <span className={`truncate text-[11px] font-medium ${laufen.length ? 'text-green-400' : 'text-[var(--text-muted)] opacity-70'}`}>
+        Pumpen: {laufen.length ? laufen.join(', ') : 'aus'}
+      </span>
+    </div>
+  );
+};
+
 const HeizungCard = ({ cardId, dragProps, controls, cardStyle, editMode, entities, settings, name }) => {
   const config = resolveHeizungConfig(settings);
   const ventile = config.ventile ? ventileStatus(config.ventile, entities) : null;
@@ -173,7 +185,7 @@ const HeizungCard = ({ cardId, dragProps, controls, cardStyle, editMode, entitie
     <div
       key={cardId}
       {...dragProps}
-      className={`glass-texture touch-feedback relative flex h-full flex-col gap-2 overflow-hidden rounded-3xl border p-3.5 font-sans select-none ${editMode ? 'cursor-move' : config.url ? 'cursor-pointer active:scale-[0.98]' : ''}`}
+      className={`glass-texture touch-feedback @container relative flex h-full flex-col gap-1.5 overflow-hidden rounded-3xl border p-3 font-sans @min-[15rem]:gap-2 @min-[15rem]:p-3.5 select-none ${editMode ? 'cursor-move' : config.url ? 'cursor-pointer active:scale-[0.98]' : ''}`}
       style={cardStyle}
       {...openProps(config.url, editMode, `${titel} öffnen`)}
     >
@@ -209,12 +221,15 @@ const HeizungCard = ({ cardId, dragProps, controls, cardStyle, editMode, entitie
           <Settings className="h-4 w-4" /> Keine Entitäten eingestellt
         </div>
       ) : (
-        <div className={`grid min-h-0 flex-1 items-center gap-3 ${config.pumpen.length > 0 ? 'grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]' : 'grid-cols-1'}`}>
-          <div className="flex min-w-0 flex-col gap-1.5">
+        // Schmale Kachel (Handy): Erzeuger über die volle Breite, statt der Pumpenliste
+        // eine Zeile mit den laufenden Pumpen
+        <div className={`grid min-h-0 flex-1 items-center gap-3 grid-cols-1 ${config.pumpen.length > 0 ? '@min-[15rem]:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]' : ''}`}>
+          <div className="flex min-w-0 flex-col gap-1 @min-[15rem]:gap-1.5">
             {config.erzeuger.map((item) => <ErzeugerZeile key={item.name} item={item} entities={entities} />)}
+            {config.pumpen.length > 0 && <PumpenKurz pumpen={config.pumpen} entities={entities} />}
           </div>
           {config.pumpen.length > 0 && (
-            <div className="flex min-w-0 flex-col gap-1">
+            <div className="hidden min-w-0 flex-col gap-1 @min-[15rem]:flex">
               <SectionLabel>Pumpen</SectionLabel>
               {config.pumpen.map((p) => <PumpenZeile key={p.name} name={p.name} on={isActive(entities[p.entity], p)} />)}
             </div>

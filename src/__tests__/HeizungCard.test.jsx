@@ -100,6 +100,8 @@ describe('HeizungCard', () => {
     expect(screen.getAllByText('Heizkreis').some((el) => el.className.includes('text-green-400'))).toBe(true);
     expect(screen.getByText('Zirkulation').className).not.toContain('text-green-400');
     expect(screen.queryByText(/Notkühlung/)).toBeNull(); // nur sichtbar, wenn aktiv
+    // schmale Kachel: Kurzzeile mit den laufenden Pumpen (per Container-Query statt Liste)
+    expect(screen.getByText('Pumpen: Heizkreis, Kompressor')).toBeTruthy();
   });
 
   it('replaces the bottom row with a warning while emergency cooling is active', () => {
