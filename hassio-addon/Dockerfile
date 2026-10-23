@@ -21,7 +21,9 @@ LABEL \
 	io.hass.type="app" \
 	io.hass.arch="${BUILD_ARCH}"
 
-RUN apk add --no-cache nodejs npm python3 make g++
+# Upgrade musl as well: the base image pins an older musl that no longer
+# matches musl-dev (pulled in by g++), so the install fails otherwise
+RUN apk add --no-cache --upgrade musl nodejs npm python3 make g++
 
 WORKDIR /app
 
