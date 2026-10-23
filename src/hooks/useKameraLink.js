@@ -17,9 +17,14 @@ export function leseKameraLink(search) {
   return { kamera, clip: clip && EREIGNIS.test(clip) ? clip : null };
 }
 
-/** Adresse des Frigate-Clips zu einem Ereignis (Frigate-Integration, ohne Anmeldung abrufbar). */
-export function clipAdresse(ereignis, basis = '') {
-  return ereignis ? `${String(basis || '').replace(/\/+$/, '')}/api/frigate/notifications/${ereignis}/clip.mp4` : null;
+/**
+ * Adresse des Frigate-Clips zu einem Ereignis (Frigate-Integration, ohne Anmeldung abrufbar):
+ * `mp4` (Datei) oder `hls` (Stream – das iPhone spielt nur den, weil die MP4 ohne Byte-Ranges kommt).
+ */
+export function clipAdresse(ereignis, basis = '', art = 'mp4') {
+  if (!ereignis) return null;
+  const datei = art === 'hls' ? 'master.m3u8' : 'clip.mp4';
+  return `${String(basis || '').replace(/\/+$/, '')}/api/frigate/notifications/${ereignis}/${datei}`;
 }
 
 // Tunet läuft per Ingress in einem iframe derselben Herkunft wie HA: dann zählt die

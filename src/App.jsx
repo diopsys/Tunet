@@ -887,6 +887,7 @@ export function AppContent({ showOnboarding, setShowOnboarding }) {
             getEntityImageUrl={getEntityImageUrl}
             settings={Object.values(cardSettings || {}).find((c) => c?.cameraId === kameraLink.kamera) || {}}
             clipUrl={clipAdresse(kameraLink.clip, kameraLink.basis)}
+            clipHlsUrl={clipAdresse(kameraLink.clip, kameraLink.basis, 'hls')}
             t={t}
           />
         </Suspense>

@@ -15,6 +15,7 @@ export default function CameraModal({
   getEntityImageUrl,
   settings,
   clipUrl,
+  clipHlsUrl,
   t,
 }) {
   // clipUrl (z. B. Frigate-Clip aus einer Klingel-Nachricht): eigene Ansicht, dann zuerst gezeigt
@@ -141,16 +142,16 @@ export default function CameraModal({
                   {t?.('camera.clipPending') || 'Der Clip ist noch nicht fertig – gleich noch einmal laden.'}
                 </div>
               ) : (
-                <video
-                  key={refreshTs}
-                  src={`${clipUrl}${clipUrl.includes('?') ? '&' : '?'}t=${refreshTs}`}
-                  className="h-full w-full object-contain"
-                  controls
-                  autoPlay
-                  muted
-                  playsInline
-                  onError={() => setClipFehler(true)}
-                />
+                // HLS zuerst (iPhone: MP4 ohne Byte-Ranges spielt es nicht ab), MP4 als Ersatz;
+                // der Browser nimmt die erste Quelle, die er kann. Fehlt die letzte, kommt der Hinweis.
+                <video key={refreshTs} className="h-full w-full object-contain" controls autoPlay muted playsInline>
+                  {clipHlsUrl && <source src={clipHlsUrl} type="application/vnd.apple.mpegurl" />}
+                  <source
+                    src={`${clipUrl}${clipUrl.includes('?') ? '&' : '?'}t=${refreshTs}`}
+                    type="video/mp4"
+                    onError={() => setClipFehler(true)}
+                  />
+                </video>
               )
             ) : (
             <CameraFeed

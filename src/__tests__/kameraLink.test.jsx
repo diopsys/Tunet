@@ -30,6 +30,7 @@ describe('Kamera-Link aus der Adresse', () => {
   it('builds the clip address', () => {
     expect(clipAdresse('ev1', 'https://ha.example/')).toBe('https://ha.example/api/frigate/notifications/ev1/clip.mp4');
     expect(clipAdresse('ev1')).toBe('/api/frigate/notifications/ev1/clip.mp4');
+    expect(clipAdresse('ev1', '', 'hls')).toBe('/api/frigate/notifications/ev1/master.m3u8');
     expect(clipAdresse(null)).toBeNull();
   });
 
@@ -54,8 +55,11 @@ describe('Kamera-Fenster mit Clip', () => {
   const entity = { state: 'idle', attributes: { friendly_name: 'Haustür' } };
 
   it('shows the clip first and switches to the live stream', () => {
-    const { container } = render(<CameraModal show onClose={() => {}} entityId="camera.haustuer" entity={entity} clipUrl="/api/frigate/notifications/ev1/clip.mp4" />);
-    expect(container.querySelector('video').getAttribute('src')).toContain('/api/frigate/notifications/ev1/clip.mp4');
+    const { container } = render(<CameraModal show onClose={() => {}} entityId="camera.haustuer" entity={entity} clipUrl="/api/frigate/notifications/ev1/clip.mp4" clipHlsUrl="/api/frigate/notifications/ev1/master.m3u8" />);
+    // HLS zuerst (iPhone), MP4 als Ersatz
+    const quellen = [...container.querySelectorAll('video source')];
+    expect(quellen.map((q) => q.getAttribute('type'))).toEqual(['application/vnd.apple.mpegurl', 'video/mp4']);
+    expect(quellen[1].getAttribute('src')).toContain('/api/frigate/notifications/ev1/clip.mp4');
     fireEvent.click(screen.getByRole('button', { name: /Stream/ }));
     expect(container.querySelector('video')).toBeNull();
     expect(screen.getByTestId('feed')).toBeTruthy();
@@ -63,7 +67,7 @@ describe('Kamera-Fenster mit Clip', () => {
 
   it('explains a clip that is not ready yet', () => {
     const { container } = render(<CameraModal show onClose={() => {}} entityId="camera.haustuer" entity={entity} clipUrl="/clip.mp4" />);
-    fireEvent.error(container.querySelector('video'));
+    fireEvent.error(container.querySelector('video source'));
     expect(screen.getByText(/noch nicht fertig/)).toBeTruthy();
   });
 

@@ -185,6 +185,8 @@
   "calendar.title": "Calendrier",
   "calendar.today": "Aujourd'hui",
   "calendar.tomorrow": "Demain",
+  "camera.clip": "Clip",
+  "camera.clipPending": "Le clip n’est pas encore prêt – rechargez-le dans un instant.",
   "camera.gate": "Portail",
   "camera.gateAlt": "Caméra portail",
   "camera.intervalSeconds": "Actualiser toutes les (secondes)",
