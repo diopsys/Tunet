@@ -14,9 +14,12 @@ export default function CameraModal({
   conn,
   getEntityImageUrl,
   settings,
+  clipUrl,
   t,
 }) {
-  const [viewMode, setViewMode] = useState('stream');
+  // clipUrl (z. B. Frigate-Clip aus einer Klingel-Nachricht): eigene Ansicht, dann zuerst gezeigt
+  const [viewMode, setViewMode] = useState(clipUrl ? 'clip' : 'stream');
+  const [clipFehler, setClipFehler] = useState(false);
   const [refreshTs, setRefreshTs] = useState(Date.now());
   const modalTitleId = `camera-modal-title-${(entityId || 'camera').replace(/[^a-zA-Z0-9_-]/g, '-')}`;
 
@@ -73,7 +76,23 @@ export default function CameraModal({
               </div>
             </div>
 
-            <div className="grid grid-cols-[1fr_1fr_auto] gap-2 sm:flex sm:items-center">
+            <div className={`grid ${clipUrl ? 'grid-cols-[1fr_1fr_1fr_auto]' : 'grid-cols-[1fr_1fr_auto]'} gap-2 sm:flex sm:items-center`}>
+              {clipUrl && (
+                <button
+                  type="button"
+                  aria-pressed={viewMode === 'clip'}
+                  onClick={() => {
+                    setViewMode('clip');
+                    setClipFehler(false);
+                    setRefreshTs(Date.now());
+                  }}
+                  className={`rounded-xl border px-3 py-2 text-[10px] font-bold tracking-widest uppercase transition-colors sm:text-xs ${viewMode === 'clip' ? 'border-[var(--accent-color)] bg-[var(--accent-bg)] text-[var(--accent-color)]' : 'border-[var(--glass-border)] bg-[var(--glass-bg)] text-[var(--text-secondary)]'}`}
+                >
+                  <span className="inline-flex items-center gap-1">
+                    <Video className="h-3.5 w-3.5" /> {t?.('camera.clip') || 'Clip'}
+                  </span>
+                </button>
+              )}
               <button
                 type="button"
                 aria-pressed={viewMode === 'stream'}
@@ -102,7 +121,10 @@ export default function CameraModal({
               </button>
               <button
                 type="button"
-                onClick={() => setRefreshTs(Date.now())}
+                onClick={() => {
+                  setClipFehler(false);
+                  setRefreshTs(Date.now());
+                }}
                 className="rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] p-2 text-[var(--text-secondary)] transition-colors hover:text-[var(--text-primary)]"
                 title={t?.('camera.refresh') || 'Refresh'}
                 aria-label={t?.('camera.refresh') || 'Refresh'}
@@ -113,6 +135,24 @@ export default function CameraModal({
           </div>
 
           <div className="relative h-[52dvh] min-h-[240px] shrink-0 overflow-hidden rounded-2xl border border-[var(--glass-border)] bg-black/70 sm:h-[68dvh] sm:min-h-[420px]">
+            {viewMode === 'clip' ? (
+              clipFehler ? (
+                <div className="flex h-full items-center justify-center p-6 text-center text-sm text-[var(--text-secondary)]">
+                  {t?.('camera.clipPending') || 'Der Clip ist noch nicht fertig – gleich noch einmal laden.'}
+                </div>
+              ) : (
+                <video
+                  key={refreshTs}
+                  src={`${clipUrl}${clipUrl.includes('?') ? '&' : '?'}t=${refreshTs}`}
+                  className="h-full w-full object-contain"
+                  controls
+                  autoPlay
+                  muted
+                  playsInline
+                  onError={() => setClipFehler(true)}
+                />
+              )
+            ) : (
             <CameraFeed
               entityId={activeEntityId}
               entity={activeEntity}
@@ -126,6 +166,7 @@ export default function CameraModal({
               alt={name}
               t={t}
             />
+            )}
           </div>
         </>
       )}

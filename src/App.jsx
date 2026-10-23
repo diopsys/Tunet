@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useState, useMemo, useCallback, useEffect, lazy, Suspense } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { en, nb, nn, sv, de, zh, fr, es, DEFAULT_LANGUAGE, normalizeLanguage } from './i18n';
 import { LayoutGrid } from './icons';
@@ -20,6 +20,7 @@ import {
   usePages,
 } from './contexts';
 import ModalManager from './rendering/ModalManager';
+import { clipAdresse, useKameraLink } from './hooks/useKameraLink';
 
 import {
   useSmartTheme,
@@ -47,6 +48,8 @@ import {
   subscribeToOAuthTokenChanges,
 } from './services/oauthStorage';
 import { scheduleLikelyModalPrefetch, scheduleModalPrefetch } from './utils/prefetchModals';
+
+const KameraLinkModal = lazy(() => import('./modals/CameraModal'));
 
 /** @typedef {import('./types/dashboard').AppContentProps} AppContentProps */
 
@@ -225,6 +228,8 @@ export function AppContent({ showOnboarding, setShowOnboarding }) {
   const visibleEditMode = cardsOnlyMode ? false : editMode;
 
   const { activePage, setActivePage } = usePageRouting();
+  // ?kamera=…[&clip=…] in der Adresse (z. B. Klingel-Nachricht) öffnet das Kamera-Fenster
+  const [kameraLink, schliesseKameraLink] = useKameraLink();
 
   const [tempHistoryById, _setTempHistoryById] = useTempHistory(conn, cardSettings);
   const [forecastsById, _setForecastsById] = useWeatherForecast(conn, cardSettings);
@@ -865,6 +870,22 @@ export function AppContent({ showOnboarding, setShowOnboarding }) {
         cardConfig={modalManagerCardConfig}
         mediaTick={mediaTick}
       />
+      {kameraLink && entities?.[kameraLink.kamera] && (
+        <Suspense fallback={null}>
+          <KameraLinkModal
+            key={`${kameraLink.kamera}-${kameraLink.clip || 'live'}`}
+            show
+            onClose={schliesseKameraLink}
+            entityId={kameraLink.kamera}
+            entity={entities[kameraLink.kamera]}
+            conn={conn}
+            getEntityImageUrl={getEntityImageUrl}
+            settings={Object.values(cardSettings || {}).find((c) => c?.cameraId === kameraLink.kamera) || {}}
+            clipUrl={clipAdresse(kameraLink.clip, kameraLink.basis)}
+            t={t}
+          />
+        </Suspense>
+      )}
     </>
   );
 }
