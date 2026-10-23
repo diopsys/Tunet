@@ -125,7 +125,7 @@ describe('StundenplanPage im Bearbeiten-Modus', () => {
     const onSavePlans = vi.fn();
     const { rerender } = render(<StundenplanPage pageId="sp" settings={{ plans: basePlans() }} editMode onSavePlans={onSavePlans} />);
     fireEvent.click(screen.getByRole('button', { name: '+ Person' }));
-    fireEvent.change(screen.getByPlaceholderText('z. B. Felizitas'), { target: { value: 'Neu' } });
+    fireEvent.change(screen.getByPlaceholderText('z. B. Anna'), { target: { value: 'Neu' } });
     fireEvent.click(screen.getByRole('button', { name: 'Speichern' }));
     const saved = onSavePlans.mock.calls[0][0];
     expect(saved.map((p) => p.name)).toEqual(['Kind', 'Andere', 'Neu']);
@@ -148,7 +148,7 @@ describe('StundenplanPage im Bearbeiten-Modus', () => {
   it('rejects a duplicate name', () => {
     render(<StundenplanPage pageId="sp" settings={{ plans: basePlans() }} editMode onSavePlans={vi.fn()} />);
     fireEvent.click(screen.getByRole('button', { name: '+ Person' }));
-    fireEvent.change(screen.getByPlaceholderText('z. B. Felizitas'), { target: { value: 'andere' } });
+    fireEvent.change(screen.getByPlaceholderText('z. B. Anna'), { target: { value: 'andere' } });
     expect(screen.getByText('Diesen Namen gibt es schon.')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Speichern' }).disabled).toBe(true);
   });

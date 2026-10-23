@@ -342,7 +342,7 @@ export const PlanDialog = memo(function PlanDialog({ plan, plans, canDelete, onS
 
         <label className="spe-field">
           <span>Name</span>
-          <input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="z. B. Felizitas" />
+          <input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="z. B. Anna" />
         </label>
         {nameVergeben && <p className="spe-hint">Diesen Namen gibt es schon.</p>}
 
