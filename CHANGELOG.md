@@ -1,3 +1,19 @@
+## [1.30.3] — 2026-10-23
+
+### Added
+- Neue Seite „Wärmepumpe“ (Seite hinzufügen): animiertes Hydraulikschema der Daikin Altherma 3 R ECH2O mit Außengerät, Kältekreis, 3UV DHW, Bypass, Speicher mit Ladeschlange und Heizstab, Fußbodenheizung und Trinkwasser. Die Animation folgt den Live-Werten (Durchfluss, Ventilstellungen, Verdichter, Abtauen); mobil in vier Tabs
+- Neue Kacheln „Heizung“ und „Puffer“ (PR #1 von diopsys)
+- Stundenplan: mehrere Personen, eigene Zeiten, ganze Tage, Bereich „Nachmittag“ und Bearbeiten direkt in der Karte (PR #1)
+- Status-Pill „Heizungen an“ mit Soll, Ist und Ventilöffnung (PR #1)
+
+### Changed
+- PV-Karte: Entitäten einstellbar, Monat/Jahr aus der Langzeitstatistik, fehlende Prognosewerte aus der Leistungskurve (PR #1)
+- Sicherheits- und Licht-Panel per Einstellungen anpassbar (PR #1)
+
+### Fixed
+- App: Einstellungsdatenbank liegt jetzt in `/data` und bleibt bei Updates erhalten (PR #1)
+- App: Build-Abbruch durch musl-Versionskonflikt behoben (PR #1)
+
 ## [1.30.2] — 2026-10-18
 
 ### Fixed

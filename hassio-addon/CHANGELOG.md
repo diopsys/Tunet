@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.30.3
+
+### Added
+- New "Heat pump" page: animated hydraulic schema of the Daikin Altherma 3 R ECH2O (outdoor unit, refrigerant circuit, DHW valve, bypass, tank with heater, floor heating, domestic hot water) driven by live values; tabs on mobile
+- New "Heating" and "Buffer" tiles (PR #1 by diopsys)
+- Timetable: multiple people, custom times, whole days, afternoon section and in-card editing (PR #1)
+- "Heating on" status pill (PR #1)
+
+### Changed
+- PV card: configurable entities, month/year from long-term statistics, forecast values derived from the power curve (PR #1)
+- Security and light panels configurable via settings (PR #1)
+
+### Fixed
+- Settings database now stored in /data and kept across add-on updates (PR #1)
+- Add-on build no longer fails on a musl version conflict (PR #1)
+
 ## 1.30.2
 
 ### Fixed
