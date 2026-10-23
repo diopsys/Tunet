@@ -1,6 +1,6 @@
 name: 'Casa'
 description: 'A modern, responsive dashboard for Home Assistant'
-version: "1.30.3"
+version: "1.30.4"
 slug: 'tunet-gorbi87'
 url: 'https://github.com/oyvhov/Tunet'
 init: false

@@ -1,4 +1,4 @@
-import { memo, useEffect, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 
 // ── Reine Hilfsfunktionen: geben jeweils eine neue Plan-Liste zurück ──────
 
@@ -192,7 +192,7 @@ export function updateFach(plans, planId, alt, { name, emoji, color, kurz }) {
     if (color) meta.color = color;
     if (kurz?.trim()) meta.kurz = kurz.trim();
     else delete meta.kurz;
-    delete meta.label;
+    if (neu !== alt) delete meta.label;
     faecher[neu] = meta;
     next.faecher = faecher;
     return next;
@@ -264,7 +264,40 @@ export function removePlan(plans, planId) {
   return plans.filter((p) => p.id !== planId);
 }
 
+const SYMBOLE = [
+  '📘', '📚', '📖', '✏️', '📝', '📐', '➗', '🔢', '🔤', '🗣️', '🇬🇧', '🇫🇷',
+  '🔭', '🔬', '🧪', '🌍', '🌱', '💻', '🤖', '🧩', '🎨', '🖌️', '🎵', '🎹',
+  '🎸', '🥁', '🎤', '🎭', '🩰', '⚽', '🏀', '🏐', '🎾', '🏊', '🤸', '🚴',
+  '🏃', '🐴', '🐎', '🐴🤸', '🧘', '🤝', '✝️', '🍳', '📅', '⭐', '🎉', '😴',
+];
+
+function SymbolPicker({ value, onPick }) {
+  return (
+    <div className="spe-emoji-grid" role="group" aria-label="Symbol wählen">
+      {SYMBOLE.map((s) => (
+        <button
+          key={s}
+          type="button"
+          className={`spe-emoji${value === s ? ' spe-emoji-active' : ''}`}
+          aria-label={s}
+          aria-pressed={value === s}
+          onClick={() => onPick(s)}
+        >
+          {s}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 const DIALOG_CSS = `
+  .spe-emoji-grid { display: flex; flex-wrap: wrap; gap: 4px; max-height: 120px; overflow-y: auto; }
+  .spe-emoji {
+    min-width: 34px; height: 34px; padding: 0 6px; border-radius: 0.6rem; font-size: 18px; line-height: 1;
+    background: var(--glass-bg); border: 1px solid transparent; cursor: pointer;
+  }
+  .spe-emoji:hover { border-color: var(--glass-border); }
+  .spe-emoji-active { border-color: var(--accent-color, #6366f1); }
   .spe-backdrop {
     position: fixed; inset: 0; z-index: 60;
     background: rgba(0,0,0,0.45);
@@ -548,6 +581,7 @@ export const FaecherDialog = memo(function FaecherDialog({ faecher, metaFor, onS
                 <input type="color" value={color} onChange={(e) => setColor(e.target.value)} style={{ padding: 2, height: 38 }} />
               </label>
             </div>
+            <SymbolPicker value={emoji} onPick={setEmoji} />
             <div className="spe-actions">
               <span className="spe-spacer" />
               <button type="button" className="spe-btn" onClick={() => setAuswahl(null)}>Zurück</button>
@@ -586,11 +620,14 @@ function EintragDialog({ mode, title, initial, faecher, onSave, onDelete, onClos
   const [bis, setBis] = useState(initial?.bis || '');
   const [emoji, setEmoji] = useState(initial?.fach ? faecher?.[initial.fach]?.emoji || '' : '');
 
-  // Symbol des gewählten Fachs vorschlagen, solange keins eingegeben wurde
+  // `faecher` is a new object on every dashboard re-render; depending on it would overwrite typed symbols
+
+  const faecherRef = useRef(faecher);
+  faecherRef.current = faecher;
   useEffect(() => {
-    const bekannt = faecher?.[fach.trim()]?.emoji;
+    const bekannt = faecherRef.current?.[fach.trim()]?.emoji;
     if (bekannt) setEmoji(bekannt);
-  }, [fach, faecher]);
+  }, [fach]);
 
   useEscape(onClose);
 
@@ -634,6 +671,7 @@ function EintragDialog({ mode, title, initial, faecher, onSave, onDelete, onClos
           <span>Symbol</span>
           <input value={emoji} onChange={(e) => setEmoji(e.target.value)} placeholder="📘" maxLength={8} />
         </label>
+        <SymbolPicker value={emoji} onPick={setEmoji} />
 
         {mode === 'nachmittag' && (
           <div className="spe-row">

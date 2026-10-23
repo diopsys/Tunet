@@ -1,3 +1,30 @@
+const DEFAULT_HEIZUNG_SETTINGS = {
+  erzeuger: [
+    {
+      name: 'Wärmepumpe',
+      kurz: 'WP',
+      stufen: [
+        { entity: 'binary_sensor.daikin_heizung_abtauvorgang', label: 'Abtauen' },
+        { entity: 'binary_sensor.wp_heizstab_aktiv', label: 'Heizstab' },
+        { entity: 'sensor.daikin_heizung_kompressor_drehzahl', label: 'Verdichter', above: 0 },
+      ],
+      tempEntity: 'sensor.daikin_heizung_vorlauftemeratur_tv',
+      tempAlways: true,
+    },
+  ],
+  pumpen: [
+    { name: 'Umwälzpumpe', kurz: 'Pumpe', entity: 'sensor.daikin_3_r_ech2o_seriell_can_durchfluss_uart', above: 0 },
+  ],
+};
+
+const DEFAULT_SPEICHER_SETTINGS = {
+  name: 'Speicher',
+  schichten: ['sensor.daikin_heizung_dhw_tank_temp'],
+  liter: 500,
+  bezug: 12,
+  voll: 55,
+};
+
 /**
  * Handles adding selected entities/cards to the dashboard configuration.
  * Extracted from App.jsx to keep the main component lean.
@@ -359,6 +386,16 @@ export const handleAddSelected = (ctx) => {
     case 'security_panel': {
       const securityPanelCardId = `security_panel_card_${Date.now()}`;
       commitSingleCard(securityPanelCardId, {});
+      return;
+    }
+
+    case 'heizung': {
+      commitSingleCard(`heizung_card_${Date.now()}`, { heizung: DEFAULT_HEIZUNG_SETTINGS });
+      return;
+    }
+
+    case 'puffer': {
+      commitSingleCard(`puffer_card_${Date.now()}`, { puffer: DEFAULT_SPEICHER_SETTINGS });
       return;
     }
 

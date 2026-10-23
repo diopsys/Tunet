@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.30.4
+
+### Added
+- "Heating" and "Storage tank" tiles can now be added via "Add card", prefilled for the heat pump and the 500 l tank
+- Timetable: tappable symbol picker in the dialogs
+
+### Fixed
+- Timetable: a typed symbol was overwritten on the next dashboard update
+- Timetable: a subject's display name was lost when only its symbol was changed
+
 ## 1.30.3
 
 ### Added

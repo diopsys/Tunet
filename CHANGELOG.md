@@ -1,3 +1,13 @@
+## [1.30.4] — 2026-10-23
+
+### Added
+- „Heizung“ und „Speicher“ lassen sich jetzt über „Karte hinzufügen“ anlegen, vorbelegt mit der Wärmepumpe (Verdichter, Heizstab, Abtauen, Vorlauf, Pumpe) bzw. dem 500-l-Speicher
+- Stundenplan: Symbol-Auswahl zum Antippen in den Dialogen (inkl. 🐎 und 🐴🤸 für Voltigieren)
+
+### Fixed
+- Stundenplan: eingegebenes Symbol wurde beim nächsten Dashboard-Update sofort überschrieben
+- Stundenplan: Anzeigename eines Fachs (z. B. „Sichere Basis“) ging verloren, wenn nur das Symbol geändert wurde
+
 ## [1.30.3] — 2026-10-23
 
 ### Added

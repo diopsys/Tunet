@@ -1255,6 +1255,20 @@ function AddCardContent({
                     onSelect={setAddCardType}
                   />
                   <TypeButton
+                    type="heizung"
+                    icon={Flame}
+                    label="Heizung"
+                    isActive={addCardType === 'heizung'}
+                    onSelect={setAddCardType}
+                  />
+                  <TypeButton
+                    type="puffer"
+                    icon={Thermometer}
+                    label="Speicher"
+                    isActive={addCardType === 'puffer'}
+                    onSelect={setAddCardType}
+                  />
+                  <TypeButton
                     type="navimow"
                     icon={Sprout}
                     label={t('addCard.type.navimow') || 'Navimow'}
@@ -1338,6 +1352,10 @@ function AddCardContent({
                 renderSimpleAddSection(ArrowUpDown, 'Beschattung Panel hinzufügen (EG / OG / Automatik)', 'Beschattung Panel hinzufügen')
               ) : addCardType === 'security_panel' ? (
                 renderSimpleAddSection(Shield, 'Sicherheit Panel hinzufügen', 'Sicherheit Panel hinzufügen')
+              ) : addCardType === 'heizung' ? (
+                renderSimpleAddSection(Flame, 'Heizung-Kachel: Wärmepumpe mit Zustand (Verdichter, Heizstab, Abtauen), Vorlauf und Pumpe', 'Heizung hinzufügen')
+              ) : addCardType === 'puffer' ? (
+                renderSimpleAddSection(Thermometer, 'Speicher-Kachel: Energieinhalt und 24-h-Verlauf des 500-l-Speichers', 'Speicher hinzufügen')
               ) : addCardType === 'navimow' ? (
                 renderSimpleAddSection(Sprout, 'Navimow Mähroboter Karte hinzufügen', t('addCard.type.navimow') || 'Navimow hinzufügen')
               ) : addCardType === 'room' ? (

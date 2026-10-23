@@ -1,7 +1,8 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import {
+import EintragDialog, {
   STANDARD_STUNDEN,
+  updateFach,
   addPlan,
   removePlan,
   setAfternoonEntry,
@@ -156,5 +157,29 @@ describe('StundenplanPage im Bearbeiten-Modus', () => {
   it('offers no editing outside edit mode', () => {
     render(<StundenplanPage pageId="sp" settings={{ plans: basePlans() }} onSavePlans={vi.fn()} />);
     expect(screen.queryByRole('button', { name: /hinzufügen/ })).toBeNull();
+  });
+});
+
+describe('Symbole', () => {
+  it('keeps a typed symbol when the parent re-renders with a new subject list', () => {
+    const faecher = () => ({ Mathe: { emoji: '➗', color: '#000' } });
+    const props = { mode: 'stunde', title: 'Stunde', initial: { fach: 'Mathe' }, onSave: vi.fn(), onClose: vi.fn() };
+    const { rerender } = render(<EintragDialog {...props} faecher={faecher()} />);
+    const symbol = screen.getByPlaceholderText('📘');
+    fireEvent.change(symbol, { target: { value: '🚀' } });
+    rerender(<EintragDialog {...props} faecher={faecher()} />);
+    expect(symbol).toHaveValue('🚀');
+  });
+
+  it('picks a symbol from the selection', () => {
+    render(<EintragDialog mode="stunde" title="Stunde" initial={null} faecher={{}} onSave={vi.fn()} onClose={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: '⚽' }));
+    expect(screen.getByPlaceholderText('📘')).toHaveValue('⚽');
+  });
+
+  it('keeps the display label when only the symbol changes', () => {
+    const plans = [{ id: 'p', stunden: [], eintraege: {}, faecher: { SichBasis: { emoji: '🤝', label: 'Sichere Basis', color: '#000' } } }];
+    const next = updateFach(plans, 'p', 'SichBasis', { name: 'SichBasis', emoji: '🧩', color: '#000', kurz: '' });
+    expect(next[0].faecher.SichBasis).toMatchObject({ emoji: '🧩', label: 'Sichere Basis' });
   });
 });
