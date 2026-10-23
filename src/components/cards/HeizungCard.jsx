@@ -8,14 +8,14 @@ import { getIconComponent } from '../../icons';
  * {
  *   url: '/heizung?tab=anlage',            // Tippen öffnet diese HA-Seite (optional)
  *   erzeuger: [{
- *     name, icon?,
+ *     name, kurz?, icon?,               // kurz: Name auf schmalen Kacheln (Handy)
  *     stufen: [{ entity, label, above?, min?, passive? }],  // erste zutreffende Stufe = Zustand
  *     tempEntity?, tempAlways?,            // Temperatur nur im Betrieb bzw. immer
  *   }],
  *   zustaende: [{ name, entity, warn? }],  // z. B. Notkühlung; warn = rot, solange an
  *   ventile: { name?, icon?, url?, entities: [...] },  // Anzahl offener Ventile (Wert > 0 bzw. „on“);
  *                                          // Symbol Standard Heizkörper, url = eigenes Ziel beim Tippen
- *   pumpen:   [{ name, entity, above?, min? }],   // laufend = an bzw. Wert über Schwelle
+ *   pumpen:   [{ name, kurz?, entity, above?, min? }],   // laufend = an bzw. Wert über Schwelle
  *   modi:     [{ name, entity, invert? }], // Betriebsarten (Anzeige), invert: aus = aktiv
  * }
  *
@@ -134,6 +134,14 @@ const MODUS_ICON = {
   urlaub: 'mdi:palm-tree',
 };
 
+// Name, auf schmalen Kacheln (Container unter 15rem) die Kurzform
+const Name = ({ item }) => (item.kurz ? (
+  <>
+    <span className="hidden @min-[15rem]:inline">{item.name}</span>
+    <span className="@min-[15rem]:hidden">{item.kurz}</span>
+  </>
+) : item.name);
+
 const ErzeugerZeile = memo(({ item, entities }) => {
   const status = erzeugerStatus(item, entities);
   const Icon = item.icon ? getIconComponent(item.icon, Flame) : Flame;
@@ -143,9 +151,9 @@ const ErzeugerZeile = memo(({ item, entities }) => {
   // Zustand neben der Temperatur nur, wenn er mehr sagt als „an“
   const zusatz = status.active && status.label !== 'an' ? status.label : null;
   return (
-    <div className="flex min-w-0 items-center gap-2">
+    <div className="flex min-w-0 items-center gap-1.5 @min-[15rem]:gap-2">
       <Icon className={`h-3.5 w-3.5 flex-shrink-0 stroke-[1.5px] ${status.active ? 'animate-pulse' : ''}`} style={{ color: farbe }} />
-      <span className="truncate text-[11px] font-medium text-[var(--text-primary)]">{item.name}</span>
+      <span className="truncate text-[11px] font-medium text-[var(--text-primary)]"><Name item={item} /></span>
       <span className="flex-shrink-0 whitespace-nowrap text-[11px] font-semibold" style={{ color: showTemp ? 'var(--text-primary)' : farbe }}>
         {showTemp ? formatTemp(temp) : status.label}
       </span>
@@ -154,24 +162,29 @@ const ErzeugerZeile = memo(({ item, entities }) => {
   );
 });
 
-const PumpenZeile = ({ name, on }) => (
+const PumpenZeile = ({ item, on }) => (
   <div className="flex min-w-0 items-center gap-1.5">
     <span className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${on ? 'animate-pulse bg-green-400' : 'bg-gray-500 opacity-60'}`} />
-    <span className={`truncate text-[11px] font-medium ${on ? 'text-green-400' : 'text-[var(--text-muted)] opacity-70'}`}>{name}</span>
+    <span className={`truncate text-[11px] font-medium ${on ? 'text-green-400' : 'text-[var(--text-muted)] opacity-70'}`}><Name item={item} /></span>
   </div>
 );
 
-const PumpenKurz = ({ pumpen, entities }) => {
-  const laufen = pumpen.filter((p) => isActive(entities[p.entity], p)).map((p) => p.name);
-  return (
-    <div className="flex min-w-0 items-center gap-1.5 @min-[15rem]:hidden">
-      <span className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${laufen.length ? 'animate-pulse bg-green-400' : 'bg-gray-500 opacity-60'}`} />
-      <span className={`truncate text-[11px] font-medium ${laufen.length ? 'text-green-400' : 'text-[var(--text-muted)] opacity-70'}`}>
-        Pumpen: {laufen.length ? laufen.join(', ') : 'aus'}
-      </span>
-    </div>
-  );
-};
+const Betriebsarten = ({ modi, entities, className }) => (
+  <div className={`flex items-center gap-[3px] @min-[15rem]:gap-1.5 ${className}`}>
+    {modi.map((m) => {
+      const e = entities[m.entity];
+      const on = isUnavailable(e) ? false : (e.state === 'on') !== !!m.invert;
+      const Icon = getIconComponent(m.icon || MODUS_ICON[m.name.toLowerCase()] || 'mdi:toggle-switch-outline', Settings);
+      return (
+        <span key={m.name} title={`${m.name}: ${on ? 'an' : 'aus'}`} aria-label={`${m.name} ${on ? 'an' : 'aus'}`}
+          className="flex h-[18px] w-[18px] items-center justify-center rounded-md @min-[15rem]:h-5 @min-[15rem]:w-5"
+          style={on ? { backgroundColor: 'rgba(34,197,94,0.14)', color: '#4ade80' } : { backgroundColor: 'var(--glass-bg-hover)', color: 'var(--text-muted)', opacity: 0.6 }}>
+          <Icon className="h-3 w-3" />
+        </span>
+      );
+    })}
+  </div>
+);
 
 const HeizungCard = ({ cardId, dragProps, controls, cardStyle, editMode, entities, settings, name }) => {
   const config = resolveHeizungConfig(settings);
@@ -221,17 +234,19 @@ const HeizungCard = ({ cardId, dragProps, controls, cardStyle, editMode, entitie
           <Settings className="h-4 w-4" /> Keine Entitäten eingestellt
         </div>
       ) : (
-        // Schmale Kachel (Handy): Erzeuger über die volle Breite, statt der Pumpenliste
-        // eine Zeile mit den laufenden Pumpen
-        <div className={`grid min-h-0 flex-1 items-center gap-3 grid-cols-1 ${config.pumpen.length > 0 ? '@min-[15rem]:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]' : ''}`}>
+        // Schmale Kachel (Handy): Betriebsarten links unter den Erzeugern statt als eigene
+        // Zeile unten – sonst reicht die Höhe nicht und die Pumpenliste läuft darunter
+        <div className={`grid min-h-0 flex-1 items-center gap-2 @min-[15rem]:gap-3 ${config.pumpen.length > 0 ? 'grid-cols-[minmax(0,1fr)_auto] @min-[15rem]:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]' : 'grid-cols-1'}`}>
           <div className="flex min-w-0 flex-col gap-1 @min-[15rem]:gap-1.5">
             {config.erzeuger.map((item) => <ErzeugerZeile key={item.name} item={item} entities={entities} />)}
-            {config.pumpen.length > 0 && <PumpenKurz pumpen={config.pumpen} entities={entities} />}
+            {config.modi.length > 0 && warnungen.length === 0 && (
+              <Betriebsarten modi={config.modi} entities={entities} className="mt-1 @min-[15rem]:hidden" />
+            )}
           </div>
           {config.pumpen.length > 0 && (
-            <div className="hidden min-w-0 flex-col gap-1 @min-[15rem]:flex">
+            <div className="flex min-w-0 flex-col gap-0.5 @min-[15rem]:gap-1">
               <SectionLabel>Pumpen</SectionLabel>
-              {config.pumpen.map((p) => <PumpenZeile key={p.name} name={p.name} on={isActive(entities[p.entity], p)} />)}
+              {config.pumpen.map((p) => <PumpenZeile key={p.name} item={p} on={isActive(entities[p.entity], p)} />)}
             </div>
           )}
         </div>
@@ -243,20 +258,7 @@ const HeizungCard = ({ cardId, dragProps, controls, cardStyle, editMode, entitie
           <span className="truncate">{warnungen.map((w) => w.name).join(', ')} aktiv</span>
         </div>
       ) : config.modi.length > 0 && (
-        <div className="flex items-center gap-1.5">
-          {config.modi.map((m) => {
-            const e = entities[m.entity];
-            const on = isUnavailable(e) ? false : (e.state === 'on') !== !!m.invert;
-            const Icon = getIconComponent(m.icon || MODUS_ICON[m.name.toLowerCase()] || 'mdi:toggle-switch-outline', Settings);
-            return (
-              <span key={m.name} title={`${m.name}: ${on ? 'an' : 'aus'}`} aria-label={`${m.name} ${on ? 'an' : 'aus'}`}
-                className="flex h-5 w-5 items-center justify-center rounded-md"
-                style={on ? { backgroundColor: 'rgba(34,197,94,0.14)', color: '#4ade80' } : { backgroundColor: 'var(--glass-bg-hover)', color: 'var(--text-muted)', opacity: 0.6 }}>
-                <Icon className="h-3 w-3" />
-              </span>
-            );
-          })}
-        </div>
+        <Betriebsarten modi={config.modi} entities={entities} className="hidden @min-[15rem]:flex" />
       )}
     </div>
   );

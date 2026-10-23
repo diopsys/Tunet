@@ -93,15 +93,23 @@ describe('HeizungCard', () => {
     expect(screen.getAllByText('Kompressor').some((el) => el.className.includes('text-orange-400'))).toBe(true); // Zusatz beim Explorer
     expect(screen.getByText('Freigabe')).toBeTruthy();
     expect(screen.getByText('2/3')).toBeTruthy(); // offene von erreichbaren Ventilen
-    expect(screen.getByLabelText('Warmwasser an')).toBeTruthy();
-    expect(screen.getByLabelText('Heizkreis an')).toBeTruthy(); // invertiert: Schalter aus = an
+    expect(screen.getAllByLabelText('Warmwasser an').length).toBeGreaterThan(0);
+    expect(screen.getAllByLabelText('Heizkreis an').length).toBeGreaterThan(0); // invertiert: Schalter aus = an
     // alle Pumpen gelistet, laufende grün
     expect(screen.getByText('Pumpen')).toBeTruthy();
     expect(screen.getAllByText('Heizkreis').some((el) => el.className.includes('text-green-400'))).toBe(true);
     expect(screen.getByText('Zirkulation').className).not.toContain('text-green-400');
     expect(screen.queryByText(/Notkühlung/)).toBeNull(); // nur sichtbar, wenn aktiv
-    // schmale Kachel: Kurzzeile mit den laufenden Pumpen (per Container-Query statt Liste)
-    expect(screen.getByText('Pumpen: Heizkreis, Kompressor')).toBeTruthy();
+  });
+
+  it('offers short names and keeps the modes clear of the pump list on narrow tiles', () => {
+    const kurz = { ...heizung, erzeuger: heizung.erzeuger.map((e) => (e.name === 'Gaskessel' ? { ...e, kurz: 'Gas' } : e)) };
+    render(<HeizungCard cardId="heizung_card_1" entities={entities} settings={{ heizung: kurz }} />);
+    // beide Formen im DOM, die Container-Query blendet je nach Breite eine aus
+    expect(screen.getByText('Gaskessel').className).toContain('@min-[15rem]:inline');
+    expect(screen.getByText('Gas').className).toContain('@min-[15rem]:hidden');
+    // Betriebsarten zweimal: links in der schmalen, unten in der breiten Kachel
+    expect(screen.getAllByLabelText('Warmwasser an')).toHaveLength(2);
   });
 
   it('replaces the bottom row with a warning while emergency cooling is active', () => {
