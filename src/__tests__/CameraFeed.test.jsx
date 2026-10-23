@@ -116,6 +116,31 @@ describe('camera stream source selection', () => {
 });
 
 describe('CameraFeed', () => {
+  it('signs the snapshot path including the cache buster', async () => {
+    // HA lehnt signierte Adressen ab (403), wenn nach dem Signieren Parameter dazukommen
+    const sendMessagePromise = vi.fn(async (message) => {
+      if (message.type === 'camera/capabilities') return { frontend_stream_types: [] };
+      if (message.type === 'auth/sign_path') return { path: `${message.path}&authSig=signed` };
+      return undefined;
+    });
+    render(
+      <CameraFeed
+        entityId="camera.front"
+        entity={{ state: 'idle', attributes: {} }}
+        conn={{ sendMessagePromise }}
+        getEntityImageUrl={(url) => url}
+        settings={{ cameraStreamEngine: 'snapshot' }}
+        refreshKey={42}
+        alt="Front camera"
+        t={(key) => key}
+      />
+    );
+    await waitFor(() => {
+      expect(screen.getByAltText('Front camera')).toHaveAttribute('src', '/api/camera_proxy/camera.front?_ts=42&authSig=signed');
+    });
+    expect(sendMessagePromise).toHaveBeenCalledWith({ type: 'auth/sign_path', path: '/api/camera_proxy/camera.front?_ts=42' });
+  });
+
   it('keeps a saved MSE player active and applies an explicit mode selection', async () => {
     const sendMessagePromise = vi.fn(async (message) => {
       if (message.type === 'camera/capabilities') {
@@ -254,10 +279,9 @@ describe('CameraFeed', () => {
     });
 
     const snapshot = screen.getByRole('img', { name: 'Front camera' });
-    expect(snapshot).toHaveAttribute(
-      'src',
-      'http://ha.local/api/camera_proxy/camera.front?authSig=signed&_ts=123'
-    );
+    // _ts wird mitsigniert, die signierte Adresse bleibt unverändert
+    expect(snapshot).toHaveAttribute('src', 'http://ha.local/api/camera_proxy/camera.front?authSig=signed');
+    expect(sendMessagePromise).toHaveBeenCalledWith({ type: 'auth/sign_path', path: '/api/camera_proxy/camera.front?_ts=123' });
     fireEvent.load(snapshot);
 
     expect(sendMessagePromise).toHaveBeenCalledWith({
