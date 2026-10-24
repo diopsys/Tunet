@@ -14,6 +14,8 @@ ingress: true
 ingress_port: 3002
 panel_icon: 'mdi:view-dashboard-variant'
 panel_title: 'Tunet'
+# Seitenleisten-Eintrag auch für Nicht-Admins (Familie); Einstellungen bleiben per PIN/Rechten geschützt
+panel_admin: false
 ports:
   3002/tcp: null
 ports_description:
