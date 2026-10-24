@@ -191,6 +191,8 @@
   "calendar.title": "Kalender",
   "calendar.today": "I dag",
   "calendar.tomorrow": "I morgon",
+  "camera.clip": "Klipp",
+  "camera.clipPending": "Klippet er ikkje klart enno – last inn på nytt om litt.",
   "camera.gate": "Port",
   "camera.gateAlt": "Portkamera",
   "camera.intervalSeconds": "Oppdater kvart (sekund)",

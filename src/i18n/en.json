@@ -188,6 +188,8 @@
   "calendar.largeCalendarHint": "Show Outlook-style week time-grid view",
   "calendar.today": "Today",
   "calendar.tomorrow": "Tomorrow",
+  "camera.clip": "Clip",
+  "camera.clipPending": "The clip is not ready yet – load it again in a moment.",
   "camera.gate": "Gate",
   "camera.gateAlt": "Gate camera",
   "camera.intervalSeconds": "Refresh every (seconds)",

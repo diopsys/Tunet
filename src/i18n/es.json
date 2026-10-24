@@ -186,6 +186,8 @@
   "calendar.largeCalendarHint": "Muestra una vista semanal con rejilla horaria estilo Outlook",
   "calendar.today": "Hoy",
   "calendar.tomorrow": "Mañana",
+  "camera.clip": "Clip",
+  "camera.clipPending": "El clip aún no está listo; vuelve a cargarlo en un momento.",
   "camera.gate": "Puerta",
   "camera.gateAlt": "Cámara de la puerta",
   "camera.intervalSeconds": "Actualizar cada (segundos)",

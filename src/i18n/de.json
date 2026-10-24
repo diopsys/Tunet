@@ -185,6 +185,8 @@
   "calendar.title": "Kalender",
   "calendar.today": "Heute",
   "calendar.tomorrow": "Morgen",
+  "camera.clip": "Clip",
+  "camera.clipPending": "Der Clip ist noch nicht fertig – gleich noch einmal laden.",
   "camera.gate": "Tor",
   "camera.gateAlt": "Torkamera",
   "camera.intervalSeconds": "Aktualisieren alle (Sekunden)",

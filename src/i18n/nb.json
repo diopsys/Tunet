@@ -779,6 +779,8 @@
   "updates.to": "Til",
   "updates.readMore": "Les mer",
   "map.lastSeenHere": "Sist sett her",
+  "camera.clip": "Klipp",
+  "camera.clipPending": "Klippet er ikke klart ennå – last inn på nytt om litt.",
   "camera.intervalSeconds": "Oppdater hvert (sekund)",
   "camera.unavailable": "Kamera ikke tilgjengelig",
   "camera.gate": "Porten",

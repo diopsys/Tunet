@@ -162,6 +162,8 @@
   "calendar.title": "日历",
   "calendar.today": "今天",
   "calendar.tomorrow": "明天",
+  "camera.clip": "片段",
+  "camera.clipPending": "片段尚未就绪，请稍后重新加载。",
   "camera.gate": "门",
   "camera.gateAlt": "门禁摄像头",
   "camera.intervalSeconds": "每（秒）刷新一次",

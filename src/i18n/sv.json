@@ -185,6 +185,8 @@
   "calendar.title": "Kalender",
   "calendar.today": "Idag",
   "calendar.tomorrow": "Imorgon",
+  "camera.clip": "Klipp",
+  "camera.clipPending": "Klippet är inte klart än – ladda om om en stund.",
   "camera.gate": "Port",
   "camera.gateAlt": "Portkamera",
   "camera.intervalSeconds": "Uppdatera var (sekund)",
