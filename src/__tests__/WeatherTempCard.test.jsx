@@ -138,6 +138,29 @@ describe('WeatherTempCard', () => {
     expect(onOpen).toHaveBeenCalledOnce();
   });
 
+  it('shows a compact forecast page on narrow mobile cards', () => {
+    // 2-Spalten-Kachel am Handy: kein Kopf mit Symbol/Temperatur, Umschalter oben, drei Einträge
+    const { container } = renderCard({
+      isMobile: true,
+      forecastsById: {
+        'weather.home': {
+          hourly: [
+            { datetime: '2026-08-21T13:00:00+02:00', temperature: 13, condition: 'sunny' },
+            { datetime: '2026-08-21T14:00:00+02:00', temperature: 14, condition: 'rainy' },
+            { datetime: '2026-08-21T15:00:00+02:00', temperature: 15, condition: 'rainy' },
+            { datetime: '2026-08-21T16:00:00+02:00', temperature: 16, condition: 'rainy' },
+          ],
+          daily: [],
+        },
+      },
+    });
+    swipeCard(container, 'left');
+    expect(screen.getByRole('button', { name: 'Timar' })).toBeInTheDocument();
+    expect(['13°C', '14°C', '15°C'].every((v) => screen.queryByText(v))).toBe(true);
+    expect(screen.queryByText('16°C')).not.toBeInTheDocument();
+    expect(screen.queryByText('Delvis skya')).not.toBeInTheDocument(); // kein Zustand-Kopf
+  });
+
   it('supports forecast switching on the compact card', () => {
     const { container } = renderCard({
       cardSettings: { weather_home: { weatherId: 'weather.home', size: 'small' } },

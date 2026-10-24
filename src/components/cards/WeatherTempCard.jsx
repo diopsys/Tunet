@@ -255,7 +255,7 @@ const WeatherTempCard = memo(
         ? 3
         : 2
       : isMobile && !isFullWidthMobile
-        ? 2
+        ? 3
         : 4;
     const forecastItems = (forecastView === 'hourly' ? hourlyForecast : dailyForecast)
       .map((entry, index) => {
@@ -495,6 +495,9 @@ const WeatherTempCard = memo(
     }
 
     const largePadding = isMobile ? (isFullWidthMobile ? 'px-7 py-5' : 'p-5') : 'p-7';
+    // Schmale Kachel (2 Spalten am Handy): Vorhersage-Seite ohne Kopf mit Symbol/Temperatur –
+    // die stehen auf der ersten Seite, sonst reicht die Höhe nicht
+    const schmal = isMobile && !isFullWidthMobile;
     const graphMargins = isMobile
       ? isFullWidthMobile
         ? '-mx-7 -mb-5'
@@ -523,7 +526,7 @@ const WeatherTempCard = memo(
         <div
           ref={swipeContentRef}
           data-testid="weather-swipe-content"
-          className={`weather-card-swipe-content absolute inset-0 z-10 flex h-full flex-col justify-between ${largePadding} ${swipeAnimation}`}
+          className={`weather-card-swipe-content absolute inset-0 z-10 flex h-full flex-col justify-between ${schmal && cardView === 'forecast' ? 'px-4 pt-4 pb-5' : largePadding} ${swipeAnimation}`}
         >
           {cardView === 'current' ? (
             <>
@@ -583,6 +586,7 @@ const WeatherTempCard = memo(
             </>
           ) : (
             <>
+              {!schmal && (
               <div className="relative z-10 flex items-start justify-between gap-4">
                 <div className="min-w-0 flex-1">
                   <div
@@ -610,8 +614,9 @@ const WeatherTempCard = memo(
                   </span>
                 </div>
               </div>
-              <div className="relative z-10 mt-auto flex min-h-0 flex-col gap-2">
-                <div className="flex justify-end">
+              )}
+              <div className={`relative z-10 flex min-h-0 flex-col ${schmal ? 'h-full justify-between gap-1' : 'mt-auto gap-2'}`}>
+                <div className={`flex ${schmal ? 'justify-center' : 'justify-end'}`}>
                   <ForecastTypeToggle
                     forecastView={forecastView}
                     setForecastView={setForecastView}
