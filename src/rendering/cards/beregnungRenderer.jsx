@@ -1,14 +1,8 @@
 import { memo } from 'react';
 import { Droplets } from '../../icons';
 import { getSettings } from '../helpers';
-
-const ZONES = [
-  { key: 'z1', name: 'Terrasse rechts',   sensorId: 'binary_sensor.irrigation_unlimited_c1_z1', smartMinId: 'sensor.smart_irrigation_terrasse_rechts_min', color: '#34d399' },
-  { key: 'z3', name: 'Terrasse links',    sensorId: 'binary_sensor.irrigation_unlimited_c1_z3', smartMinId: 'sensor.smart_irrigation_terrasse_links_min',  color: '#60a5fa' },
-  { key: 'z2', name: 'Rasenfläche',       sensorId: 'binary_sensor.irrigation_unlimited_c1_z2', smartMinId: 'sensor.smart_irrigation_rasenflache_min',     color: '#a78bfa' },
-  { key: 'z4', name: 'Vorgarten rechts',  sensorId: 'binary_sensor.irrigation_unlimited_c1_z4', smartMinId: null, color: '#f59e0b' },
-  { key: 'z5', name: 'Vorgarten links',   sensorId: 'binary_sensor.irrigation_unlimited_c1_z5', smartMinId: null, color: '#fb923c' },
-];
+import { openHaPath } from '../../components/cards/HeizungCard';
+import { beregnungAktiv, beregnungWert, resolveBeregnungConfig, zonenName } from '../../utils/beregnungConfig';
 
 const BeregnungCard = memo(function BeregnungCard({
   cardId,
@@ -20,23 +14,31 @@ const BeregnungCard = memo(function BeregnungCard({
   entities,
   onOpen,
   isTwoColMobile = false,
+  settings,
 }) {
   const name = customNames?.[cardId] || 'Beregnung';
   const isUltraCompact = isTwoColMobile;
+  const config = resolveBeregnungConfig(settings);
 
-  const masterActive = entities?.['binary_sensor.beregung_master_status']?.state === 'on';
-  const rain = entities?.['sensor.gw2000a_daily_rain']?.state;
-  const bucket = entities?.['sensor.rasenflache_bucket']?.state;
-  const totalMin = entities?.['sensor.beregnung_gesamtzeit_minuten']?.state;
+  const masterActive = beregnungAktiv(entities, config);
+  const rain = beregnungWert(entities, config.regen);
+  const bucket = beregnungWert(entities, config.vorrat);
+  const totalMin = beregnungWert(entities, config.gesamt);
+  const evaporation = beregnungWert(entities, config.verdunstung);
 
-  const activeZones = ZONES.filter((z) => entities?.[z.sensorId]?.state === 'on').map((z) => ({
-    ...z,
-    timeRemaining: entities?.[z.sensorId]?.attributes?.time_remaining,
+  const activeZones = config.zonen.filter((z) => entities?.[z.entity]?.state === 'on').map((z) => ({
+    key: z.entity,
+    name: zonenName(entities, z),
+    color: z.color,
+    timeRemaining: entities?.[z.entity]?.attributes?.time_remaining,
   }));
 
   const smartMax = Math.max(
-    ...ZONES.map((z) => (z.smartMinId ? parseFloat(entities?.[z.smartMinId]?.state) || 0 : 0))
+    0,
+    ...config.zonen.map((z) => (z.smartMin ? parseFloat(entities?.[z.smartMin]?.state) || 0 : 0))
   );
+  // Tropfen-Symbol öffnet ein eigenes Ziel (z. B. das Beregnungs-Panel), die Karte den Dialog
+  const panelUrl = !editMode ? config.url : null;
 
   const iconColor = masterActive ? '#34d399' : 'var(--text-muted)';
   const iconBg = masterActive ? 'rgba(52,211,153,0.12)' : 'rgba(127,127,127,0.1)';
@@ -58,6 +60,14 @@ const BeregnungCard = memo(function BeregnungCard({
           <div
             className={`transition-transform duration-500 group-hover:scale-110 ${isUltraCompact ? 'rounded-lg p-2' : 'rounded-2xl p-3'}`}
             style={{ backgroundColor: iconBg, color: iconColor }}
+            {...(panelUrl ? {
+              role: 'button',
+              tabIndex: 0,
+              title: `${name} – Dashboard öffnen`,
+              'aria-label': `${name} – Dashboard öffnen`,
+              onClick: (e) => { e.stopPropagation(); openHaPath(panelUrl); },
+              onKeyDown: (e) => { e.stopPropagation(); if (e.key === 'Enter') openHaPath(panelUrl); },
+            } : {})}
           >
             <Droplets className={isUltraCompact ? 'h-3 w-3' : 'h-5 w-5'} style={{ strokeWidth: 1.5 }} />
           </div>
@@ -121,6 +131,12 @@ const BeregnungCard = memo(function BeregnungCard({
               <span className={`font-light text-blue-400 ${isUltraCompact ? 'text-sm' : 'text-lg'}`}>{rain} mm</span>
             </div>
           )}
+          {evaporation != null && (
+            <div className="flex flex-col">
+              <span className="text-[9px] font-bold tracking-wide text-[var(--text-muted)] uppercase">Verdunstung</span>
+              <span className={`font-light text-amber-400 ${isUltraCompact ? 'text-sm' : 'text-lg'}`}>{evaporation} mm</span>
+            </div>
+          )}
           {bucket != null && (
             <div className="flex flex-col">
               <span className="text-[9px] font-bold tracking-wide text-[var(--text-muted)] uppercase">Vorrat</span>
@@ -135,7 +151,7 @@ const BeregnungCard = memo(function BeregnungCard({
 
 export function renderBeregnungCard(cardId, dragProps, getControls, cardStyle, settingsKey, ctx) {
   const { editMode, cardSettings, customNames, entities, setShowBeregnungModal, isTwoColMobile, t } = ctx;
-  getSettings(cardSettings, settingsKey, cardId);
+  const settings = getSettings(cardSettings, settingsKey, cardId);
 
   return (
     <BeregnungCard
@@ -149,6 +165,7 @@ export function renderBeregnungCard(cardId, dragProps, getControls, cardStyle, s
       entities={entities}
       onOpen={() => setShowBeregnungModal?.(cardId)}
       isTwoColMobile={isTwoColMobile}
+      settings={settings}
       t={t}
     />
   );
