@@ -171,6 +171,22 @@ describe('Symbole', () => {
     expect(symbol).toHaveValue('🚀');
   });
 
+  it('suggests a matching symbol for a new subject and keeps an own choice', () => {
+    const onSave = vi.fn();
+    render(<EintragDialog mode="nachmittag" title="Nachmittag" initial={null} faecher={{}} onSave={onSave} onClose={vi.fn()} />);
+    const name = screen.getByPlaceholderText('z. B. Mathematik');
+    const symbol = screen.getByPlaceholderText('📘');
+    fireEvent.change(name, { target: { value: 'Schwimmen' } });
+    expect(symbol).toHaveValue('🏊');
+    expect(screen.getByText('Symbol (automatisch)')).toBeTruthy();
+    fireEvent.change(name, { target: { value: 'Tennis' } });
+    expect(symbol).toHaveValue('🎾'); // folgt dem Namen, solange nichts selbst gewählt ist
+    fireEvent.click(screen.getByRole('button', { name: '⭐' }));
+    fireEvent.change(name, { target: { value: 'Tennis-Turnier' } });
+    expect(symbol).toHaveValue('⭐'); // eigene Wahl bleibt
+    expect(screen.queryByText('Symbol (automatisch)')).toBeNull();
+  });
+
   it('picks a symbol from the selection', () => {
     render(<EintragDialog mode="stunde" title="Stunde" initial={null} faecher={{}} onSave={vi.fn()} onClose={vi.fn()} />);
     fireEvent.click(screen.getByRole('button', { name: '⚽' }));
