@@ -8,6 +8,7 @@ import DragOverlaySVG from './DragOverlaySVG';
 import EditToolbar from './EditToolbar';
 import SettingsMenuControl from './SettingsMenuControl';
 import { PageNavigation } from '../components';
+import { useHaKopfleiste } from '../hooks/useHaKopfleiste';
 import DashboardGrid from '../rendering/DashboardGrid';
 import PinLockModal from '../components/ui/PinLockModal';
 
@@ -30,6 +31,8 @@ const CARDS_ONLY_LONG_PRESS_IGNORE_SELECTOR = [
 
 /** @param {any} props */
 export default function DashboardLayout(props) {
+  // als HA-App am Handy: HA-Kopfleiste über dem Panel ausblenden
+  useHaKopfleiste();
   const {
     resolvedAppFontFamily,
     editMode,
