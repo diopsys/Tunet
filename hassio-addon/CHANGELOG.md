@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.31.0
+
+### Added
+- Open the camera dialog via URL, e.g. from a doorbell notification (`?kamera=camera.x`, optional `&clip=<frigate event>` with clip view)
+- HA app on phones: the HA header above the Tunet panel is hidden (kiosk mode); the sidebar still opens by swiping
+- Timetable: whole days can be edited directly via the cell
+
+### Changed
+- Group pills turn grey when nothing matches
+- Weather tile on phones (2 columns): forecast page without header, three instead of two entries
+
+### Fixed
+- Camera snapshot stayed empty (403) because the cache parameter was appended after signing
+- Card links (heating, buffer, PV icon) only accept HA paths or http(s)
+
 ## 1.30.4
 
 ### Added

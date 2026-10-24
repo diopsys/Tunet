@@ -1,3 +1,18 @@
+## [1.31.0] — 2026-10-24
+
+### Added
+- Kamera-Fenster per Adresse öffnen, z. B. aus einer Klingel-Benachrichtigung (`?kamera=camera.x`, optional `&clip=<frigate-ereignis>` mit Clip-Ansicht) (#4)
+- HA-App am Handy: HA-Kopfleiste über dem Tunet-Panel wird ausgeblendet (Kiosk-Modus), Menü weiter per Wischen (#6)
+- Stundenplan: ganze Tage lassen sich direkt über die Zelle bearbeiten (#3)
+
+### Changed
+- Gruppen-Pills werden grau, wenn nichts zutrifft (z. B. „Heizungen an“ bei 0) (#3)
+- Wetterkachel am Handy (2 Spalten): Vorhersage-Seite ohne Kopf, drei statt zwei Einträge (#7)
+
+### Fixed
+- Kamera-Schnappschuss blieb leer („Stream nicht verfügbar“, 403), weil der Cache-Zusatz nach dem Signieren angehängt wurde (#5)
+- Kartenziele (Heizung, Puffer, PV-Symbol) nur noch als HA-Pfad oder http(s); `javascript:` u. ä. werden verworfen (#2)
+
 ## [1.30.4] — 2026-10-23
 
 ### Added
