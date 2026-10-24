@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.31.1
+
+### Added
+- Timetable: symbol for new subjects is suggested automatically from the name; more symbols in the picker
+- Irrigation card and dialog configurable via `settings.beregnung`; existing setup stays the default
+
+### Changed
+- Tunet panel is now available to non-admin users (`panel_admin: false`); you may need to toggle "Show in sidebar" once
+
 ## 1.31.0
 
 ### Added

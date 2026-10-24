@@ -1,3 +1,12 @@
+## [1.31.1] — 2026-10-24
+
+### Added
+- Stundenplan: Symbol für neue Fächer wird automatisch aus dem Namen vorgeschlagen (z. B. Schwimmen → 🏊), weitere Symbole in der Auswahl (#8)
+- Beregnungs-Karte und -Dialog über `settings.beregnung` belegbar; ohne Einstellung bleibt die bisherige Anlage der Standard (#9)
+
+### Changed
+- App: Tunet-Panel auch für Benutzer ohne Admin-Rechte sichtbar (`panel_admin: false`); ggf. „In der Seitenleiste anzeigen“ einmal aus- und einschalten (#10)
+
 ## [1.31.0] — 2026-10-24
 
 ### Added
