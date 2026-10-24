@@ -1,65 +1,8 @@
 import { memo } from 'react';
 import { Droplets } from '../../icons';
 import { getSettings } from '../helpers';
-import { openProps, safeHaUrl } from '../../components/cards/HeizungCard';
-
-const ZONES = [
-  { key: 'z1', name: 'Terrasse rechts',   sensorId: 'binary_sensor.irrigation_unlimited_c1_z1', smartMinId: 'sensor.smart_irrigation_terrasse_rechts_min', color: '#34d399' },
-  { key: 'z3', name: 'Terrasse links',    sensorId: 'binary_sensor.irrigation_unlimited_c1_z3', smartMinId: 'sensor.smart_irrigation_terrasse_links_min',  color: '#60a5fa' },
-  { key: 'z2', name: 'Rasenfläche',       sensorId: 'binary_sensor.irrigation_unlimited_c1_z2', smartMinId: 'sensor.smart_irrigation_rasenflache_min',     color: '#a78bfa' },
-  { key: 'z4', name: 'Vorgarten rechts',  sensorId: 'binary_sensor.irrigation_unlimited_c1_z4', smartMinId: null, color: '#f59e0b' },
-  { key: 'z5', name: 'Vorgarten links',   sensorId: 'binary_sensor.irrigation_unlimited_c1_z5', smartMinId: null, color: '#fb923c' },
-];
-
-/*
- * Belegung über settings.beregnung (ohne Einstellung: die Anlage oben):
- * {
- *   master?, masterStatus?,                 // aktiv, wenn eine der beiden Entitäten „on“ ist
- *   zonen: [{ entity, name?, smartMin?, color? }],   // name fehlt → friendly_name der Zone
- *   regen?, vorrat?, gesamt?, verdunstung?, // Entität oder { entity, attribute }
- *   url?,                                   // Tippen öffnet diese HA-Seite statt des Dialogs
- * }
- */
-const STANDARD = {
-  master: null,
-  masterStatus: 'binary_sensor.beregung_master_status',
-  zonen: ZONES.map((z) => ({ entity: z.sensorId, name: z.name, smartMin: z.smartMinId, color: z.color })),
-  regen: 'sensor.gw2000a_daily_rain',
-  vorrat: 'sensor.rasenflache_bucket',
-  gesamt: 'sensor.beregnung_gesamtzeit_minuten',
-  verdunstung: null,
-  url: null,
-};
-const FARBEN = ['#34d399', '#60a5fa', '#a78bfa', '#f59e0b', '#fb923c', '#f472b6', '#22d3ee', '#a3e635', '#facc15'];
-
-export function resolveBeregnungConfig(settings) {
-  const b = settings?.beregnung && typeof settings.beregnung === 'object' ? settings.beregnung : null;
-  if (!b) return STANDARD;
-  const zonen = (Array.isArray(b.zonen) ? b.zonen : [])
-    .filter((z) => z && typeof z.entity === 'string')
-    .map((z, i) => ({ ...z, color: z.color || FARBEN[i % FARBEN.length] }));
-  return {
-    master: b.master || null,
-    masterStatus: b.masterStatus || null,
-    zonen,
-    regen: b.regen || null,
-    vorrat: b.vorrat || null,
-    gesamt: b.gesamt || null,
-    verdunstung: b.verdunstung || null,
-    url: safeHaUrl(b.url),
-  };
-}
-
-/** Wert einer Entität oder eines ihrer Attribute ({ entity, attribute }); null, wenn nicht da. */
-export function beregnungWert(entities, spec) {
-  if (!spec) return null;
-  const id = typeof spec === 'string' ? spec : spec.entity;
-  const e = entities?.[id];
-  if (!e) return null;
-  const roh = typeof spec === 'string' || !spec.attribute ? e.state : e.attributes?.[spec.attribute];
-  if (roh == null || roh === 'unavailable' || roh === 'unknown') return null;
-  return roh;
-}
+import { openHaPath } from '../../components/cards/HeizungCard';
+import { beregnungAktiv, beregnungWert, resolveBeregnungConfig, zonenName } from '../../utils/beregnungConfig';
 
 const BeregnungCard = memo(function BeregnungCard({
   cardId,
@@ -77,7 +20,7 @@ const BeregnungCard = memo(function BeregnungCard({
   const isUltraCompact = isTwoColMobile;
   const config = resolveBeregnungConfig(settings);
 
-  const masterActive = [config.masterStatus, config.master].some((id) => id && entities?.[id]?.state === 'on');
+  const masterActive = beregnungAktiv(entities, config);
   const rain = beregnungWert(entities, config.regen);
   const bucket = beregnungWert(entities, config.vorrat);
   const totalMin = beregnungWert(entities, config.gesamt);
@@ -85,7 +28,7 @@ const BeregnungCard = memo(function BeregnungCard({
 
   const activeZones = config.zonen.filter((z) => entities?.[z.entity]?.state === 'on').map((z) => ({
     key: z.entity,
-    name: z.name || entities?.[z.entity]?.attributes?.friendly_name || z.entity,
+    name: zonenName(entities, z),
     color: z.color,
     timeRemaining: entities?.[z.entity]?.attributes?.time_remaining,
   }));
@@ -94,8 +37,8 @@ const BeregnungCard = memo(function BeregnungCard({
     0,
     ...config.zonen.map((z) => (z.smartMin ? parseFloat(entities?.[z.smartMin]?.state) || 0 : 0))
   );
-  // Eigenes Ziel (z. B. das Beregnungs-Panel) statt des Dialogs
-  const linkProps = config.url ? openProps(config.url, editMode, `${name} öffnen`) : null;
+  // Tropfen-Symbol öffnet ein eigenes Ziel (z. B. das Beregnungs-Panel), die Karte den Dialog
+  const panelUrl = !editMode ? config.url : null;
 
   const iconColor = masterActive ? '#34d399' : 'var(--text-muted)';
   const iconBg = masterActive ? 'rgba(52,211,153,0.12)' : 'rgba(127,127,127,0.1)';
@@ -107,7 +50,7 @@ const BeregnungCard = memo(function BeregnungCard({
       data-haptic={editMode ? undefined : 'card'}
       className={`glass-texture touch-feedback group relative flex h-full flex-col justify-between overflow-hidden rounded-3xl border font-sans transition-colors duration-500 ${isUltraCompact ? 'p-3' : 'p-7'} ${!editMode ? 'cursor-pointer active:scale-[0.98]' : 'cursor-move'}`}
       style={cardStyle}
-      onClick={(e) => { e.stopPropagation(); if (editMode) return; if (linkProps) linkProps.onClick(); else onOpen?.(); }}
+      onClick={(e) => { e.stopPropagation(); if (!editMode) onOpen?.(); }}
     >
       {controls}
 
@@ -117,6 +60,14 @@ const BeregnungCard = memo(function BeregnungCard({
           <div
             className={`transition-transform duration-500 group-hover:scale-110 ${isUltraCompact ? 'rounded-lg p-2' : 'rounded-2xl p-3'}`}
             style={{ backgroundColor: iconBg, color: iconColor }}
+            {...(panelUrl ? {
+              role: 'button',
+              tabIndex: 0,
+              title: `${name} – Dashboard öffnen`,
+              'aria-label': `${name} – Dashboard öffnen`,
+              onClick: (e) => { e.stopPropagation(); openHaPath(panelUrl); },
+              onKeyDown: (e) => { e.stopPropagation(); if (e.key === 'Enter') openHaPath(panelUrl); },
+            } : {})}
           >
             <Droplets className={isUltraCompact ? 'h-3 w-3' : 'h-5 w-5'} style={{ strokeWidth: 1.5 }} />
           </div>

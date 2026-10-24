@@ -2,57 +2,7 @@ import { useState, useEffect } from 'react';
 import { X, Droplets, Play, Pause } from '../icons';
 import AccessibleModalShell from '../components/ui/AccessibleModalShell';
 import { getHistoryRest, getHistory } from '../services/haClient';
-
-const MASTER_ENTITY = 'binary_sensor.irrigation_unlimited_c1_m';
-const MASTER_STATUS = 'binary_sensor.beregung_master_status';
-
-const ZONES = [
-  {
-    key: 'z1',
-    name: 'Terrasse rechts',
-    switchId: 'switch.irrigation_manual_zone_1',
-    sensorId: 'binary_sensor.irrigation_unlimited_c1_z1',
-    minutesId: 'input_number.manual_irrigation_z1_minutes',
-    smartMinId: 'sensor.smart_irrigation_terrasse_rechts_min',
-    color: '#34d399',
-  },
-  {
-    key: 'z3',
-    name: 'Terrasse links',
-    switchId: 'switch.irrigation_manual_zone_3',
-    sensorId: 'binary_sensor.irrigation_unlimited_c1_z3',
-    minutesId: 'input_number.manual_irrigation_z3_minutes',
-    smartMinId: 'sensor.smart_irrigation_terrasse_links_min',
-    color: '#60a5fa',
-  },
-  {
-    key: 'z2',
-    name: 'Rasenfläche',
-    switchId: 'switch.irrigation_manual_zone_2',
-    sensorId: 'binary_sensor.irrigation_unlimited_c1_z2',
-    minutesId: 'input_number.manual_irrigation_z2_minutes',
-    smartMinId: 'sensor.smart_irrigation_rasenflache_min',
-    color: '#a78bfa',
-  },
-  {
-    key: 'z4',
-    name: 'Vorgarten rechts',
-    switchId: 'switch.irrigation_manual_zone_4',
-    sensorId: 'binary_sensor.irrigation_unlimited_c1_z4',
-    minutesId: 'input_number.manual_irrigation_z4_minutes',
-    smartMinId: null,
-    color: '#f59e0b',
-  },
-  {
-    key: 'z5',
-    name: 'Vorgarten links',
-    switchId: 'switch.irrigation_manual_zone_5',
-    sensorId: 'binary_sensor.irrigation_unlimited_c1_z5',
-    minutesId: 'input_number.manual_irrigation_z5_minutes',
-    smartMinId: null,
-    color: '#fb923c',
-  },
-];
+import { beregnungAktiv, beregnungWert, resolveBeregnungConfig, zonenName } from '../utils/beregnungConfig';
 
 const MAIN_TABS = [
   { key: 'regen', label: 'Regen' },
@@ -80,9 +30,9 @@ function fmtDay(date) {
   return `${String(date.getDate()).padStart(2, '0')}.${String(date.getMonth() + 1).padStart(2, '0')}`;
 }
 
-async function fetchEntityHistory(conn, haUrl, haToken, entityId, start) {
+async function fetchEntityHistory(conn, haUrl, haToken, entityId, start, mitAttributen = false) {
   const end = new Date();
-  const opts = { entityId, start, end, minimal_response: false, no_attributes: true, significant_changes_only: false };
+  const opts = { entityId, start, end, minimal_response: false, no_attributes: !mitAttributen, significant_changes_only: false };
   // Try WebSocket first (always available), fall back to REST
   if (conn) {
     try {
@@ -132,12 +82,12 @@ function parseZoneMinutesByDay(histData, days) {
   return byDate;
 }
 
-function parseRainByDay(histData, days) {
+function parseRainByDay(histData, days, attribute = null) {
   const byDate = {};
   days.forEach((d) => { byDate[d.toDateString()] = null; });
   if (!Array.isArray(histData) || !histData.length) return byDate;
   for (const item of histData) {
-    const val = parseFloat(item.state ?? item.s);
+    const val = parseFloat(attribute ? (item.attributes ?? item.a)?.[attribute] : (item.state ?? item.s));
     if (isNaN(val)) continue;
     const t = getTs(item);
     if (isNaN(t.getTime())) continue;
@@ -216,13 +166,13 @@ function BarChart({ days, valuesByDay, color }) {
   );
 }
 
-function StackedBarChart({ days, zoneData }) {
+function StackedBarChart({ days, zoneData, zonen }) {
   const VBW = 600, VBH = 180;
   const PAD = { top: 24, right: 8, bottom: 28, left: 36 };
   const GW = VBW - PAD.left - PAD.right;
   const GH = VBH - PAD.top - PAD.bottom;
   const totals = days.map((d) =>
-    ZONES.reduce((s, z) => s + (zoneData[z.key]?.[d.toDateString()] ?? 0), 0)
+    zonen.reduce((s, z) => s + (zoneData[z.key]?.[d.toDateString()] ?? 0), 0)
   );
   const maxVal = Math.max(...totals, 1);
   const step = GW / days.length;
@@ -235,7 +185,7 @@ function StackedBarChart({ days, zoneData }) {
     <div className="relative w-full select-none" style={{ height: 180 }}>
       <svg viewBox={`0 0 ${VBW} ${VBH}`} className="h-full w-full overflow-visible" preserveAspectRatio="none">
         <defs>
-          {ZONES.map((z) => (
+          {zonen.map((z) => (
             <linearGradient key={z.key} id={`zGrad_${z.key}`} x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor={z.color} stopOpacity="0.9" />
               <stop offset="100%" stopColor={z.color} stopOpacity="0.35" />
@@ -260,7 +210,7 @@ function StackedBarChart({ days, zoneData }) {
           const rx = Math.min(4, barW / 2);
           return (
             <g key={i}>
-              {ZONES.map((z) => {
+              {zonen.map((z) => {
                 const v = zoneData[z.key]?.[key] ?? 0;
                 if (v <= 0) return null;
                 const bH = Math.max(3, (v / maxVal) * GH);
@@ -312,18 +262,30 @@ function ZoneCard({ zone, entities, callService }) {
   const sensor = entities?.[zone.sensorId];
   const minutesEntity = entities?.[zone.minutesId];
   const smartEntity = entities?.[zone.smartMinId];
+  // Ohne eigenen Schalter + Minuten-Helfer: Dauer nur hier, Start/Stopp über Irrigation Unlimited
+  const eigeneSteuerung = Boolean(zone.switchId && zone.minutesId);
+  const [lokaleMinuten, setLokaleMinuten] = useState(10);
 
   const isRunning = sensor?.state === 'on';
   const timeRemaining = sensor?.attributes?.time_remaining;
-  const minutes = parseFloat(minutesEntity?.state) || 0;
+  const minutes = eigeneSteuerung ? parseFloat(minutesEntity?.state) || 0 : lokaleMinuten;
   const minMin = parseFloat(minutesEntity?.attributes?.min) || 1;
   const minMax = parseFloat(minutesEntity?.attributes?.max) || 60;
   const smartMin = smartEntity ? parseFloat(smartEntity.state) : null;
 
-  const start = () => callService?.('switch', 'turn_on', { entity_id: zone.switchId });
-  const stop = () => callService?.('switch', 'turn_off', { entity_id: zone.switchId });
+  const dauer = `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}:00`;
+  const start = () =>
+    eigeneSteuerung
+      ? callService?.('switch', 'turn_on', { entity_id: zone.switchId })
+      : callService?.('irrigation_unlimited', 'manual_run', { entity_id: zone.sensorId, time: dauer });
+  const stop = () =>
+    eigeneSteuerung
+      ? callService?.('switch', 'turn_off', { entity_id: zone.switchId })
+      : callService?.('irrigation_unlimited', 'cancel', { entity_id: zone.sensorId });
   const setMinutes = (val) =>
-    callService?.('input_number', 'set_value', { entity_id: zone.minutesId, value: val });
+    eigeneSteuerung
+      ? callService?.('input_number', 'set_value', { entity_id: zone.minutesId, value: val })
+      : setLokaleMinuten(val);
 
   return (
     <div
@@ -380,8 +342,8 @@ function ZoneCard({ zone, entities, callService }) {
 
 // ─── Tab: Zonen ──────────────────────────────────────────────────────────────
 
-function ZonenTab({ entities, callService, isCompact }) {
-  const totalMin = entities?.['sensor.beregnung_gesamtzeit_minuten']?.state;
+function ZonenTab({ entities, callService, zonen, config }) {
+  const totalMin = beregnungWert(entities, config.gesamt);
 
   return (
     <div className="space-y-3">
@@ -390,7 +352,7 @@ function ZonenTab({ entities, callService, isCompact }) {
           <span className="font-semibold text-orange-400">{totalMin} min</span> gesamt aktiv
         </p>
       )}
-      {ZONES.map((zone) => (
+      {zonen.map((zone) => (
         <ZoneCard key={zone.key} zone={zone} entities={entities} callService={callService} />
       ))}
     </div>
@@ -399,20 +361,16 @@ function ZonenTab({ entities, callService, isCompact }) {
 
 // ─── Tab: Regen ──────────────────────────────────────────────────────────────
 
-function RegenTab({ entities, rainHistory, days, loading, isPhone }) {
-  const daily = entities?.['sensor.gw2000a_daily_rain']?.state;
-  const hourly = entities?.['sensor.gw2000a_hourly_rain']?.state;
-  const weekly = entities?.['sensor.gw2000a_weekly_rain']?.state;
-  const yearly = entities?.['sensor.gw2000a_yearly_rain']?.state;
-  const rate = entities?.['sensor.gw2000a_rain_rate']?.state;
-  const bucket = entities?.['sensor.rasenflache_bucket']?.state;
-  const water = entities?.['sensor.wasserzaehler_value']?.state;
+function RegenTab({ entities, rainHistory, days, loading, isPhone, zonen, config }) {
+  const daily = beregnungWert(entities, config.regen);
+  const weekly = beregnungWert(entities, config.regenWoche);
+  const yearly = beregnungWert(entities, config.regenJahr);
+  const rate = beregnungWert(entities, config.regenRate);
+  const bucket = beregnungWert(entities, config.vorrat);
+  const water = beregnungWert(entities, config.wasser);
+  const evaporation = beregnungWert(entities, config.verdunstung);
 
-  const smartZones = [
-    { name: 'T. rechts', id: 'sensor.smart_irrigation_terrasse_rechts_min' },
-    { name: 'T. links', id: 'sensor.smart_irrigation_terrasse_links_min' },
-    { name: 'Rasen', id: 'sensor.smart_irrigation_rasenflache_min' },
-  ];
+  const smartZones = zonen.filter((z) => z.smartMinId).map((z) => ({ name: z.name, id: z.smartMinId }));
 
   return (
     <div className="space-y-6">
@@ -438,15 +396,26 @@ function RegenTab({ entities, rainHistory, days, loading, isPhone }) {
         </div>
       </div>
 
-      <div>
-        <p className="mb-2 text-[10px] font-bold tracking-[0.2em] uppercase" style={{ color: 'var(--text-muted)' }}>
-          Smart Irrigation
-        </p>
-        <div className="grid grid-cols-3 gap-2">
-          {smartZones.map((z) => (
-            <StatBox key={z.id} label={z.name} value={entities?.[z.id]?.state ?? '—'} unit="min" color="#4ade80" />
-          ))}
+      {evaporation != null && (
+        <div className="popup-surface flex items-center justify-between rounded-2xl px-4 py-3">
+          <p className="text-sm font-light" style={{ color: 'var(--text-secondary)' }}>Verdunstung (ET₀)</p>
+          <p className="text-sm font-semibold text-amber-400">{evaporation} mm</p>
         </div>
+      )}
+
+      <div>
+        {smartZones.length > 0 && (
+          <>
+            <p className="mb-2 text-[10px] font-bold tracking-[0.2em] uppercase" style={{ color: 'var(--text-muted)' }}>
+              Smart Irrigation
+            </p>
+            <div className="grid grid-cols-3 gap-2">
+              {smartZones.map((z) => (
+                <StatBox key={z.id} label={z.name} value={entities?.[z.id]?.state ?? '—'} unit="min" color="#4ade80" />
+              ))}
+            </div>
+          </>
+        )}
         {bucket != null && (
           <div className="popup-surface mt-2 flex items-center justify-between rounded-2xl px-4 py-3">
             <p className="text-sm font-light" style={{ color: 'var(--text-secondary)' }}>Bodenwasser-Vorrat</p>
@@ -472,8 +441,8 @@ function RegenTab({ entities, rainHistory, days, loading, isPhone }) {
 
 // ─── Tab: Verlauf ─────────────────────────────────────────────────────────────
 
-function VerlaufTab({ zoneData, days, loading }) {
-  const hasData = ZONES.some((z) => Object.values(zoneData[z.key] ?? {}).some((v) => v > 0));
+function VerlaufTab({ zoneData, days, loading, zonen }) {
+  const hasData = zonen.some((z) => Object.values(zoneData[z.key] ?? {}).some((v) => v > 0));
   const todayKey = new Date().toDateString();
 
   return (
@@ -490,11 +459,11 @@ function VerlaufTab({ zoneData, days, loading }) {
               Keine Daten für die letzten 14 Tage
             </div>
           ) : (
-            <StackedBarChart days={days} zoneData={zoneData} />
+            <StackedBarChart days={days} zoneData={zoneData} zonen={zonen} />
           )}
         </div>
         <div className="mt-2 flex gap-4 flex-wrap">
-          {ZONES.map((z) => (
+          {zonen.map((z) => (
             <div key={z.key} className="flex items-center gap-1.5 text-xs" style={{ color: 'var(--text-secondary)' }}>
               <span className="h-2 w-2 rounded-full" style={{ backgroundColor: z.color }} />
               {z.name}
@@ -508,7 +477,7 @@ function VerlaufTab({ zoneData, days, loading }) {
           Heute
         </p>
         <div className="space-y-2">
-          {ZONES.map((z) => {
+          {zonen.map((z) => {
             const todayMin = zoneData[z.key]?.[todayKey] ?? 0;
             return (
               <div key={z.key} className="popup-surface flex items-center gap-3 rounded-2xl px-4 py-3">
@@ -528,15 +497,8 @@ function VerlaufTab({ zoneData, days, loading }) {
 
 // ─── Tab: Ventile ─────────────────────────────────────────────────────────────
 
-function VentileTab({ entities, callService }) {
-  const ventile = [
-    { id: 'switch.magnetventil_1', name: 'Terrasse rechts' },
-    { id: 'switch.magnetventil_4', name: 'Terrasse links' },
-    { id: 'switch.magnetventil_3', name: 'Rasenfläche' },
-    { id: 'switch.magnetventil_5', name: 'Vorgarten rechts' },
-    { id: 'switch.magnetventil_6', name: 'Vorgarten links' },
-    { id: 'switch.magnetventil_2', name: 'Wasserdose' },
-  ];
+function VentileTab({ entities, callService, config }) {
+  const ventile = config.ventile.map((v) => ({ id: v.entity, name: v.name || v.entity }));
 
   return (
     <div className="space-y-2">
@@ -568,26 +530,41 @@ function VentileTab({ entities, callService }) {
 
 // ─── Main Modal ───────────────────────────────────────────────────────────────
 
-export default function BeregnungModal({ show, onClose, entities, callService, conn, haUrl, haToken }) {
+export default function BeregnungModal({ show, onClose, entities, callService, conn, haUrl, haToken, settings }) {
+  const config = resolveBeregnungConfig(settings);
+  // Zonen im Format der Bausteine oben; key ohne Punkte (für die SVG-Verlaufs-IDs)
+  const zonen = config.zonen.map((z, i) => ({
+    ...z,
+    key: `z${i}`,
+    name: zonenName(entities, z),
+    sensorId: z.entity,
+    switchId: z.schalter,
+    minutesId: z.minuten,
+    smartMinId: z.smartMin,
+  }));
+  const tabs = MAIN_TABS.filter((tab) => tab.key !== 'ventile' || config.ventile.length > 0);
   const [mainTab, setMainTab] = useState('regen');
-  const [zoneData, setZoneData] = useState({ z1: {}, z2: {}, z3: {}, z4: {}, z5: {} });
+  const [zoneData, setZoneData] = useState({});
   const [rainHistory, setRainHistory] = useState({});
   const [histLoading, setHistLoading] = useState(false);
 
   const days = getLastNDays(HIST_DAYS);
-  const masterRunning = entities?.[MASTER_STATUS]?.state === 'on';
+  const masterRunning = beregnungAktiv(entities, config);
 
   // Check if IU controller is enabled (attributes may expose this)
-  const masterEntity = entities?.[MASTER_ENTITY];
+  const masterEntity = config.master ? entities?.[config.master] : null;
   const masterEnabled = masterEntity?.attributes?.enabled !== false; // default assume enabled
 
   const toggleMaster = () => {
-    callService?.('irrigation_unlimited', 'toggle', { entity_id: MASTER_ENTITY });
+    if (config.master) callService?.('irrigation_unlimited', 'toggle', { entity_id: config.master });
   };
 
   const stopAll = () => {
-    callService?.('irrigation_unlimited', 'cancel', { entity_id: MASTER_ENTITY });
+    if (config.master) callService?.('irrigation_unlimited', 'cancel', { entity_id: config.master });
   };
+  const regenSpec =
+    config.regen && typeof config.regen === 'object' ? config.regen : { entity: config.regen, attribute: null };
+  const zonenIds = zonen.map((z) => z.sensorId).join(',');
 
   useEffect(() => {
     if (!show) return;
@@ -602,7 +579,7 @@ export default function BeregnungModal({ show, onClose, entities, callService, c
 
     if (mainTab === 'verlauf') {
       Promise.all(
-        ZONES.map((z) =>
+        zonen.map((z) =>
           fetchEntityHistory(conn, haUrl, haToken, z.sensorId, start).then((data) => ({ key: z.key, data }))
         )
       )
@@ -614,12 +591,17 @@ export default function BeregnungModal({ show, onClose, entities, callService, c
         .catch(() => {})
         .finally(() => setHistLoading(false));
     } else {
-      fetchEntityHistory(conn, haUrl, haToken, 'sensor.gw2000a_daily_rain', start)
-        .then((data) => setRainHistory(parseRainByDay(data, days)))
+      if (!regenSpec.entity) {
+        setHistLoading(false);
+        return;
+      }
+      fetchEntityHistory(conn, haUrl, haToken, regenSpec.entity, start, Boolean(regenSpec.attribute))
+        .then((data) => setRainHistory(parseRainByDay(data, days, regenSpec.attribute)))
         .catch(() => {})
         .finally(() => setHistLoading(false));
     }
-  }, [show, mainTab, conn, haUrl, haToken]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- Zonen und Regen über ihre IDs
+  }, [show, mainTab, conn, haUrl, haToken, zonenIds, regenSpec.entity, regenSpec.attribute]);
 
   if (!show) return null;
 
@@ -701,6 +683,7 @@ export default function BeregnungModal({ show, onClose, entities, callService, c
                     </p>
                   </div>
                   {/* Master toggle */}
+                  {config.master && (
                   <button
                     onClick={toggleMaster}
                     className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[10px] font-bold tracking-widest uppercase italic transition-all"
@@ -712,8 +695,9 @@ export default function BeregnungModal({ show, onClose, entities, callService, c
                   >
                     {masterEnabled ? 'Aktiviert' : 'Deaktiviert'}
                   </button>
+                  )}
                   {/* Stop all — only when running */}
-                  {masterRunning && (
+                  {masterRunning && config.master && (
                     <button
                       onClick={stopAll}
                       className="inline-flex items-center gap-1.5 rounded-full border border-red-500/40 bg-red-500/10 px-3 py-1 text-[10px] font-bold tracking-widest uppercase italic text-red-400"
@@ -727,7 +711,7 @@ export default function BeregnungModal({ show, onClose, entities, callService, c
 
             {/* Tab bar */}
             <div className="flex rounded-2xl p-1" style={{ backgroundColor: 'var(--glass-bg)' }}>
-              {MAIN_TABS.map(({ key, label }) => (
+              {tabs.map(({ key, label }) => (
                 <button
                   key={key}
                   onClick={() => setMainTab(key)}
@@ -751,7 +735,7 @@ export default function BeregnungModal({ show, onClose, entities, callService, c
           {/* ── Scrollable content ── */}
           <div className={`flex-1 overflow-y-auto ${isCompact ? 'p-4' : 'p-8'}`}>
             {mainTab === 'zonen' && (
-              <ZonenTab entities={entities} callService={callService} isCompact={isCompact} />
+              <ZonenTab entities={entities} callService={callService} zonen={zonen} config={config} />
             )}
             {mainTab === 'regen' && (
               <RegenTab
@@ -760,13 +744,15 @@ export default function BeregnungModal({ show, onClose, entities, callService, c
                 days={days}
                 loading={histLoading}
                 isPhone={isPhone}
+                zonen={zonen}
+                config={config}
               />
             )}
             {mainTab === 'verlauf' && (
-              <VerlaufTab zoneData={zoneData} days={days} loading={histLoading} />
+              <VerlaufTab zoneData={zoneData} days={days} loading={histLoading} zonen={zonen} />
             )}
             {mainTab === 'ventile' && (
-              <VentileTab entities={entities} callService={callService} />
+              <VentileTab entities={entities} callService={callService} config={config} />
             )}
           </div>
         </>

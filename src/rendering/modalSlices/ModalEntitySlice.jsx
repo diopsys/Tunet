@@ -621,6 +621,7 @@ export function ModalEntitySlice({ core, modals, cardConfig, entityHelpers, reso
           <BeregnungModal
             show={true}
             onClose={() => setShowBeregnungModal(null)}
+            settings={cardSettings?.[getCardSettingsKey(showBeregnungModal)] || cardSettings?.[showBeregnungModal]}
             entities={entities}
             callService={callService}
             conn={conn}
