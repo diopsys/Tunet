@@ -1,4 +1,5 @@
 import { memo, useEffect, useRef, useState } from 'react';
+import { symbolVorschlag } from './stundenplanSymbole';
 
 // ── Reine Hilfsfunktionen: geben jeweils eine neue Plan-Liste zurück ──────
 
@@ -16,7 +17,7 @@ function ensureFach(plan, fach, emoji) {
   const bekannt = faecher[fach];
   if (!bekannt) {
     const farbe = FARBEN[Object.keys(faecher).length % FARBEN.length];
-    faecher[fach] = { emoji: emoji || '📘', color: farbe };
+    faecher[fach] = { emoji: emoji || symbolVorschlag(fach) || '📘', color: farbe };
   } else if (emoji && emoji !== bekannt.emoji) {
     faecher[fach] = { ...bekannt, emoji };
   }
@@ -268,7 +269,8 @@ const SYMBOLE = [
   '📘', '📚', '📖', '✏️', '📝', '📐', '➗', '🔢', '🔤', '🗣️', '🇬🇧', '🇫🇷',
   '🔭', '🔬', '🧪', '🌍', '🌱', '💻', '🤖', '🧩', '🎨', '🖌️', '🎵', '🎹',
   '🎸', '🥁', '🎤', '🎭', '🩰', '⚽', '🏀', '🏐', '🎾', '🏊', '🤸', '🚴',
-  '🏃', '🐴', '🐎', '🐴🤸', '🧘', '🤝', '✝️', '🍳', '📅', '⭐', '🎉', '😴',
+  '🏃', '🐴', '🐎', '🐴🤸', '🧘', '🥋', '🤝', '✝️', '🤔', '🍳', '🔨', '🧵',
+  '🏛️', '📜', '🇪🇸', '🗳️', '🏠', '🏫', '🏖️', '📅', '⭐', '🎉', '😴',
 ];
 
 function SymbolPicker({ value, onPick }) {
@@ -619,15 +621,22 @@ function EintragDialog({ mode, title, initial, faecher, onSave, onDelete, onClos
   const [von, setVon] = useState(initial?.von || '');
   const [bis, setBis] = useState(initial?.bis || '');
   const [emoji, setEmoji] = useState(initial?.fach ? faecher?.[initial.fach]?.emoji || '' : '');
+  // Symbol selbst gewählt oder eingetippt: dann nicht mehr automatisch überschreiben
+  const [eigenesSymbol, setEigenesSymbol] = useState(false);
+  const symbolWaehlen = (s) => {
+    setEigenesSymbol(true);
+    setEmoji(s);
+  };
 
   // `faecher` is a new object on every dashboard re-render; depending on it would overwrite typed symbols
 
   const faecherRef = useRef(faecher);
   faecherRef.current = faecher;
+  // Bekanntes Fach: sein Symbol; neues Fach: Vorschlag aus dem Namen (z. B. Schwimmen → 🏊)
+  const vorschlag = faecherRef.current?.[fach.trim()]?.emoji || symbolVorschlag(fach);
   useEffect(() => {
-    const bekannt = faecherRef.current?.[fach.trim()]?.emoji;
-    if (bekannt) setEmoji(bekannt);
-  }, [fach]);
+    if (!eigenesSymbol && vorschlag) setEmoji(vorschlag);
+  }, [fach, vorschlag, eigenesSymbol]);
 
   useEscape(onClose);
 
@@ -668,10 +677,10 @@ function EintragDialog({ mode, title, initial, faecher, onSave, onDelete, onClos
         </label>
 
         <label className="spe-field spe-field-small">
-          <span>Symbol</span>
-          <input value={emoji} onChange={(e) => setEmoji(e.target.value)} placeholder="📘" maxLength={8} />
+          <span>Symbol{!eigenesSymbol && vorschlag && emoji === vorschlag ? ' (automatisch)' : ''}</span>
+          <input value={emoji} onChange={(e) => symbolWaehlen(e.target.value)} placeholder="📘" maxLength={8} />
         </label>
-        <SymbolPicker value={emoji} onPick={setEmoji} />
+        <SymbolPicker value={emoji} onPick={symbolWaehlen} />
 
         {mode === 'nachmittag' && (
           <div className="spe-row">
