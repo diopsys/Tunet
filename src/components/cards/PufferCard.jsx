@@ -1,7 +1,7 @@
 import { memo, useEffect, useId, useMemo, useState } from 'react';
 import { getHistory, getStatistics } from '../../services';
 import { AlertTriangle } from '../../icons';
-import { formatTemp, isActive, num, openProps } from './HeizungCard';
+import { formatTemp, isActive, num, openProps, safeHaUrl } from './HeizungCard';
 
 /*
  * Puffer-Kachel (settings.puffer):
@@ -38,7 +38,7 @@ export function resolvePufferConfig(settings) {
     bezug: zahl(p.bezug, 30),
     voll: zahl(p.voll, 90),
     stunden: zahl(p.stunden, 24),
-    url: typeof p.url === 'string' && p.url.trim() ? p.url.trim() : null,
+    url: safeHaUrl(p.url),
     zustaende: Array.isArray(p.zustaende) ? p.zustaende.filter((z) => z && z.entity) : [],
   };
 }
