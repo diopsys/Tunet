@@ -532,16 +532,16 @@ const CameraFeed = memo(
             .then((response) => response?.frontend_stream_types || [])
             .catch(() => null)
         : Promise.resolve(null);
+      // Den Cache-Zusatz mitsignieren: HA prüft, dass die Parameter einer signierten Adresse
+      // genau den signierten entsprechen; ein nachträglich angehängtes _ts ergibt 403
       const signedSnapshotPromise = canCallWs
         ? conn
             .sendMessagePromise({
               type: 'auth/sign_path',
-              path: `/api/camera_proxy/${entityId}`,
+              path: appendCameraCacheBust(`/api/camera_proxy/${entityId}`, refreshKey),
             })
             .then((response) =>
-              response?.path
-                ? getEntityImageUrl(appendCameraCacheBust(response.path, refreshKey))
-                : legacySnapshotUrl
+              response?.path ? getEntityImageUrl(response.path) : legacySnapshotUrl
             )
             .catch(() => legacySnapshotUrl)
         : Promise.resolve(legacySnapshotUrl);
