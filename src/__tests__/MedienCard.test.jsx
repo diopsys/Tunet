@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import MedienCard, { quelleAktiv, quellenAktionen, resolveMedienConfig } from '../components/cards/MedienCard';
+import MedienCard, { medienModus, quelleAktiv, quellenAktionen, resolveMedienConfig } from '../components/cards/MedienCard';
 
 const medien = {
   zone: 'media_player.zone2',
@@ -67,6 +67,29 @@ describe('Medien-Kachel', () => {
 
     fireEvent.change(screen.getByLabelText('Lautstärke'), { target: { value: '50' } });
     expect(callService).toHaveBeenCalledWith('media_player', 'volume_set', { entity_id: 'media_player.zone2', volume_level: 0.5 });
+  });
+
+  it('shows the TV with its app and controls the surround while only the TV runs', () => {
+    const callService = vi.fn();
+    const mitTv = { ...medien, tv: { entity: 'media_player.tv', surround: 'media_player.surround' } };
+    const tvAn = {
+      'media_player.zone2': { state: 'off', attributes: {} },
+      'media_player.ma': { state: 'idle', attributes: { media_title: 'Alter Titel' } },
+      'media_player.tv': { state: 'on', attributes: { friendly_name: 'Fernseher', source: 'Prime Video', entity_picture: '/api/app' } },
+      'media_player.surround': { state: 'on', attributes: { volume_level: 0.4 } },
+    };
+    expect(medienModus(resolveMedienConfig({ medien: mitTv }), tvAn)).toBe('tv');
+    render(<MedienCard cardId='m' entities={tvAn} settings={{ medien: mitTv }} callService={callService} getEntityImageUrl={(u) => u} />);
+    expect(screen.getByText('Fernseher')).toBeTruthy();
+    expect(screen.getByText('Prime Video')).toBeTruthy();
+    expect(screen.queryByText('Alter Titel')).toBeNull();
+    expect(screen.getByText('40 %')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /TV/ })).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.change(screen.getByLabelText('Lautstärke'), { target: { value: '30' } });
+    expect(callService).toHaveBeenCalledWith('media_player', 'volume_set', { entity_id: 'media_player.surround', volume_level: 0.3 });
+    fireEvent.click(screen.getByRole('button', { name: /Aus/ }));
+    expect(callService).toHaveBeenCalledWith('media_player', 'turn_off', { entity_id: 'media_player.tv' });
+    expect(callService).toHaveBeenCalledWith('media_player', 'turn_off', { entity_id: 'media_player.surround' });
   });
 
   it('shows the zone as off without player title', () => {

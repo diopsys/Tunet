@@ -17,11 +17,14 @@ import { openHaPath, safeHaUrl } from './HeizungCard';
  *     einschalten?: ['media_player.tv', …], // oder Geräte einschalten (z. B. Fernseher + Surround)
  *     aus?: true,                           // oder die Zone ausschalten
  *   }],
+ *   tv?: { entity, surround? },             // läuft der Fernseher (und die Zone nicht), zeigt die
+ *                                           // Kachel ihn (App/Quelle); Lautstärke dann am Surround
  *   url?: '/music-assistant',               // Tippen auf die Kachel öffnet diese HA-Seite
  * }
  *
  * Ein Knopf gilt als aktiv, wenn die Zone an ist und seine `source` gewählt ist bzw. das
- * erste Gerät aus `einschalten` an ist.
+ * erste Gerät aus `einschalten` an ist. „Aus“ schaltet im TV-Betrieb Fernseher und Surround
+ * aus, sonst die Zone.
  */
 
 const AN = ['on', 'playing', 'paused', 'idle', 'buffering'];
@@ -34,8 +37,18 @@ export function resolveMedienConfig(settings) {
     player: typeof m.player === 'string' ? m.player : null,
     name: typeof m.name === 'string' ? m.name : null,
     quellen: (Array.isArray(m.quellen) ? m.quellen : []).filter((q) => q && typeof q.name === 'string'),
+    tv: m.tv && typeof m.tv.entity === 'string'
+      ? { entity: m.tv.entity, surround: typeof m.tv.surround === 'string' ? m.tv.surround : null }
+      : null,
     url: safeHaUrl(m.url),
   };
+}
+
+/** Was die Kachel zeigt: 'zone' (Raum läuft), 'tv' (nur der Fernseher läuft) oder 'aus'. */
+export function medienModus(config, entities) {
+  if (istAn(config.zone ? entities[config.zone] : null)) return 'zone';
+  if (config.tv && istAn(entities[config.tv.entity])) return 'tv';
+  return 'aus';
 }
 
 /** Aktiv-Zustand eines Quellen-Knopfs. */
@@ -47,7 +60,8 @@ export function quelleAktiv(quelle, zone, entities) {
 }
 
 /** Aktionen eines Quellen-Knopfs als Liste von [domain, service, data]. */
-export function quellenAktionen(quelle, zoneId) {
+export function quellenAktionen(quelle, zoneId, tvAus = null) {
+  if (quelle.aus && tvAus) return tvAus.map((id) => [id.split('.')[0], 'turn_off', { entity_id: id }]);
   if (quelle.aus) return zoneId ? [['media_player', 'turn_off', { entity_id: zoneId }]] : [];
   if (quelle.script) return [['script', 'turn_on', { entity_id: quelle.script }]];
   if (quelle.source && zoneId) {
@@ -65,16 +79,27 @@ export function quellenAktionen(quelle, zoneId) {
 const MedienCard = ({ cardId, dragProps, controls, cardStyle, editMode, entities, settings, name, callService, getEntityImageUrl }) => {
   const config = resolveMedienConfig(settings);
   const zone = config.zone ? entities[config.zone] : null;
-  const player = config.player ? entities[config.player] : null;
+  const modus = medienModus(config, entities);
+  const tv = modus === 'tv' ? entities[config.tv.entity] : null;
+  // Im TV-Betrieb kommen Anzeige und Lautstärke vom Fernseher bzw. Surround
+  const player = modus === 'tv' ? null : config.player ? entities[config.player] : null;
+  const lautId = modus === 'tv' ? config.tv.surround || config.tv.entity : config.zone;
+  const lautEntity = lautId ? entities[lautId] : null;
   const titel = name || 'Medien';
   const raum = config.name || zone?.attributes?.friendly_name || '';
-  const zoneAn = istAn(zone);
+  const zoneAn = modus !== 'aus';
   const spielt = player?.state === 'playing';
   const pa = player?.attributes || {};
-  const medienTitel = player && pa.media_title ? pa.media_title : zoneAn ? zone?.attributes?.source || 'An' : 'Aus';
-  const medienUnter = player && pa.media_title ? pa.media_artist || pa.media_album_name || '' : '';
-  const cover = player && pa.entity_picture && getEntityImageUrl ? getEntityImageUrl(pa.entity_picture) : null;
-  const lautstaerke = Math.round((zone?.attributes?.volume_level ?? 0) * 100);
+  const medienTitel = tv
+    ? tv.attributes?.friendly_name || 'Fernseher'
+    : player && pa.media_title ? pa.media_title : modus === 'zone' ? zone?.attributes?.source || 'An' : 'Aus';
+  const medienUnter = tv
+    ? tv.attributes?.source || tv.attributes?.media_title || ''
+    : player && pa.media_title ? pa.media_artist || pa.media_album_name || '' : '';
+  const bild = tv ? tv.attributes?.entity_picture : player ? pa.entity_picture : null;
+  const cover = bild && getEntityImageUrl ? getEntityImageUrl(bild) : null;
+  const lautstaerke = Math.round((lautEntity?.attributes?.volume_level ?? 0) * 100);
+  const tvAus = tv ? [config.tv.entity, config.tv.surround].filter(Boolean) : null;
   const ruf = (aktionen) => aktionen.forEach(([d, s, data]) => callService?.(d, s, data));
   const stop = (fn) => (e) => { e.stopPropagation(); if (!editMode) fn(); };
   const url = !editMode ? config.url : null;
@@ -119,12 +144,12 @@ const MedienCard = ({ cardId, dragProps, controls, cardStyle, editMode, entities
       </div>
 
       {/* Lautstärke der Zone */}
-      {zone && zoneAn && (
+      {lautEntity && zoneAn && (
         <label className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
           <Volume2 className="h-3.5 w-3.5 flex-shrink-0 text-[var(--text-muted)]" />
           <input
             type="range" min={0} max={100} step={1} value={lautstaerke} aria-label="Lautstärke"
-            onChange={(e) => callService?.('media_player', 'volume_set', { entity_id: config.zone, volume_level: Number(e.target.value) / 100 })}
+            onChange={(e) => callService?.('media_player', 'volume_set', { entity_id: lautId, volume_level: Number(e.target.value) / 100 })}
             className="min-w-0 flex-1 accent-[var(--accent-color)]"
             disabled={editMode}
           />
@@ -136,14 +161,14 @@ const MedienCard = ({ cardId, dragProps, controls, cardStyle, editMode, entities
       {config.quellen.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
           {config.quellen.map((q) => {
-            const aktiv = quelleAktiv(q, zone, entities);
+            const aktiv = q.aus ? modus === 'aus' : quelleAktiv(q, zone, entities);
             const Icon = q.aus ? Power : getIconComponent(q.icon || 'mdi:music', Music);
             return (
               <button
                 key={q.name}
                 type="button"
                 aria-pressed={aktiv}
-                onClick={stop(() => ruf(quellenAktionen(q, config.zone)))}
+                onClick={stop(() => ruf(quellenAktionen(q, config.zone, tvAus)))}
                 className="flex items-center gap-1 rounded-lg px-2 py-1 text-[10px] font-semibold"
                 style={aktiv && !q.aus
                   ? { backgroundColor: 'rgba(34,197,94,0.14)', color: '#4ade80' }
