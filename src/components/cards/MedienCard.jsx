@@ -1,7 +1,9 @@
-import { memo } from 'react';
+import { lazy, memo, Suspense, useState } from 'react';
 import { Music, Pause, Play, Power, SkipBack, SkipForward, Volume2 } from '../../icons';
 import { getIconComponent } from '../../icons';
 import { openHaPath, safeHaUrl } from './HeizungCard';
+
+const MedienModal = lazy(() => import('../../modals/MedienModal'));
 
 /*
  * Medien-Kachel für einen Raum, vollständig über die Kartenoptionen belegt (settings.medien):
@@ -19,8 +21,11 @@ import { openHaPath, safeHaUrl } from './HeizungCard';
  *   }],
  *   tv?: { entity, surround? },             // läuft der Fernseher (und die Zone nicht), zeigt die
  *                                           // Kachel ihn (App/Quelle); Lautstärke dann am Surround
- *   url?: '/music-assistant',               // Tippen auf die Kachel öffnet diese HA-Seite
+ *   url?: '/music-assistant',               // Link „Bibliothek öffnen“ im Medien-Fenster
+ *   musik?: { maEintrag, zoneQuelle? },     // Music Assistant im Reiter Musik (siehe MedienModal)
  * }
+ * Tippen auf die Kachel öffnet das Medien-Fenster (Reiter Fernseher/Musik).
+ * Weitere tv-Felder (apps, sat, surroundTvQuelle, fernbedienung) siehe MedienModal.
  *
  * Ein Knopf gilt als aktiv, wenn die Zone an ist und seine `source` gewählt ist bzw. das
  * erste Gerät aus `einschalten` an ist. „Aus“ schaltet im TV-Betrieb Fernseher und Surround
@@ -38,8 +43,16 @@ export function resolveMedienConfig(settings) {
     name: typeof m.name === 'string' ? m.name : null,
     quellen: (Array.isArray(m.quellen) ? m.quellen : []).filter((q) => q && typeof q.name === 'string'),
     tv: m.tv && typeof m.tv.entity === 'string'
-      ? { entity: m.tv.entity, surround: typeof m.tv.surround === 'string' ? m.tv.surround : null }
+      ? {
+          entity: m.tv.entity,
+          surround: typeof m.tv.surround === 'string' ? m.tv.surround : null,
+          surroundTvQuelle: typeof m.tv.surroundTvQuelle === 'string' ? m.tv.surroundTvQuelle : null,
+          apps: (Array.isArray(m.tv.apps) ? m.tv.apps : []).filter((a) => a && typeof a.name === 'string' && typeof a.source === 'string'),
+          sat: m.tv.sat && typeof m.tv.sat.entity === 'string' ? m.tv.sat : null,
+          fernbedienung: m.tv.fernbedienung || null,
+        }
       : null,
+    musik: m.musik && typeof m.musik === 'object' ? m.musik : null,
     url: safeHaUrl(m.url),
   };
 }
@@ -76,8 +89,9 @@ export function quellenAktionen(quelle, zoneId, tvAus = null) {
   return [];
 }
 
-const MedienCard = ({ cardId, dragProps, controls, cardStyle, editMode, entities, settings, name, callService, getEntityImageUrl }) => {
+const MedienCard = ({ cardId, dragProps, controls, cardStyle, editMode, entities, settings, name, callService, getEntityImageUrl, conn }) => {
   const config = resolveMedienConfig(settings);
+  const [offen, setOffen] = useState(false);
   const zone = config.zone ? entities[config.zone] : null;
   const modus = medienModus(config, entities);
   const tv = modus === 'tv' ? entities[config.tv.entity] : null;
@@ -102,15 +116,15 @@ const MedienCard = ({ cardId, dragProps, controls, cardStyle, editMode, entities
   const tvAus = tv ? [config.tv.entity, config.tv.surround].filter(Boolean) : null;
   const ruf = (aktionen) => aktionen.forEach(([d, s, data]) => callService?.(d, s, data));
   const stop = (fn) => (e) => { e.stopPropagation(); if (!editMode) fn(); };
-  const url = !editMode ? config.url : null;
+  const oeffnen = () => { if (!editMode) setOffen(true); };
 
   return (
     <div
       key={cardId}
       {...dragProps}
-      className={`glass-texture touch-feedback relative flex h-full flex-col gap-2 overflow-hidden rounded-3xl border p-3.5 font-sans select-none ${editMode ? 'cursor-move' : url ? 'cursor-pointer' : ''}`}
+      className={`glass-texture touch-feedback relative flex h-full flex-col gap-2 overflow-hidden rounded-3xl border p-3.5 font-sans select-none ${editMode ? 'cursor-move' : 'cursor-pointer'}`}
       style={cardStyle}
-      {...(url ? { role: 'button', tabIndex: 0, 'aria-label': `${titel} öffnen`, onClick: () => openHaPath(url), onKeyDown: (e) => e.key === 'Enter' && openHaPath(url) } : {})}
+      {...(!editMode ? { role: 'button', tabIndex: 0, 'aria-label': `${titel} öffnen`, onClick: oeffnen, onKeyDown: (e) => e.key === 'Enter' && oeffnen() } : {})}
     >
       {controls}
       <div className="flex items-center justify-between gap-2">
@@ -179,6 +193,24 @@ const MedienCard = ({ cardId, dragProps, controls, cardStyle, editMode, entities
               </button>
             );
           })}
+        </div>
+      )}
+      {offen && (
+        // React reicht Ereignisse aus dem Portal an die Kachel weiter – hier abfangen, sonst
+        // öffnet „Schließen“ das Fenster gleich wieder bzw. startet das Verschieben
+        <div onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
+        <Suspense fallback={null}>
+          <MedienModal
+            show
+            onClose={() => setOffen(false)}
+            config={{ ...config, oeffneUrl: config.url ? () => { setOffen(false); openHaPath(config.url); } : null }}
+            entities={entities}
+            callService={callService}
+            conn={conn}
+            getEntityImageUrl={getEntityImageUrl}
+            titel={titel}
+          />
+        </Suspense>
         </div>
       )}
     </div>
