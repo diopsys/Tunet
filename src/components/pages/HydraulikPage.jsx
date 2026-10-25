@@ -54,36 +54,89 @@ const COIL = (() => {
   return d;
 })();
 
-const DHW_COIL = (() => {
-  let d = 'M330 600H612';
-  for (let y = 600; y > 360; y -= 20) d += `Q${y % 40 ? 560 : 664} ${y - 10} 612 ${y - 20}`;
-  return `${d}H330`;
-})();
+const dhwWave = (cx, from, to) => {
+  let d = '';
+  for (let y = from; y > to; y -= 20) d += `Q${y % 40 ? cx - 52 : cx + 52} ${y - 10} ${cx} ${y - 20}`;
+  return d;
+};
 
-const SEGMENTS = [
+const OUTDOOR_SEGMENTS = [
   { d: 'M190 110H238', c: 'suc', ref: true },
-  { d: 'M282 110H480', c: 'gas', ref: true },
-  { d: 'M480 170H350V210H280', c: 'liq', ref: true },
   { d: 'M240 210H190', c: 'suc', ref: true },
+];
+
+const INDOOR_SEGMENTS = [
   { d: 'M524 84H676', c: 'hot', share: 'all' },
   { d: 'M708 84H760', c: 'hot', share: 'direct' },
-  { d: 'M760 84H958V270', c: 'hot', share: 'fbh' },
   { d: 'M692 102V330', c: 'hot', share: 'tank' },
   { d: COIL, c: 'hot', share: 'tank' },
   { d: 'M520 594H470V56H740V84H760', c: 'cold', share: 'tank' },
-  { d: 'M958 270V330H812V346H958V362H812V378H958V394H790', c: 'fbh', share: 'fbh' },
-  { d: 'M790 394H760V246', c: 'cold', share: 'fbh' },
   { d: 'M760 84V214', c: 'bypass', share: 'bypass' },
   { d: 'M744 230H600V186', c: 'cold', share: 'all' },
   { d: 'M584 170H524', c: 'cold', share: 'all' },
 ];
 
-const MOBILE_VIEWS = [
-  { id: 'aussen', label: 'Außen', viewBox: '10 10 450 300' },
-  { id: 'innen', label: 'Innen', viewBox: '455 10 315 635' },
-  { id: 'heizkreis', label: 'Heizkreis', viewBox: '775 105 215 370' },
-  { id: 'wasser', label: 'Trinkwasser', viewBox: '10 320 330 330' },
-];
+// Building blocks are drawn in landscape coordinates and shifted per layout;
+// only the connecting pipes, the floor-heating box and outer tags differ.
+const LAYOUTS = {
+  landscape: {
+    viewBox: '0 0 1000 660',
+    outdoor: [0, 0],
+    indoor: [0, 0],
+    water: [0, 0],
+    pipeLabelsInWaterBox: true,
+    segments: [
+      { d: 'M282 110H480', c: 'gas', ref: true },
+      { d: 'M480 170H350V210H280', c: 'liq', ref: true },
+      { d: 'M760 84H958V270', c: 'hot', share: 'fbh' },
+      { d: 'M958 270V330H812V346H958V362H812V378H958V394H790', c: 'fbh', share: 'fbh' },
+      { d: 'M790 394H760V246', c: 'cold', share: 'fbh' },
+    ],
+    dhw: `M330 600H612${dhwWave(612, 600, 360)}H330`,
+    fbhGradient: [330, 394],
+    fbhBox: { x: 790, y: 270, w: 190, h: 146 },
+    labels: [],
+    tags: [
+      ['hg', 'Heißgas', 352, 62, 92],
+      ['kond', 'Kondensat', 362, 180, 88],
+      ['vlbh', 'Vorlauf BH', 790, 118, 84],
+      ['vls', 'Vorlauf-Soll', 790, 166, 84],
+      ['bar', 'Druck', 790, 214, 84],
+      ['rl', 'Rücklauf', 790, 428, 90],
+      ['dt', 'Spreizung', 890, 428, 90],
+    ],
+  },
+  portrait: {
+    viewBox: '0 0 420 1556',
+    outdoor: [45, 0],
+    indoor: [-402, 380],
+    water: [0, 720],
+    pipeLabelsInWaterBox: false,
+    segments: [
+      { d: 'M327 110H410V374H108V450', c: 'gas', ref: true },
+      { d: 'M92 450V356H392V210H325', c: 'liq', ref: true },
+      { d: 'M358 464H392V1478', c: 'hot', share: 'fbh' },
+      { d: 'M392 1478H40V1462H352V1446H40V1430H372', c: 'fbh', share: 'fbh' },
+      { d: 'M372 1430V650H358V626', c: 'cold', share: 'fbh' },
+    ],
+    dhw: `M300 1050V980H210${dhwWave(210, 980, 740)}H44V1050`,
+    fbhGradient: [1478, 1430],
+    fbhBox: { x: 20, y: 1380, w: 390, h: 114 },
+    labels: [
+      ['Warmwasser', 52, 1042, 'start'],
+      ['Kaltwasser', 292, 1042, 'end'],
+    ],
+    tags: [
+      ['hg', 'Heißgas', 130, 308, 92],
+      ['kond', 'Kondensat', 236, 308, 86],
+      ['vlbh', 'Vorlauf BH', 20, 1504, 74],
+      ['vls', 'Vorlauf-Soll', 98, 1504, 74],
+      ['bar', 'Druck', 176, 1504, 74],
+      ['rl', 'Rücklauf', 254, 1504, 74],
+      ['dt', 'Spreizung', 332, 1504, 74],
+    ],
+  },
+};
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const fmt = (v, digits = 1) => (v == null ? '–' : v.toFixed(digits).replace('.', ','));
@@ -137,10 +190,7 @@ function Metric({ label, children, wide, text }) {
 
 function HydraulikPage({ entities, isMobile = false }) {
   const [now, setNow] = useState(() => new Date());
-  const [mobileView, setMobileView] = useState('innen');
-  const viewBox = isMobile
-    ? MOBILE_VIEWS.find((v) => v.id === mobileView).viewBox
-    : '0 0 1000 660';
+  const layout = LAYOUTS[isMobile ? 'portrait' : 'landscape'];
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 30000);
     return () => clearInterval(id);
@@ -182,30 +232,44 @@ function HydraulikPage({ entities, isMobile = false }) {
         : 'var(--text-muted)';
 
   const barY = (t) => 590 - 190 * clamp(((t ?? 10) - 10) / 50, 0, 1);
+  const shift = ([x, y]) => (x || y ? `translate(${x} ${y})` : undefined);
+  const tagValues = {
+    hg: deg(num('hg')),
+    kond: deg(num('kond')),
+    vlbh: deg(num('vlbh')),
+    vls: deg(num('vls')),
+    bar: `${fmt(num('bar'))} bar`,
+    rl: deg(num('rl')),
+    dt: `${fmt(num('dt'))} K`,
+  };
+
+  const renderSegment = (s, i) => {
+    const share = s.ref ? 1 : shares[s.share];
+    const on = s.ref ? refRuns : waterRuns && share > 0.01;
+    const speed = s.ref ? clamp(rpm / 2400, 0.6, 1.5) : clamp((flow / NOMINAL_FLOW) * share, 0.6, 1.5);
+    const color = s.c === 'bypass' ? (mix >= 0.5 ? COLORS.cold : COLORS.hot) : COLORS[s.c];
+    return (
+      <g
+        key={i}
+        className={`${on ? 'hyd-on' : ''} ${s.ref ? 'hyd-ref' : ''}`}
+        style={{ '--share': Math.max(0.25, share).toFixed(2), '--dur': `${(0.9 / speed).toFixed(2)}s` }}
+      >
+        <path className="hyd-pipe" d={s.d} />
+        <path className="hyd-glow" d={s.d} style={{ stroke: color }} />
+        <path className="hyd-flow" d={s.d} style={{ stroke: color }} />
+      </g>
+    );
+  };
+
+  const { fbhBox } = layout;
 
   return (
     <div className={`hyd-root ${isMobile ? 'hyd-mobile' : ''}`}>
       <style>{CSS}</style>
       <div className="hyd-grid">
         <div className="hyd-card hyd-schema">
-          {isMobile && (
-            <div className="hyd-tabs" role="tablist" aria-label="Bereich">
-              {MOBILE_VIEWS.map((v) => (
-                <button
-                  key={v.id}
-                  type="button"
-                  role="tab"
-                  aria-selected={mobileView === v.id}
-                  className={`hyd-tab ${mobileView === v.id ? 'hyd-tab-active' : ''}`}
-                  onClick={() => setMobileView(v.id)}
-                >
-                  {v.label}
-                </button>
-              ))}
-            </div>
-          )}
           <svg
-            viewBox={viewBox}
+            viewBox={layout.viewBox}
             role="img"
             aria-label="Hydraulikschema Wärmepumpe"
             className={defrost ? 'hyd-defrost' : ''}
@@ -215,7 +279,14 @@ function HydraulikPage({ entities, isMobile = false }) {
                 <stop offset="0" stopColor={tempColor(storage == null ? null : storage + 3)} />
                 <stop offset="1" stopColor={tempColor(storage == null ? null : storage - 10)} />
               </linearGradient>
-              <linearGradient id="hyd-fbh-grad" gradientUnits="userSpaceOnUse" x1="0" y1="330" x2="0" y2="394">
+              <linearGradient
+                id="hyd-fbh-grad"
+                gradientUnits="userSpaceOnUse"
+                x1="0"
+                y1={layout.fbhGradient[0]}
+                x2="0"
+                y2={layout.fbhGradient[1]}
+              >
                 <stop offset="0" stopColor="#ff6a4d" />
                 <stop offset=".5" stopColor="#f59e0b" />
                 <stop offset="1" stopColor="#4ea8ff" />
@@ -226,176 +297,177 @@ function HydraulikPage({ entities, isMobile = false }) {
             </defs>
 
             {/* Außengerät */}
-            <rect className="hyd-box" x="20" y="20" width="310" height="282" rx="16" />
-            <text className="hyd-lbl" x="38" y="44">Außengerät</text>
-            <text className="hyd-ttl" x="38" y="64">Altherma 3 R · R32</text>
-            <text className="hyd-lbl" x="312" y="44" textAnchor="end">Außen</text>
-            <text className="hyd-val" x="312" y="64" textAnchor="end">{deg(num('ta'))}</text>
-            <rect x="40" y="88" width="150" height="144" rx="6" fill="url(#hyd-fins)" stroke="var(--glass-border)" />
-            <circle cx="115" cy="160" r="56" className="hyd-fan-ring" />
-            <g
-              className={`hyd-spin ${fan > 0 ? 'hyd-go' : ''}`}
-              style={{ transformOrigin: '115px 160px', transformBox: 'view-box', animationDuration: fan > 0 ? `${(600 / fan).toFixed(2)}s` : undefined }}
-            >
-              {[0, 120, 240].map((r) => (
-                <path
-                  key={r}
-                  d="M115 160 C105 128 120 112 133 112 C136 135 125 150 115 160Z"
-                  className="hyd-blade"
-                  transform={`rotate(${r} 115 160)`}
-                />
-              ))}
-              <circle cx="115" cy="160" r="7" className="hyd-hub" />
-            </g>
-            <rect className="hyd-frost" x="40" y="88" width="150" height="144" rx="6" />
-            <g className="hyd-defrost-badge">
-              <rect x="72" y="148" width="86" height="24" rx="12" />
-              <text x="115" y="164" textAnchor="middle">ABTAUEN</text>
+            <g transform={shift(layout.outdoor)}>
+              <rect className="hyd-box" x="20" y="20" width="310" height="282" rx="16" />
+              <text className="hyd-lbl" x="38" y="44">Außengerät</text>
+              <text className="hyd-ttl" x="38" y="64">Altherma 3 R · R32</text>
+              <text className="hyd-lbl" x="312" y="44" textAnchor="end">Außen</text>
+              <text className="hyd-val" x="312" y="64" textAnchor="end">{deg(num('ta'))}</text>
+              <rect x="40" y="88" width="150" height="144" rx="6" fill="url(#hyd-fins)" stroke="var(--glass-border)" />
+              <circle cx="115" cy="160" r="56" className="hyd-fan-ring" />
+              <g
+                className={`hyd-spin ${fan > 0 ? 'hyd-go' : ''}`}
+                style={{
+                  transformOrigin: '115px 160px',
+                  transformBox: 'view-box',
+                  animationDuration: fan > 0 ? `${(600 / fan).toFixed(2)}s` : undefined,
+                }}
+              >
+                {[0, 120, 240].map((r) => (
+                  <path
+                    key={r}
+                    d="M115 160 C105 128 120 112 133 112 C136 135 125 150 115 160Z"
+                    className="hyd-blade"
+                    transform={`rotate(${r} 115 160)`}
+                  />
+                ))}
+                <circle cx="115" cy="160" r="7" className="hyd-hub" />
+              </g>
+              <rect className="hyd-frost" x="40" y="88" width="150" height="144" rx="6" />
+              <g className="hyd-defrost-badge">
+                <rect x="72" y="148" width="86" height="24" rx="12" />
+                <text x="115" y="164" textAnchor="middle">ABTAUEN</text>
+              </g>
             </g>
 
             {/* Innengerät */}
-            <rect x="460" y="20" width="304" height="620" rx="22" className="hyd-indoor" />
-            <text className="hyd-lbl" x="478" y="44">Innengerät ECH₂O</text>
-
-            {/* Speicher */}
-            <rect x="484" y="296" width="256" height="330" rx="40" fill="url(#hyd-tank-grad)" opacity=".2" />
-            <rect x="484" y="296" width="256" height="330" rx="40" fill="none" stroke="var(--glass-border)" strokeWidth="2" />
-            <text className="hyd-lbl" x="612" y="614" textAnchor="middle">Speicher 500 l · drucklos</text>
-            <circle cx="740" cy="460" r="5" className="hyd-sensor" />
-            <text className="hyd-lbl" x="730" y="452" textAnchor="end">Fühler</text>
+            <g transform={shift(layout.indoor)}>
+              <rect x="460" y="20" width="304" height="620" rx="22" className="hyd-indoor" />
+              <text className="hyd-lbl" x="536" y="44">Innengerät ECH₂O</text>
+              <rect x="484" y="296" width="256" height="330" rx="40" fill="url(#hyd-tank-grad)" opacity=".2" />
+              <rect x="484" y="296" width="256" height="330" rx="40" fill="none" stroke="var(--glass-border)" strokeWidth="2" />
+              <text className="hyd-lbl" x="612" y="614" textAnchor="middle">Speicher 500 l · drucklos</text>
+              <circle cx="740" cy="460" r="5" className="hyd-sensor" />
+              <text className="hyd-lbl" x="730" y="452" textAnchor="end">Fühler</text>
+            </g>
 
             {/* Trinkwasser */}
-            <rect className="hyd-box" x="20" y="330" width="310" height="310" rx="16" />
-            <text className="hyd-lbl" x="38" y="354">Trinkwasser</text>
-            <text className="hyd-lbl" x="312" y="350" textAnchor="end">Warmwasser</text>
-            <text className="hyd-lbl" x="312" y="620" textAnchor="end">Kaltwasser</text>
-            <rect x="40" y="400" width="22" height="190" rx="11" className="hyd-bar-bg" />
-            {storage != null && (
-              <rect
-                x="40"
-                y={barY(storage)}
-                width="22"
-                height={590 - barY(storage)}
-                rx="11"
-                fill={tempColor(storage)}
-                opacity=".85"
-              />
-            )}
-            {storageSet != null && (
-              <line
-                x1="34"
-                x2="68"
-                y1={barY(storageSet)}
-                y2={barY(storageSet)}
-                stroke="var(--text-primary)"
-                strokeWidth="2"
-                strokeDasharray="3 3"
-              />
-            )}
-            <text className="hyd-lbl" x="84" y="420">Speicher Ist</text>
-            <text className="hyd-big" x="84" y="458">{deg(storage)}</text>
-            <text className="hyd-lbl" x="84" y="494">Soll</text>
-            <text className="hyd-val" x="84" y="514">{deg(storageSet)}</text>
-            <text className="hyd-lbl" x="196" y="494">Heizstab</text>
-            <text className="hyd-val" x="196" y="514" style={buh ? { fill: 'var(--hyd-warn)' } : undefined}>
-              {buh ? 'An' : 'Aus'}
-            </text>
-            <text className="hyd-lbl" x="84" y="550">Ladeprogramm</text>
-            <text className="hyd-val" x="84" y="570">{program.range}</text>
-            <text className="hyd-lbl hyd-lbl-plain" x="84" y="588">{program.next}</text>
-            <text className="hyd-lbl" x="196" y="550">Strom heute</text>
-            <text className="hyd-val" x="196" y="570">{`${fmt(num('kwh'))} kWh`}</text>
+            <g transform={shift(layout.water)}>
+              <rect className="hyd-box" x="20" y="330" width="310" height="310" rx="16" />
+              <text className="hyd-lbl" x="38" y="354">Trinkwasser</text>
+              {layout.pipeLabelsInWaterBox && (
+                <>
+                  <text className="hyd-lbl" x="312" y="350" textAnchor="end">Warmwasser</text>
+                  <text className="hyd-lbl" x="312" y="620" textAnchor="end">Kaltwasser</text>
+                </>
+              )}
+              <rect x="40" y="400" width="22" height="190" rx="11" className="hyd-bar-bg" />
+              {storage != null && (
+                <rect
+                  x="40"
+                  y={barY(storage)}
+                  width="22"
+                  height={590 - barY(storage)}
+                  rx="11"
+                  fill={tempColor(storage)}
+                  opacity=".85"
+                />
+              )}
+              {storageSet != null && (
+                <line
+                  x1="34"
+                  x2="68"
+                  y1={barY(storageSet)}
+                  y2={barY(storageSet)}
+                  stroke="var(--text-primary)"
+                  strokeWidth="2"
+                  strokeDasharray="3 3"
+                />
+              )}
+              <text className="hyd-lbl" x="84" y="420">Speicher Ist</text>
+              <text className="hyd-big" x="84" y="458">{deg(storage)}</text>
+              <text className="hyd-lbl" x="84" y="494">Soll</text>
+              <text className="hyd-val" x="84" y="514">{deg(storageSet)}</text>
+              <text className="hyd-lbl" x="196" y="494">Heizstab</text>
+              <text className="hyd-val" x="196" y="514" style={buh ? { fill: 'var(--hyd-warn)' } : undefined}>
+                {buh ? 'An' : 'Aus'}
+              </text>
+              <text className="hyd-lbl" x="84" y="550">Ladeprogramm</text>
+              <text className="hyd-val" x="84" y="570">{program.range}</text>
+              <text className="hyd-lbl hyd-lbl-plain" x="84" y="588">{program.next}</text>
+              <text className="hyd-lbl" x="196" y="550">Strom heute</text>
+              <text className="hyd-val" x="196" y="570">{`${fmt(num('kwh'))} kWh`}</text>
+            </g>
 
             {/* Heizkreis */}
-            <rect className="hyd-box" x="790" y="270" width="190" height="146" rx="16" />
-            <text className="hyd-lbl" x="808" y="294">Heizkreis</text>
-            <text className="hyd-ttl" x="808" y="314">Fußbodenheizung</text>
+            <rect className="hyd-box" x={fbhBox.x} y={fbhBox.y} width={fbhBox.w} height={fbhBox.h} rx="16" />
+            <text className="hyd-lbl" x={fbhBox.x + 18} y={fbhBox.y + 22}>Heizkreis</text>
+            <text className="hyd-ttl" x={fbhBox.x + 18} y={fbhBox.y + 40}>Fußbodenheizung</text>
+            {layout.labels.map(([text, x, y, anchor]) => (
+              <text key={text} className="hyd-lbl" x={x} y={y} textAnchor={anchor}>{text}</text>
+            ))}
 
-            <g>
-              {SEGMENTS.map((s, i) => {
-                const share = s.ref ? 1 : shares[s.share];
-                const on = s.ref ? refRuns : waterRuns && share > 0.01;
-                const speed = s.ref ? clamp(rpm / 2400, 0.6, 1.5) : clamp((flow / NOMINAL_FLOW) * share, 0.6, 1.5);
-                const color = s.c === 'bypass' ? (mix >= 0.5 ? COLORS.cold : COLORS.hot) : COLORS[s.c];
-                return (
-                  <g
-                    key={i}
-                    className={`${on ? 'hyd-on' : ''} ${s.ref ? 'hyd-ref' : ''}`}
-                    style={{ '--share': Math.max(0.25, share).toFixed(2), '--dur': `${(0.9 / speed).toFixed(2)}s` }}
-                  >
-                    <path className="hyd-pipe" d={s.d} />
-                    <path className="hyd-glow" d={s.d} style={{ stroke: color }} />
-                    <path className="hyd-flow" d={s.d} style={{ stroke: color }} />
-                  </g>
-                );
-              })}
-            </g>
-            <path d={DHW_COIL} fill="none" stroke="var(--hyd-dhw)" strokeWidth="3" opacity=".8" />
+            <g transform={shift(layout.outdoor)}>{OUTDOOR_SEGMENTS.map(renderSegment)}</g>
+            <g transform={shift(layout.indoor)}>{INDOOR_SEGMENTS.map(renderSegment)}</g>
+            <g>{layout.segments.map(renderSegment)}</g>
+            <path d={layout.dhw} fill="none" stroke="var(--hyd-dhw)" strokeWidth="3" opacity=".8" />
 
-            {/* Heizstab im Speicher */}
-            <g className={buh ? 'hyd-buh-on' : ''}>
-              <path
-                className="hyd-buh-rod"
-                d="M660 296V330l-7 6 14 8-14 8 14 8-14 8 14 8-14 8 14 8-14 8 14 8-14 8 14 8-7 6V470"
-              />
-              <rect x="651" y="282" width="18" height="14" rx="3" className="hyd-part" />
-              <g className="hyd-buh-heat">
-                <path className="hyd-heat" d="M644 440q-4-6 0-12q4-6 0-12" />
-                <path className="hyd-heat" d="M676 420q-4-6 0-12q4-6 0-12" style={{ animationDelay: '.6s' }} />
-                <path className="hyd-heat" d="M644 380q-4-6 0-12q4-6 0-12" style={{ animationDelay: '1.2s' }} />
-                <path className="hyd-heat" d="M676 460q-4-6 0-12q4-6 0-12" style={{ animationDelay: '.3s' }} />
+            <g transform={shift(layout.indoor)}>
+              {/* Heizstab im Speicher */}
+              <g className={buh ? 'hyd-buh-on' : ''}>
+                <path
+                  className="hyd-buh-rod"
+                  d="M660 296V330l-7 6 14 8-14 8 14 8-14 8 14 8-14 8 14 8-14 8 14 8-14 8 14 8-7 6V470"
+                />
+                <rect x="651" y="282" width="18" height="14" rx="3" className="hyd-part" />
+                <g className="hyd-buh-heat">
+                  <path className="hyd-heat" d="M644 440q-4-6 0-12q4-6 0-12" />
+                  <path className="hyd-heat" d="M676 420q-4-6 0-12q4-6 0-12" style={{ animationDelay: '.6s' }} />
+                  <path className="hyd-heat" d="M644 380q-4-6 0-12q4-6 0-12" style={{ animationDelay: '1.2s' }} />
+                  <path className="hyd-heat" d="M676 460q-4-6 0-12q4-6 0-12" style={{ animationDelay: '.3s' }} />
+                </g>
+                <text className="hyd-lbl" x="645" y="292" textAnchor="end">Heizstab</text>
               </g>
-              <text className="hyd-lbl" x="645" y="292" textAnchor="end">Heizstab</text>
+
+              {/* Kondensator */}
+              <rect x="480" y="70" width="44" height="120" rx="5" className="hyd-part" />
+              <path d="M486 84h32M486 97h32M486 110h32M486 123h32M486 136h32M486 149h32M486 162h32M486 175h32" stroke="var(--glass-border)" />
+              <text className="hyd-lbl" x="484" y="206">Kondensator</text>
+
+              {/* Pumpe */}
+              <circle cx="600" cy="170" r="16" className="hyd-part" />
+              <g className={`hyd-spin ${waterRuns ? 'hyd-go' : ''}`} style={{ animationDuration: '.6s' }}>
+                <path d="M600 157v26M587 170h26" className="hyd-part-line" />
+              </g>
+
+              {/* 3UV DHW (M1S) */}
+              <path d="M676 74L692 84L676 94Z" style={{ fill: waterRuns ? COLORS.hot : 'var(--hyd-dim)' }} className="hyd-v3" />
+              <path d="M708 74L692 84L708 94Z" style={{ fill: waterRuns && mix < 1 ? COLORS.hot : 'var(--hyd-dim)' }} className="hyd-v3" />
+              <path d="M682 102L692 84L702 102Z" style={{ fill: waterRuns && mix > 0 ? COLORS.hot : 'var(--hyd-dim)' }} className="hyd-v3" />
+
+              {/* Bypass (M2S) */}
+              <path d="M744 220L760 230L744 240Z" style={{ fill: waterRuns ? COLORS.cold : 'var(--hyd-dim)' }} className="hyd-v3" />
+              <path d="M750 214L760 230L770 214Z" style={{ fill: waterRuns && bp > 0 ? COLORS.cold : 'var(--hyd-dim)' }} className="hyd-v3" />
+              <path d="M750 246L760 230L770 246Z" style={{ fill: waterRuns && bp < 1 ? COLORS.cold : 'var(--hyd-dim)' }} className="hyd-v3" />
+
+              <Tag x={530} y={100} w={66} label="Vorlauf" value={deg(num('vl'))} />
+              <Tag x={700} y={100} w={54} label="3UV DHW" value={`${Math.round(mix * 100)} %`} />
+              <Tag x={700} y={150} w={54} label="Bypass" value={`${Math.round(bp * 100)} %`} />
+              <Tag x={488} y={240} w={84} label="Durchfluss" value={`${Math.round(flow)} l/h`} />
             </g>
 
-            {/* Kältekreis-Bauteile */}
-            <circle cx="260" cy="110" r="22" className="hyd-part" />
-            <path
-              d="M248 122 L272 98 M248 98 L272 122"
-              className={`hyd-part-line hyd-spin ${refRuns ? 'hyd-go' : ''}`}
-              style={{ animationDuration: refRuns ? `${(2400 / rpm).toFixed(2)}s` : undefined }}
-            />
-            <text className="hyd-lbl" x="260" y="148" textAnchor="middle">Verdichter</text>
-            <path d="M240 200L260 210L240 220Z M280 200L260 210L280 220Z" className="hyd-valve" />
-            <text className="hyd-lbl" x="260" y="236" textAnchor="middle">EEV</text>
+            <g transform={shift(layout.outdoor)}>
+              {/* Kältekreis-Bauteile */}
+              <circle cx="260" cy="110" r="22" className="hyd-part" />
+              <path
+                d="M248 122 L272 98 M248 98 L272 122"
+                className={`hyd-part-line hyd-spin ${refRuns ? 'hyd-go' : ''}`}
+                style={{ animationDuration: refRuns ? `${(2400 / rpm).toFixed(2)}s` : undefined }}
+              />
+              <text className="hyd-lbl" x="260" y="148" textAnchor="middle">Verdichter</text>
+              <path d="M240 200L260 210L240 220Z M280 200L260 210L280 220Z" className="hyd-valve" />
+              <text className="hyd-lbl" x="260" y="236" textAnchor="middle">EEV</text>
 
-            {/* Kondensator */}
-            <rect x="480" y="70" width="44" height="120" rx="5" className="hyd-part" />
-            <path d="M486 84h32M486 97h32M486 110h32M486 123h32M486 136h32M486 149h32M486 162h32M486 175h32" stroke="var(--glass-border)" />
-            <text className="hyd-lbl" x="484" y="206">Kondensator</text>
-
-            {/* Pumpe */}
-            <circle cx="600" cy="170" r="16" className="hyd-part" />
-            <g className={`hyd-spin ${waterRuns ? 'hyd-go' : ''}`} style={{ animationDuration: '.6s' }}>
-              <path d="M600 157v26M587 170h26" className="hyd-part-line" />
+              <Tag x={222} y={156} w={84} label="Strom" value={`${fmt(num('amp'))} A`} />
+              <Tag x={34} y={250} w={64} label="Lüfter" value={fan > 0 ? `${Math.round(fan)} rpm` : 'aus'} />
+              <Tag x={104} y={250} w={72} label="Verdichter" value={rpm > 0 ? `${Math.round(rpm)} rpm` : 'aus'} />
+              <Tag x={182} y={250} w={72} label="Verdampfer" value={deg(num('evap'))} />
+              <Tag x={260} y={250} w={56} label="EEV" value={eevPct == null ? '–' : `${eevPct} %`} />
             </g>
 
-            {/* 3UV DHW (M1S) */}
-            <path d="M676 74L692 84L676 94Z" style={{ fill: waterRuns ? COLORS.hot : 'var(--hyd-dim)' }} className="hyd-v3" />
-            <path d="M708 74L692 84L708 94Z" style={{ fill: waterRuns && mix < 1 ? COLORS.hot : 'var(--hyd-dim)' }} className="hyd-v3" />
-            <path d="M682 102L692 84L702 102Z" style={{ fill: waterRuns && mix > 0 ? COLORS.hot : 'var(--hyd-dim)' }} className="hyd-v3" />
-
-            {/* Bypass (M2S) */}
-            <path d="M744 220L760 230L744 240Z" style={{ fill: waterRuns ? COLORS.cold : 'var(--hyd-dim)' }} className="hyd-v3" />
-            <path d="M750 214L760 230L770 214Z" style={{ fill: waterRuns && bp > 0 ? COLORS.cold : 'var(--hyd-dim)' }} className="hyd-v3" />
-            <path d="M750 246L760 230L770 246Z" style={{ fill: waterRuns && bp < 1 ? COLORS.cold : 'var(--hyd-dim)' }} className="hyd-v3" />
-
-            <Tag x={222} y={156} w={84} label="Strom" value={`${fmt(num('amp'))} A`} />
-            <Tag x={34} y={250} w={64} label="Lüfter" value={fan > 0 ? `${Math.round(fan)} rpm` : 'aus'} />
-            <Tag x={104} y={250} w={72} label="Verdichter" value={rpm > 0 ? `${Math.round(rpm)} rpm` : 'aus'} />
-            <Tag x={182} y={250} w={72} label="Verdampfer" value={deg(num('evap'))} />
-            <Tag x={260} y={250} w={56} label="EEV" value={eevPct == null ? '–' : `${eevPct} %`} />
-            <Tag x={352} y={62} w={92} label="Heißgas" value={deg(num('hg'))} />
-            <Tag x={362} y={180} w={88} label="Kondensat" value={deg(num('kond'))} />
-            <Tag x={530} y={100} w={66} label="Vorlauf" value={deg(num('vl'))} />
-            <Tag x={700} y={100} w={54} label="3UV DHW" value={`${Math.round(mix * 100)} %`} />
-            <Tag x={700} y={150} w={54} label="Bypass" value={`${Math.round(bp * 100)} %`} />
-            <Tag x={488} y={240} w={84} label="Durchfluss" value={`${Math.round(flow)} l/h`} />
-            <Tag x={790} y={118} w={84} label="Vorlauf BH" value={deg(num('vlbh'))} />
-            <Tag x={790} y={166} w={84} label="Vorlauf-Soll" value={deg(num('vls'))} />
-            <Tag x={790} y={214} w={84} label="Druck" value={`${fmt(num('bar'))} bar`} />
-            <Tag x={790} y={428} w={90} label="Rücklauf" value={deg(num('rl'))} />
-            <Tag x={890} y={428} w={90} label="Spreizung" value={`${fmt(num('dt'))} K`} />
+            {layout.tags.map(([key, label, x, y, w]) => (
+              <Tag key={key} x={x} y={y} w={w} label={label} value={tagValues[key]} />
+            ))}
           </svg>
         </div>
 
@@ -453,9 +525,6 @@ const CSS = `
 .hyd-schema{overflow-x:auto}
 .hyd-schema svg{display:block;width:100%;min-width:680px;height:auto}
 .hyd-mobile .hyd-schema svg{min-width:0}
-.hyd-tabs{display:flex;gap:6px;padding:12px 12px 0;overflow-x:auto}
-.hyd-tab{flex:1 0 auto;padding:7px 12px;border-radius:999px;border:1px solid transparent;background:var(--glass-bg);color:var(--text-secondary);font-size:12px;font-weight:700;letter-spacing:.03em;white-space:nowrap}
-.hyd-tab-active{border-color:var(--glass-border);background:var(--glass-bg-hover,var(--glass-bg));color:var(--text-primary)}
 .hyd-metrics{padding:16px;display:grid;grid-template-columns:1fr 1fr;gap:10px;align-content:start}
 .hyd-metric{border:1px solid var(--glass-border);border-radius:14px;padding:10px 12px;min-width:0}
 .hyd-metric-label{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-secondary)}

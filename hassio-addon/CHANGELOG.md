@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.31.2
+
+### Added
+- Settings → System → Maintenance: clear the Docker build cache with one button. Tunet starts Portainer, prunes the cache and stops Portainer again; shows a hint if Portainer is not installed. Admins only
+- Heat pump page: dedicated portrait schema on phones instead of tabs
+
+### Changed
+- The add-on now requests Supervisor access (`hassio_api`, role `manager`) to start and stop Portainer for maintenance
+
 ## 1.31.1
 
 ### Added

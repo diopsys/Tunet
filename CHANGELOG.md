@@ -1,3 +1,12 @@
+## [1.31.2] — 2026-10-25
+
+### Added
+- Einstellungen → System → Wartung: Docker-Build-Cache per Knopf leeren. Tunet startet dafür Portainer, leert den Cache und stoppt Portainer danach wieder; ohne installiertes Portainer erscheint ein Hinweis. Nur für Home-Assistant-Admins
+- Wärmepumpen-Seite: eigenes Hochkant-Schema am Handy (Außengerät, Innengerät, Trinkwasser und Fußbodenheizung untereinander) statt der Tabs
+
+### Changed
+- App: benötigt jetzt Supervisor-Zugriff (`hassio_api`, Rolle `manager`), um Portainer für die Wartung zu starten und zu stoppen
+
 ## [1.31.1] — 2026-10-24
 
 ### Added

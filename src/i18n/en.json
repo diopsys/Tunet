@@ -1319,6 +1319,7 @@
   "system.tabLayout": "Layout",
   "system.tabSettings": "Settings",
   "system.tabProfiles": "Profiles",
+  "system.tabMaintenance": "Maintenance",
   "system.title": "System",
   "system.token": "Token",
   "theme.dark": "Dark",

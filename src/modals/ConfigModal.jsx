@@ -3,6 +3,7 @@ import PropTypes from 'prop-types';
 import ModernDropdown from '../components/ui/ModernDropdown';
 import M3Slider from '../components/ui/M3Slider';
 import AccessibleModalShell from '../components/ui/AccessibleModalShell';
+import MaintenanceTab from './MaintenanceTab';
 import { GRADIENT_PRESETS } from '../contexts/ConfigContext';
 import { hasOAuthTokens } from '../services/oauthStorage';
 import {
@@ -27,6 +28,7 @@ import {
   Monitor,
   Sparkles,
   Download,
+  Wrench,
   ArrowRight,
   LayoutGrid,
   Columns,
@@ -216,10 +218,11 @@ export default function ConfigModal({
     // { key: 'layout', icon: LayoutGrid, label: t('system.tabLayout') },
     { key: 'profiles', icon: UserCircle2, label: t('system.tabProfiles') },
     { key: 'updates', icon: Download, label: t('updates.title') },
+    { key: 'maintenance', icon: Wrench, label: t('system.tabMaintenance') },
   ];
 
   useEffect(() => {
-    const supportedTabs = new Set(['connection', 'profiles', 'updates']);
+    const supportedTabs = new Set(['connection', 'profiles', 'updates', 'maintenance']);
     if (!isLayoutPreview && !supportedTabs.has(configTab)) {
       setConfigTab('connection');
     }
@@ -2267,6 +2270,7 @@ export default function ConfigModal({
                     {configTab === 'connection' && renderConnectionTab()}
                     {configTab === 'profiles' && renderProfilesTab()}
                     {configTab === 'updates' && renderUpdatesTab()}
+                    {configTab === 'maintenance' && <MaintenanceTab />}
                   </div>
 
                   {/* Mobile Footer */}
