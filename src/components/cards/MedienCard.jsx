@@ -76,7 +76,7 @@ export function quelleAktiv(quelle, zone, entities) {
 
 /** Abspielen/Pause: ist der Raum aus, erst auf den Eingang des Players stellen – sonst
  *  weckt der Player (z. B. HEOS) die Hauptzone des Receivers statt des Raums. */
-export function playAktionen(config, entities) {
+export function playAktionen(config, entities, playerId = config.player) {
   const zone = config.zone ? entities[config.zone] : null;
   const vorher = config.zone && config.musik?.zoneQuelle && !istAn(zone)
     ? [
@@ -84,7 +84,7 @@ export function playAktionen(config, entities) {
         ['media_player', 'select_source', { entity_id: config.zone, source: config.musik.zoneQuelle }],
       ]
     : [];
-  return [...vorher, ['media_player', 'media_play_pause', { entity_id: config.player }]];
+  return [...vorher, ['media_player', 'media_play_pause', { entity_id: playerId }]];
 }
 
 // Quelle der laufenden Zone in der anderen Zone: HEOS heißt in der Hauptzone „NET“;
@@ -136,7 +136,12 @@ const MedienCard = ({ cardId, dragProps, controls, cardStyle, editMode, entities
   const tv = modus === 'tv' ? entities[config.tv.entity] : null;
   const satBox = modus === 'sat' ? entities[config.tv.sat.entity] : null;
   // Im TV-Betrieb kommen Anzeige und Lautstärke vom Fernseher bzw. Surround
-  const player = modus === 'tv' || modus === 'sat' ? null : config.player ? entities[config.player] : null;
+  // Läuft Spotify per Connect auf dem Receiver, zeigt und steuert die Kachel Spotify statt Music Assistant
+  const sp = config.musik?.spotify;
+  const spE = sp?.entity ? entities[sp.entity] : null;
+  const spotifyLaeuft = spE?.state === 'playing' && (!sp.geraet || spE.attributes?.source === sp.geraet);
+  const playerId = modus === 'tv' || modus === 'sat' ? null : spotifyLaeuft ? sp.entity : config.player;
+  const player = playerId ? entities[playerId] : null;
   const lautId = modus === 'tv' ? config.tv.surround || config.tv.entity : config.zone;
   const lautEntity = lautId ? entities[lautId] : null;
   const titel = name || 'Medien';
@@ -193,11 +198,11 @@ const MedienCard = ({ cardId, dragProps, controls, cardStyle, editMode, entities
           {medienUnter && <span className="truncate text-[11px] text-[var(--text-secondary)]">{medienUnter}</span>}
           {player && (
             <div className="mt-1 flex items-center gap-2 text-[var(--text-secondary)]">
-              <button type="button" aria-label="Zurück" onClick={stop(() => callService?.('media_player', 'media_previous_track', { entity_id: config.player }))}><SkipBack className="h-3.5 w-3.5" /></button>
-              <button type="button" aria-label={spielt ? 'Pause' : 'Abspielen'} onClick={stop(() => ruf(playAktionen(config, entities)))}>
+              <button type="button" aria-label="Zurück" onClick={stop(() => callService?.('media_player', 'media_previous_track', { entity_id: playerId }))}><SkipBack className="h-3.5 w-3.5" /></button>
+              <button type="button" aria-label={spielt ? 'Pause' : 'Abspielen'} onClick={stop(() => ruf(playAktionen(config, entities, playerId)))}>
                 {spielt ? <Pause className="h-4 w-4 text-[var(--text-primary)]" /> : <Play className="h-4 w-4 text-[var(--text-primary)]" />}
               </button>
-              <button type="button" aria-label="Weiter" onClick={stop(() => callService?.('media_player', 'media_next_track', { entity_id: config.player }))}><SkipForward className="h-3.5 w-3.5" /></button>
+              <button type="button" aria-label="Weiter" onClick={stop(() => callService?.('media_player', 'media_next_track', { entity_id: playerId }))}><SkipForward className="h-3.5 w-3.5" /></button>
             </div>
           )}
         </div>

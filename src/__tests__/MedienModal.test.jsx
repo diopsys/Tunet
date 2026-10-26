@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import MedienCard from '../components/cards/MedienCard';
-import { satAktiv } from '../modals/MedienModal';
+import { satAktiv, spotifyUri } from '../modals/MedienModal';
 
 const medien = {
   zone: 'media_player.zone2',
@@ -74,6 +74,54 @@ describe('Medien-Fenster', () => {
     expect(callService).toHaveBeenCalledWith('script', 'turn_on', { entity_id: 'script.sat_tv' });
     fireEvent.click(screen.getByRole('button', { name: 'OK' }));
     expect(callService).toHaveBeenCalledWith('webostv', 'button', { entity_id: 'media_player.tv', button: 'ENTER' });
+  });
+
+  it('converts Music Assistant Spotify addresses', () => {
+    expect(spotifyUri('spotify--NdV3MuLj://track/1Uz')).toEqual({ id: 'spotify:track:1Uz', typ: 'track' });
+    expect(spotifyUri('library://playlist/15')).toBeNull();
+  });
+
+  it('plays Spotify on the receiver and keeps the library free of Spotify', async () => {
+    const callService = vi.fn();
+    const mitSpotify = { ...medien, musik: { ...medien.musik, spotify: { entity: 'media_player.spotify', geraet: 'Marantz' } } };
+    const spConn = {
+      sendMessagePromise: vi.fn(async (msg) => {
+        if (msg.type === 'media_player/browse_media' && msg.media_content_id === 'current_user_playlists') {
+          return { children: [{ title: 'Deutscher Rock', media_content_id: 'spotify:playlist:5G', media_content_type: 'spotify://playlist', can_play: true }] };
+        }
+        if (msg.type === 'media_player/browse_media') return { children: [] };
+        if (msg.service === 'search') {
+          return { response: { tracks: [
+            { uri: 'spotify--x://track/9', name: 'Whiskey in the Jar', media_type: 'track' },
+            { uri: 'filesystem_smb--y://track/3', name: 'Whiskey vom NAS', media_type: 'track' },
+          ] } };
+        }
+        if (msg.service === 'get_library') return { response: { items: [{ uri: 'library://playlist/1', name: 'Sommer' }] } };
+        return {};
+      }),
+    };
+    const ents = { ...basis, 'media_player.spotify': { state: 'idle', attributes: { source: 'MacBook', source_list: ['MacBook', 'Marantz'] } } };
+    const r = render(<MedienCard cardId="m" entities={ents} settings={{ medien: mitSpotify }} callService={callService} conn={spConn} getEntityImageUrl={(u) => u} />);
+    fireEvent.click(r.container.firstChild);
+    await screen.findByRole('dialog');
+    expect(screen.getByRole('tab', { name: 'Bibliothek' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('tab', { name: 'Spotify' }));
+    fireEvent.click(await screen.findByText('Deutscher Rock'));
+    expect(callService).toHaveBeenCalledWith('media_player', 'select_source', { entity_id: 'media_player.zone2', source: 'HEOS Music' });
+    expect(callService).toHaveBeenCalledWith('media_player', 'select_source', { entity_id: 'media_player.spotify', source: 'Marantz' });
+    expect(callService).toHaveBeenCalledWith('media_player', 'play_media', { entity_id: 'media_player.spotify', media_content_id: 'spotify:playlist:5G', media_content_type: 'spotify://playlist' });
+
+    fireEvent.change(screen.getByLabelText('Musik suchen'), { target: { value: 'Whiskey' } });
+    await act(async () => { fireEvent.submit(screen.getByLabelText('Musik suchen').closest('form')); });
+    expect(screen.queryByText('Whiskey vom NAS')).toBeNull();
+    fireEvent.click(await screen.findByText('Whiskey in the Jar'));
+    expect(callService).toHaveBeenCalledWith('media_player', 'play_media', { entity_id: 'media_player.spotify', media_content_id: 'spotify:track:9', media_content_type: 'track' });
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Bibliothek' }));
+    fireEvent.change(await screen.findByLabelText('Musik suchen'), { target: { value: 'Whiskey' } });
+    await act(async () => { fireEvent.submit(screen.getByLabelText('Musik suchen').closest('form')); });
+    expect(await screen.findByText('Whiskey vom NAS')).toBeTruthy();
+    expect(screen.queryByText('Whiskey in the Jar')).toBeNull();
   });
 
   it('lists playlists, searches and plays in the room', async () => {

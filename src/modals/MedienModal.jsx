@@ -8,13 +8,16 @@ import AccessibleModalShell from '../components/ui/AccessibleModalShell';
 import { beideZonenAktionen, playAktionen } from '../components/cards/MedienCard';
 
 /*
- * Medien-Fenster der Medien-Kachel mit den Reitern „Fernseher“ und „Musik“.
+ * Medien-Fenster der Medien-Kachel mit den Reitern „Fernseher“, „Spotify“ und „Bibliothek“
+ * (eigene Musik über Music Assistant; ohne Spotify heißt der Reiter „Musik“).
  * Belegung aus settings.medien (siehe MedienCard), zusätzlich:
  *   tv: { entity, surround?, surroundTvQuelle?: 'TV Audio',
  *         apps?: [{ name, icon?, source }],             // Schnellwahl am Fernseher
  *         sat?: { entity, surroundQuelle, script? },    // Sat-Receiver über den Receiver-Eingang
  *         fernbedienung?: 'webostv' }                   // Steuerkreuz über webostv.button
- *   musik: { maEintrag, zoneQuelle?: 'HEOS Music' }     // Music Assistant (config_entry_id)
+ *   musik: { maEintrag, zoneQuelle?: 'HEOS Music',      // Music Assistant (config_entry_id)
+ *            spotify?: { entity, geraet? } }            // Spotify-Integration, spielt per Connect
+ *                                                       // auf dem Gerät (z. B. 'Marantz SR7015')
  * Das Fenster hängt am <body> (Portal): die Kachel ist verschiebbar und schneidet ab.
  */
 
@@ -29,6 +32,19 @@ export async function maDienst(conn, service, data) {
   });
   return r?.response ?? r?.service_response ?? null;
 }
+
+/** Medienbrowser eines Players (z. B. Spotify-Playlists). */
+async function durchsuchen(conn, entityId, typ, id) {
+  if (!conn?.sendMessagePromise) return null;
+  return conn.sendMessagePromise({ type: 'media_player/browse_media', entity_id: entityId, media_content_type: typ, media_content_id: id });
+}
+
+/** Music-Assistant-Adresse eines Spotify-Eintrags („spotify--x://track/ID“) als Spotify-URI. */
+export function spotifyUri(uri) {
+  const m = /^spotify[^:]*:\/\/(track|album|playlist|artist)\/([^/?]+)/.exec(uri || '');
+  return m ? { id: `spotify:${m[1]}:${m[2]}`, typ: m[1] } : null;
+}
+const istSpotify = (item) => /^spotify/.test(item?.uri || '');
 
 /** Läuft gerade der Sat-Receiver über den Receiver (statt einer App am Fernseher)? */
 export function satAktiv(tvCfg, entities) {
@@ -201,40 +217,38 @@ const Treffer = ({ item, onPlay, bild }) => (
 
 const SUCH_ARTEN = [['tracks', 'Titel'], ['albums', 'Alben'], ['playlists', 'Playlists'], ['artists', 'Künstler'], ['radio', 'Radio']];
 
-function MusikReiter({ config, entities, callService, conn, bild }) {
-  const zone = config.zone ? entities[config.zone] : null;
-  const player = config.player ? entities[config.player] : null;
+// Was läuft, mit Zurück / Abspielen / Weiter für den angegebenen Player
+function JetztLaeuft({ config, entities, callService, bild, playerId }) {
+  const player = playerId ? entities[playerId] : null;
   const pa = player?.attributes || {};
   const spielt = player?.state === 'playing';
-  const eintrag = config.musik?.maEintrag;
-  const [playlists, setPlaylists] = useState([]);
-  const [suche, setSuche] = useState('');
-  const [treffer, setTreffer] = useState(null);
+  const ruf = (aktionen) => aktionen.forEach(([d, s, data]) => callService(d, s, data));
+  return (
+    <div className="flex items-center gap-4">
+      <div className="flex h-20 w-20 flex-shrink-0 items-center justify-center overflow-hidden rounded-2xl" style={{ backgroundColor: 'var(--glass-bg-hover)' }}>
+        {pa.entity_picture ? <img src={bild(pa.entity_picture)} alt="" className="h-full w-full object-cover" /> : <Music className="h-8 w-8 text-[var(--text-muted)]" />}
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-lg font-semibold text-[var(--text-primary)]">{pa.media_title || 'Nichts ausgewählt'}</p>
+        <p className="truncate text-sm text-[var(--text-secondary)]">{[pa.media_artist, pa.media_album_name].filter(Boolean).join(' · ')}</p>
+        {player && (
+          <div className="mt-2 flex items-center gap-2">
+            <Knopf label="Zurück" onClick={() => callService('media_player', 'media_previous_track', { entity_id: playerId })}><SkipBack className="h-4 w-4" /></Knopf>
+            <Knopf label={spielt ? 'Pause' : 'Abspielen'} aktiv={spielt} onClick={() => ruf(playAktionen(config, entities, playerId))}>
+              {spielt ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+            </Knopf>
+            <Knopf label="Weiter" onClick={() => callService('media_player', 'media_next_track', { entity_id: playerId })}><SkipForward className="h-4 w-4" /></Knopf>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
-  useEffect(() => {
-    if (!eintrag) return;
-    let aus = false;
-    maDienst(conn, 'get_library', { config_entry_id: eintrag, media_type: 'playlist', limit: 40, order_by: 'name' })
-      .then((r) => { if (!aus) setPlaylists((r?.items || []).filter((p) => p.name)); })
-      .catch(() => {});
-    return () => { aus = true; };
-  }, [conn, eintrag]);
-
-  const suchen = async (e) => {
-    e.preventDefault();
-    if (!eintrag || !suche.trim()) return;
-    try {
-      setTreffer(await maDienst(conn, 'search', { config_entry_id: eintrag, name: suche.trim(), limit: 5 }));
-    } catch { setTreffer({}); }
-  };
-  const abspielen = (item) => {
-    // Raum einschalten und auf den Eingang des Players stellen, dann abspielen
-    if (config.zone && config.musik?.zoneQuelle) {
-      callService('media_player', 'turn_on', { entity_id: config.zone });
-      callService('media_player', 'select_source', { entity_id: config.zone, source: config.musik.zoneQuelle });
-    }
-    callService('music_assistant', 'play_media', { entity_id: config.player, media_id: item.uri, media_type: item.media_type });
-  };
+// Raum: Quellen, „Beide Zonen“ und Lautstärke
+function Raum({ config, entities, callService }) {
+  const zone = config.zone ? entities[config.zone] : null;
+  if (!zone) return null;
   const raumQuellen = config.quellen.filter((q) => q.source || q.aus);
   const ruf = (aktionen) => aktionen.forEach(([d, s, data]) => callService(d, s, data));
   // „Beide Zonen“: Raum und Hauptzone (Surround) mit derselben Quelle
@@ -242,74 +256,168 @@ function MusikReiter({ config, entities, callService, conn, bild }) {
   const beideAn = haupt && istAn(zone) && istAn(entities[haupt]);
   const hauptZuerst = Boolean(config.tv && (istAn(entities[config.tv.entity]) || istAn(entities[config.tv.sat?.entity])));
   const beideMoeglich = haupt && (istAn(zone) || istAn(entities[haupt]));
+  return (
+    <Abschnitt titel={config.name || 'Raum'}>
+      <div className="flex flex-wrap gap-2">
+        {raumQuellen.map((q) => {
+          const Icon = q.aus ? Power : getIconComponent(q.icon || 'mdi:music', Music);
+          const aktiv = q.aus ? !istAn(zone) : istAn(zone) && zone.attributes?.source === q.source;
+          return (
+            <Knopf key={q.name} aktiv={aktiv && !q.aus} onClick={() => (q.aus
+              ? callService('media_player', 'turn_off', { entity_id: config.zone })
+              : (callService('media_player', 'turn_on', { entity_id: config.zone }), callService('media_player', 'select_source', { entity_id: config.zone, source: q.source })))}
+            >
+              <Icon className="h-4 w-4" />{q.name}
+            </Knopf>
+          );
+        })}
+        {beideMoeglich && (
+          <Knopf aktiv={beideAn} onClick={() => ruf(beideZonenAktionen(config.zone, haupt, entities, hauptZuerst))}>
+            <Speaker className="h-4 w-4" />Beide Zonen
+          </Knopf>
+        )}
+      </div>
+      {istAn(zone) && <Lautstaerke entity={zone} entityId={config.zone} callService={callService} />}
+    </Abschnitt>
+  );
+}
+
+// Raum einschalten und auf den Eingang des Players stellen (HEOS), damit nicht die Hauptzone angeht
+function raumVorbereiten(config, callService) {
+  if (config.zone && config.musik?.zoneQuelle) {
+    callService('media_player', 'turn_on', { entity_id: config.zone });
+    callService('media_player', 'select_source', { entity_id: config.zone, source: config.musik.zoneQuelle });
+  }
+}
+
+function Suche({ onSuche }) {
+  const [text, setText] = useState('');
+  return (
+    <form onSubmit={(e) => { e.preventDefault(); if (text.trim()) onSuche(text.trim()); }} className="flex gap-2">
+      <input
+        value={text} onChange={(e) => setText(e.target.value)} placeholder="Künstler, Album, Titel …" aria-label="Musik suchen"
+        className="min-w-0 flex-1 rounded-xl border px-3 py-2 text-sm"
+        style={{ backgroundColor: 'var(--glass-bg)', borderColor: 'var(--glass-border)', color: 'var(--text-primary)' }}
+      />
+      <Knopf label="Suchen"><Search className="h-4 w-4" /></Knopf>
+    </form>
+  );
+}
+
+const Trefferliste = ({ treffer, onPlay, bild }) => (
+  <div className="flex flex-col gap-3">
+    {SUCH_ARTEN.map(([art, name]) => (treffer[art]?.length ? (
+      <div key={art} className="flex flex-col">
+        <p className="mb-1 text-[11px] font-semibold text-[var(--text-secondary)]">{name}</p>
+        {treffer[art].map((t) => <Treffer key={t.uri} item={t} onPlay={onPlay} bild={bild} />)}
+      </div>
+    ) : null))}
+    {!SUCH_ARTEN.some(([art]) => treffer[art]?.length) && <p className="text-xs text-[var(--text-muted)]">Nichts gefunden.</p>}
+  </div>
+);
+
+// nur Treffer einer Herkunft behalten (Spotify bzw. eigene Bibliothek)
+const filtern = (treffer, spotify) => Object.fromEntries(
+  Object.entries(treffer || {}).map(([k, v]) => [k, Array.isArray(v) ? v.filter((t) => istSpotify(t) === spotify) : v]),
+);
+
+function SpotifyReiter({ config, entities, callService, conn, bild }) {
+  const sp = config.musik.spotify;
+  const eintrag = config.musik?.maEintrag;
+  const [listen, setListen] = useState({ playlists: [], alben: [] });
+  const [treffer, setTreffer] = useState(null);
+
+  useEffect(() => {
+    let aus = false;
+    const laden = (typ, id) => Promise.resolve(durchsuchen(conn, sp.entity, typ, id))
+      .then((r) => (r?.children || []).filter((c) => c.title && c.can_play)
+        .map((c) => ({ uri: c.media_content_id, name: c.title, image: c.thumbnail, media_type: c.media_content_type })))
+      .catch(() => []);
+    Promise.all([laden('spotify://current_user_playlists', 'current_user_playlists'), laden('spotify://current_user_saved_albums', 'current_user_saved_albums')])
+      .then(([playlists, alben]) => { if (!aus) setListen({ playlists, alben }); });
+    return () => { aus = true; };
+  }, [conn, sp.entity]);
+
+  // Spotify Connect: auf dem Gerät (Receiver) abspielen; gesucht wird über Music Assistant
+  const abspielen = (item) => {
+    const umgerechnet = spotifyUri(item.uri);
+    raumVorbereiten(config, callService);
+    const spE = entities[sp.entity];
+    if (sp.geraet && spE?.attributes?.source !== sp.geraet && (spE?.attributes?.source_list || []).includes(sp.geraet)) {
+      callService('media_player', 'select_source', { entity_id: sp.entity, source: sp.geraet });
+    }
+    callService('media_player', 'play_media', {
+      entity_id: sp.entity, media_content_id: umgerechnet?.id || item.uri, media_content_type: umgerechnet?.typ || item.media_type,
+    });
+  };
+  const suchen = async (text) => {
+    try { setTreffer(filtern(await maDienst(conn, 'search', { config_entry_id: eintrag, name: text, limit: 5 }), true)); } catch { setTreffer({}); }
+  };
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="flex items-center gap-4">
-        <div className="flex h-20 w-20 flex-shrink-0 items-center justify-center overflow-hidden rounded-2xl" style={{ backgroundColor: 'var(--glass-bg-hover)' }}>
-          {pa.entity_picture ? <img src={bild(pa.entity_picture)} alt="" className="h-full w-full object-cover" /> : <Music className="h-8 w-8 text-[var(--text-muted)]" />}
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-lg font-semibold text-[var(--text-primary)]">{pa.media_title || 'Nichts ausgewählt'}</p>
-          <p className="truncate text-sm text-[var(--text-secondary)]">{[pa.media_artist, pa.media_album_name].filter(Boolean).join(' · ')}</p>
-          {player && (
-            <div className="mt-2 flex items-center gap-2">
-              <Knopf label="Zurück" onClick={() => callService('media_player', 'media_previous_track', { entity_id: config.player })}><SkipBack className="h-4 w-4" /></Knopf>
-              <Knopf label={spielt ? 'Pause' : 'Abspielen'} aktiv={spielt} onClick={() => ruf(playAktionen(config, entities))}>
-                {spielt ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-              </Knopf>
-              <Knopf label="Weiter" onClick={() => callService('media_player', 'media_next_track', { entity_id: config.player })}><SkipForward className="h-4 w-4" /></Knopf>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {zone && (
-        <Abschnitt titel={config.name || 'Raum'}>
-          <div className="flex flex-wrap gap-2">
-            {raumQuellen.map((q) => {
-              const Icon = q.aus ? Power : getIconComponent(q.icon || 'mdi:music', Music);
-              const aktiv = q.aus ? !istAn(zone) : istAn(zone) && zone.attributes?.source === q.source;
-              return (
-                <Knopf key={q.name} aktiv={aktiv && !q.aus} onClick={() => (q.aus
-                  ? callService('media_player', 'turn_off', { entity_id: config.zone })
-                  : (callService('media_player', 'turn_on', { entity_id: config.zone }), callService('media_player', 'select_source', { entity_id: config.zone, source: q.source })))}
-                >
-                  <Icon className="h-4 w-4" />{q.name}
-                </Knopf>
-              );
-            })}
-            {beideMoeglich && (
-              <Knopf aktiv={beideAn} onClick={() => ruf(beideZonenAktionen(config.zone, haupt, entities, hauptZuerst))}>
-                <Speaker className="h-4 w-4" />Beide Zonen
-              </Knopf>
-            )}
-          </div>
-          {istAn(zone) && <Lautstaerke entity={zone} entityId={config.zone} callService={callService} />}
+      <JetztLaeuft config={config} entities={entities} callService={callService} bild={bild} playerId={sp.entity} />
+      <Raum config={config} entities={entities} callService={callService} />
+      {eintrag && (
+        <Abschnitt titel="Auf Spotify suchen">
+          <Suche onSuche={suchen} />
+          {treffer && <Trefferliste treffer={treffer} onPlay={abspielen} bild={bild} />}
         </Abschnitt>
       )}
+      {listen.playlists.length > 0 && (
+        <Abschnitt titel="Meine Playlists">
+          <div className="grid grid-cols-1 gap-0.5 sm:grid-cols-2">
+            {listen.playlists.map((p) => <Treffer key={p.uri} item={p} onPlay={abspielen} bild={bild} />)}
+          </div>
+        </Abschnitt>
+      )}
+      {listen.alben.length > 0 && (
+        <Abschnitt titel="Gespeicherte Alben">
+          <div className="grid grid-cols-1 gap-0.5 sm:grid-cols-2">
+            {listen.alben.map((p) => <Treffer key={p.uri} item={p} onPlay={abspielen} bild={bild} />)}
+          </div>
+        </Abschnitt>
+      )}
+    </div>
+  );
+}
+
+function MusikReiter({ config, entities, callService, conn, bild }) {
+  const eintrag = config.musik?.maEintrag;
+  // mit eigenem Spotify-Reiter zeigt die Bibliothek nur die eigene Musik (NAS, Radio)
+  const ohneSpotify = Boolean(config.musik?.spotify);
+  const [playlists, setPlaylists] = useState([]);
+  const [treffer, setTreffer] = useState(null);
+
+  useEffect(() => {
+    if (!eintrag) return;
+    let aus = false;
+    maDienst(conn, 'get_library', { config_entry_id: eintrag, media_type: 'playlist', limit: 40, order_by: 'name' })
+      .then((r) => { if (!aus) setPlaylists((r?.items || []).filter((p) => p.name && !(ohneSpotify && istSpotify(p)))); })
+      .catch(() => {});
+    return () => { aus = true; };
+  }, [conn, eintrag, ohneSpotify]);
+
+  const suchen = async (text) => {
+    try {
+      const r = await maDienst(conn, 'search', { config_entry_id: eintrag, name: text, limit: 5 });
+      setTreffer(ohneSpotify ? filtern(r, false) : r);
+    } catch { setTreffer({}); }
+  };
+  const abspielen = (item) => {
+    raumVorbereiten(config, callService);
+    callService('music_assistant', 'play_media', { entity_id: config.player, media_id: item.uri, media_type: item.media_type });
+  };
+
+  return (
+    <div className="flex flex-col gap-5">
+      <JetztLaeuft config={config} entities={entities} callService={callService} bild={bild} playerId={config.player} />
+      <Raum config={config} entities={entities} callService={callService} />
 
       {eintrag && (
         <Abschnitt titel="Suchen">
-          <form onSubmit={suchen} className="flex gap-2">
-            <input
-              value={suche} onChange={(e) => setSuche(e.target.value)} placeholder="Künstler, Album, Titel …" aria-label="Musik suchen"
-              className="min-w-0 flex-1 rounded-xl border px-3 py-2 text-sm"
-              style={{ backgroundColor: 'var(--glass-bg)', borderColor: 'var(--glass-border)', color: 'var(--text-primary)' }}
-            />
-            <Knopf label="Suchen"><Search className="h-4 w-4" /></Knopf>
-          </form>
-          {treffer && (
-            <div className="flex flex-col gap-3">
-              {SUCH_ARTEN.map(([art, name]) => (treffer[art]?.length ? (
-                <div key={art} className="flex flex-col">
-                  <p className="mb-1 text-[11px] font-semibold text-[var(--text-secondary)]">{name}</p>
-                  {treffer[art].map((t) => <Treffer key={t.uri} item={t} onPlay={abspielen} bild={bild} />)}
-                </div>
-              ) : null))}
-              {!SUCH_ARTEN.some(([art]) => treffer[art]?.length) && <p className="text-xs text-[var(--text-muted)]">Nichts gefunden.</p>}
-            </div>
-          )}
+          <Suche onSuche={suchen} />
+          {treffer && <Trefferliste treffer={treffer} onPlay={abspielen} bild={bild} />}
         </Abschnitt>
       )}
 
@@ -331,7 +439,12 @@ function MusikReiter({ config, entities, callService, conn, bild }) {
 }
 
 export default function MedienModal({ show, onClose, config, entities, callService, conn, getEntityImageUrl, titel }) {
-  const reiter = [config.tv && ['tv', 'Fernseher'], (config.player || config.zone) && ['musik', 'Musik']].filter(Boolean);
+  const spotify = config.musik?.spotify?.entity;
+  const reiter = [
+    config.tv && ['tv', 'Fernseher'],
+    spotify && ['spotify', 'Spotify'],
+    (config.player || config.zone) && ['musik', spotify ? 'Bibliothek' : 'Musik'],
+  ].filter(Boolean);
   const [aktiv, setAktiv] = useState(null);
   const tab = aktiv || reiter[0]?.[0];
   const bild = (url) => (url && getEntityImageUrl ? getEntityImageUrl(url) : url || null);
@@ -368,6 +481,7 @@ export default function MedienModal({ show, onClose, config, entities, callServi
           </div>
           <div className="flex-1 overflow-y-auto p-4 sm:p-6">
             {tab === 'tv' && <FernseherReiter config={config} entities={entities} callService={ruf} bild={bild} />}
+            {tab === 'spotify' && <SpotifyReiter config={config} entities={entities} callService={ruf} conn={conn} bild={bild} />}
             {tab === 'musik' && <MusikReiter config={config} entities={entities} callService={ruf} conn={conn} bild={bild} />}
           </div>
         </>
