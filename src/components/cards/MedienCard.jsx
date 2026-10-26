@@ -74,6 +74,43 @@ export function quelleAktiv(quelle, zone, entities) {
   return false;
 }
 
+/** Abspielen/Pause: ist der Raum aus, erst auf den Eingang des Players stellen – sonst
+ *  weckt der Player (z. B. HEOS) die Hauptzone des Receivers statt des Raums. */
+export function playAktionen(config, entities) {
+  const zone = config.zone ? entities[config.zone] : null;
+  const vorher = config.zone && config.musik?.zoneQuelle && !istAn(zone)
+    ? [
+        ['media_player', 'turn_on', { entity_id: config.zone }],
+        ['media_player', 'select_source', { entity_id: config.zone, source: config.musik.zoneQuelle }],
+      ]
+    : [];
+  return [...vorher, ['media_player', 'media_play_pause', { entity_id: config.player }]];
+}
+
+// Quelle der laufenden Zone in der anderen Zone: HEOS heißt in der Hauptzone „NET“;
+// kennt die Zielzone die Quelle nicht, folgt Zone 2 per „SOURCE“ der Hauptzone
+function quelleFuer(ziel, quelle) {
+  const liste = ziel?.attributes?.source_list || [];
+  const name = quelle === 'NET' && !liste.includes('NET') ? 'HEOS Music' : quelle;
+  if (name && liste.includes(name)) return name;
+  return liste.includes('SOURCE') ? 'SOURCE' : null;
+}
+
+/** „Beide Zonen“: die ausgeschaltete Zone übernimmt die Quelle der laufenden. Laufen beide,
+ *  wird die dazugeholte wieder abgeschaltet – die Hauptzone, außer Fernseher/Sat laufen. */
+export function beideZonenAktionen(zoneId, hauptId, entities, hauptZuerst = false) {
+  const zone = entities[zoneId];
+  const haupt = entities[hauptId];
+  const an = (id, quelle) => [
+    ['media_player', 'turn_on', { entity_id: id }],
+    ...(quelle ? [['media_player', 'select_source', { entity_id: id, source: quelle }]] : []),
+  ];
+  if (istAn(zone) && istAn(haupt)) return [['media_player', 'turn_off', { entity_id: hauptZuerst ? zoneId : hauptId }]];
+  if (istAn(zone)) return an(hauptId, quelleFuer(haupt, zone.attributes?.source));
+  if (istAn(haupt)) return an(zoneId, quelleFuer(zone, haupt.attributes?.source));
+  return [];
+}
+
 /** Aktionen eines Quellen-Knopfs als Liste von [domain, service, data]. */
 export function quellenAktionen(quelle, zoneId, tvAus = null) {
   if (quelle.aus && tvAus) return tvAus.map((id) => [id.split('.')[0], 'turn_off', { entity_id: id }]);
@@ -157,7 +194,7 @@ const MedienCard = ({ cardId, dragProps, controls, cardStyle, editMode, entities
           {player && (
             <div className="mt-1 flex items-center gap-2 text-[var(--text-secondary)]">
               <button type="button" aria-label="Zurück" onClick={stop(() => callService?.('media_player', 'media_previous_track', { entity_id: config.player }))}><SkipBack className="h-3.5 w-3.5" /></button>
-              <button type="button" aria-label={spielt ? 'Pause' : 'Abspielen'} onClick={stop(() => callService?.('media_player', 'media_play_pause', { entity_id: config.player }))}>
+              <button type="button" aria-label={spielt ? 'Pause' : 'Abspielen'} onClick={stop(() => ruf(playAktionen(config, entities)))}>
                 {spielt ? <Pause className="h-4 w-4 text-[var(--text-primary)]" /> : <Play className="h-4 w-4 text-[var(--text-primary)]" />}
               </button>
               <button type="button" aria-label="Weiter" onClick={stop(() => callService?.('media_player', 'media_next_track', { entity_id: config.player }))}><SkipForward className="h-3.5 w-3.5" /></button>

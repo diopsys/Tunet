@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Music, Pause, Play, Power, Search, SkipBack, SkipForward, Tv, Volume2, X,
+  ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Music, Pause, Play, Power, Search, SkipBack, SkipForward, Speaker, Tv, Volume2, X,
 } from '../icons';
 import { getIconComponent } from '../icons';
 import AccessibleModalShell from '../components/ui/AccessibleModalShell';
+import { beideZonenAktionen, playAktionen } from '../components/cards/MedienCard';
 
 /*
  * Medien-Fenster der Medien-Kachel mit den Reitern „Fernseher“ und „Musik“.
@@ -235,6 +236,12 @@ function MusikReiter({ config, entities, callService, conn, bild }) {
     callService('music_assistant', 'play_media', { entity_id: config.player, media_id: item.uri, media_type: item.media_type });
   };
   const raumQuellen = config.quellen.filter((q) => q.source || q.aus);
+  const ruf = (aktionen) => aktionen.forEach(([d, s, data]) => callService(d, s, data));
+  // „Beide Zonen“: Raum und Hauptzone (Surround) mit derselben Quelle
+  const haupt = config.tv?.surround;
+  const beideAn = haupt && istAn(zone) && istAn(entities[haupt]);
+  const hauptZuerst = Boolean(config.tv && (istAn(entities[config.tv.entity]) || istAn(entities[config.tv.sat?.entity])));
+  const beideMoeglich = haupt && (istAn(zone) || istAn(entities[haupt]));
 
   return (
     <div className="flex flex-col gap-5">
@@ -248,7 +255,7 @@ function MusikReiter({ config, entities, callService, conn, bild }) {
           {player && (
             <div className="mt-2 flex items-center gap-2">
               <Knopf label="Zurück" onClick={() => callService('media_player', 'media_previous_track', { entity_id: config.player })}><SkipBack className="h-4 w-4" /></Knopf>
-              <Knopf label={spielt ? 'Pause' : 'Abspielen'} aktiv={spielt} onClick={() => callService('media_player', 'media_play_pause', { entity_id: config.player })}>
+              <Knopf label={spielt ? 'Pause' : 'Abspielen'} aktiv={spielt} onClick={() => ruf(playAktionen(config, entities))}>
                 {spielt ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
               </Knopf>
               <Knopf label="Weiter" onClick={() => callService('media_player', 'media_next_track', { entity_id: config.player })}><SkipForward className="h-4 w-4" /></Knopf>
@@ -272,6 +279,11 @@ function MusikReiter({ config, entities, callService, conn, bild }) {
                 </Knopf>
               );
             })}
+            {beideMoeglich && (
+              <Knopf aktiv={beideAn} onClick={() => ruf(beideZonenAktionen(config.zone, haupt, entities, hauptZuerst))}>
+                <Speaker className="h-4 w-4" />Beide Zonen
+              </Knopf>
+            )}
           </div>
           {istAn(zone) && <Lautstaerke entity={zone} entityId={config.zone} callService={callService} />}
         </Abschnitt>

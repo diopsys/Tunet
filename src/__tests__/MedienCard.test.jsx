@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import MedienCard, { medienModus, quelleAktiv, quellenAktionen, resolveMedienConfig } from '../components/cards/MedienCard';
+import MedienCard, { beideZonenAktionen, medienModus, playAktionen, quelleAktiv, quellenAktionen, resolveMedienConfig } from '../components/cards/MedienCard';
 
 const medien = {
   zone: 'media_player.zone2',
@@ -111,6 +111,28 @@ describe('Medien-Kachel', () => {
     fireEvent.click(screen.getByRole('button', { name: /Aus/ }));
     expect(callService).toHaveBeenCalledWith('media_player', 'turn_off', { entity_id: 'media_player.vu' });
     expect(callService).toHaveBeenCalledWith('media_player', 'turn_off', { entity_id: 'media_player.tv' });
+  });
+
+  it('switches the room to the player input before playing', () => {
+    const cfg = resolveMedienConfig({ medien: { ...medien, musik: { zoneQuelle: 'HEOS Music' } } });
+    expect(playAktionen(cfg, { 'media_player.zone2': { state: 'off' } })).toEqual([
+      ['media_player', 'turn_on', { entity_id: 'media_player.zone2' }],
+      ['media_player', 'select_source', { entity_id: 'media_player.zone2', source: 'HEOS Music' }],
+      ['media_player', 'media_play_pause', { entity_id: 'media_player.ma' }],
+    ]);
+    expect(playAktionen(cfg, entities)).toEqual([['media_player', 'media_play_pause', { entity_id: 'media_player.ma' }]]);
+  });
+
+  it('copies the running zone source to the other zone', () => {
+    const z2 = (state, source) => ({ state, attributes: { source, source_list: ['HEOS Music', 'NET', 'Phono', 'SOURCE'] } });
+    const z1 = (state, source) => ({ state, attributes: { source, source_list: ['HEOS Music', 'Phono', 'TV Audio', 'Vu-Plus Duo'] } });
+    expect(beideZonenAktionen('z2', 'z1', { z2: z2('on', 'Phono'), z1: z1('off') })).toEqual([
+      ['media_player', 'turn_on', { entity_id: 'z1' }], ['media_player', 'select_source', { entity_id: 'z1', source: 'Phono' }],
+    ]);
+    expect(beideZonenAktionen('z2', 'z1', { z2: z2('on', 'NET'), z1: z1('off') })[1][2].source).toBe('HEOS Music');
+    expect(beideZonenAktionen('z2', 'z1', { z2: z2('off'), z1: z1('on', 'Vu-Plus Duo') })[1][2].source).toBe('SOURCE');
+    expect(beideZonenAktionen('z2', 'z1', { z2: z2('on', 'NET'), z1: z1('on', 'NET') })).toEqual([['media_player', 'turn_off', { entity_id: 'z1' }]]);
+    expect(beideZonenAktionen('z2', 'z1', { z2: z2('on', 'SOURCE'), z1: z1('on', 'TV Audio') }, true)).toEqual([['media_player', 'turn_off', { entity_id: 'z2' }]]);
   });
 
   it('shows the zone as off without player title', () => {
