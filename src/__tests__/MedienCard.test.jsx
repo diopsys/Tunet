@@ -92,6 +92,27 @@ describe('Medien-Kachel', () => {
     expect(callService).toHaveBeenCalledWith('media_player', 'turn_off', { entity_id: 'media_player.surround' });
   });
 
+  it('shows a forgotten satellite receiver and switches it off with the rest', () => {
+    const callService = vi.fn();
+    const mitSat = { ...medien, tv: { entity: 'media_player.tv', surround: 'media_player.surround', sat: { entity: 'media_player.vu', surroundQuelle: 'Vu-Plus Duo' } } };
+    const nurSat = {
+      'media_player.zone2': { state: 'off', attributes: {} },
+      'media_player.ma': { state: 'idle', attributes: { media_title: 'Alter Titel' } },
+      'media_player.tv': { state: 'off', attributes: {} },
+      'media_player.surround': { state: 'off', attributes: {} },
+      'media_player.vu': { state: 'on', attributes: { media_channel: 'ZDF HD' } },
+    };
+    expect(medienModus(resolveMedienConfig({ medien: mitSat }), nurSat)).toBe('sat');
+    render(<MedienCard cardId='m' entities={nurSat} settings={{ medien: mitSat }} callService={callService} getEntityImageUrl={(u) => u} />);
+    expect(screen.getByText('Sat-Receiver an')).toBeTruthy();
+    expect(screen.getByText('ZDF HD · Fernseher aus')).toBeTruthy();
+    expect(screen.queryByLabelText('Lautstärke')).toBeNull();
+    expect(screen.queryByText('Alter Titel')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /Aus/ }));
+    expect(callService).toHaveBeenCalledWith('media_player', 'turn_off', { entity_id: 'media_player.vu' });
+    expect(callService).toHaveBeenCalledWith('media_player', 'turn_off', { entity_id: 'media_player.tv' });
+  });
+
   it('shows the zone as off without player title', () => {
     render(<MedienCard cardId="m" entities={{ 'media_player.zone2': { state: 'off', attributes: {} } }} settings={{ medien: { ...medien, player: null } }} />);
     expect(screen.getAllByText('Aus')).toHaveLength(2); // Zustand und Knopf

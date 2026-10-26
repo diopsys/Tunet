@@ -79,11 +79,17 @@ function FernseherReiter({ config, entities, callService, bild }) {
   const tv = entities[tvCfg.entity];
   const tvAn = istAn(tv);
   const sat = satAktiv(tvCfg, entities) ? entities[tvCfg.sat.entity] : null;
+  // Sat-Receiver an, obwohl der Fernseher aus ist (z. B. vergessen) – Ausschalten muss trotzdem gehen
+  const satBox = tvCfg.sat?.entity ? entities[tvCfg.sat.entity] : null;
+  const satAn = istAn(satBox);
+  const etwasAn = tvAn || satAn;
   const surround = tvCfg.surround ? entities[tvCfg.surround] : null;
   const jetzt = sat || tv;
   const ja = jetzt?.attributes || {};
-  const titel = sat ? ja.media_channel || ja.source : tvAn ? ja.source || 'Fernseher' : 'Aus';
-  const unter = sat ? [ja.media_series_title, ja.media_start_time && ja.media_end_time ? `${ja.media_start_time}–${ja.media_end_time}` : null].filter(Boolean).join(' · ') : '';
+  const titel = sat ? ja.media_channel || ja.source : tvAn ? ja.source || 'Fernseher' : satAn ? 'Sat-Receiver an' : 'Aus';
+  const unter = sat
+    ? [ja.media_series_title, ja.media_start_time && ja.media_end_time ? `${ja.media_start_time}–${ja.media_end_time}` : null].filter(Boolean).join(' · ')
+    : !tvAn && satAn ? [satBox.attributes?.media_channel || satBox.attributes?.source, 'Fernseher aus'].filter(Boolean).join(' · ') : '';
   const app = (a) => {
     callService('media_player', 'turn_on', { entity_id: tvCfg.entity });
     callService('media_player', 'select_source', { entity_id: tvCfg.entity, source: a.source });
@@ -105,11 +111,15 @@ function FernseherReiter({ config, entities, callService, bild }) {
           {unter && <p className="truncate text-sm text-[var(--text-secondary)]">{unter}</p>}
         </div>
         <Knopf
-          label={tvAn ? 'Fernseher ausschalten' : 'Fernseher einschalten'}
-          aktiv={tvAn}
+          label={etwasAn ? 'Fernseher ausschalten' : 'Fernseher einschalten'}
+          aktiv={etwasAn}
           onClick={() => {
-            const dienst = tvAn ? 'turn_off' : 'turn_on';
-            [tvCfg.entity, tvCfg.surround].filter(Boolean).forEach((id) => callService('media_player', dienst, { entity_id: id }));
+            if (etwasAn) {
+              [tvCfg.entity, tvCfg.surround, satAn ? tvCfg.sat.entity : null].filter(Boolean)
+                .forEach((id) => callService('media_player', 'turn_off', { entity_id: id }));
+            } else {
+              [tvCfg.entity, tvCfg.surround].filter(Boolean).forEach((id) => callService('media_player', 'turn_on', { entity_id: id }));
+            }
           }}
         >
           <Power className="h-4 w-4" />

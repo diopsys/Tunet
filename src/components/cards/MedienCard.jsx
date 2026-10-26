@@ -57,10 +57,12 @@ export function resolveMedienConfig(settings) {
   };
 }
 
-/** Was die Kachel zeigt: 'zone' (Raum läuft), 'tv' (nur der Fernseher läuft) oder 'aus'. */
+/** Was die Kachel zeigt: 'zone' (Raum läuft), 'tv' (nur der Fernseher läuft),
+ *  'sat' (nur der Sat-Receiver ist noch an) oder 'aus'. */
 export function medienModus(config, entities) {
   if (istAn(config.zone ? entities[config.zone] : null)) return 'zone';
   if (config.tv && istAn(entities[config.tv.entity])) return 'tv';
+  if (config.tv?.sat?.entity && istAn(entities[config.tv.sat.entity])) return 'sat';
   return 'aus';
 }
 
@@ -95,8 +97,9 @@ const MedienCard = ({ cardId, dragProps, controls, cardStyle, editMode, entities
   const zone = config.zone ? entities[config.zone] : null;
   const modus = medienModus(config, entities);
   const tv = modus === 'tv' ? entities[config.tv.entity] : null;
+  const satBox = modus === 'sat' ? entities[config.tv.sat.entity] : null;
   // Im TV-Betrieb kommen Anzeige und Lautstärke vom Fernseher bzw. Surround
-  const player = modus === 'tv' ? null : config.player ? entities[config.player] : null;
+  const player = modus === 'tv' || modus === 'sat' ? null : config.player ? entities[config.player] : null;
   const lautId = modus === 'tv' ? config.tv.surround || config.tv.entity : config.zone;
   const lautEntity = lautId ? entities[lautId] : null;
   const titel = name || 'Medien';
@@ -106,14 +109,20 @@ const MedienCard = ({ cardId, dragProps, controls, cardStyle, editMode, entities
   const pa = player?.attributes || {};
   const medienTitel = tv
     ? tv.attributes?.friendly_name || 'Fernseher'
+    : satBox ? 'Sat-Receiver an'
     : player && pa.media_title ? pa.media_title : modus === 'zone' ? zone?.attributes?.source || 'An' : 'Aus';
   const medienUnter = tv
     ? tv.attributes?.source || tv.attributes?.media_title || ''
+    : satBox ? [satBox.attributes?.media_channel || satBox.attributes?.source, 'Fernseher aus'].filter(Boolean).join(' · ')
     : player && pa.media_title ? pa.media_artist || pa.media_album_name || '' : '';
   const bild = tv ? tv.attributes?.entity_picture : player ? pa.entity_picture : null;
   const cover = bild && getEntityImageUrl ? getEntityImageUrl(bild) : null;
   const lautstaerke = Math.round((lautEntity?.attributes?.volume_level ?? 0) * 100);
-  const tvAus = tv ? [config.tv.entity, config.tv.surround].filter(Boolean) : null;
+  // „Aus“ im TV- bzw. Sat-Betrieb: Fernseher, Surround und ein noch laufender Sat-Receiver
+  const satId = config.tv?.sat?.entity;
+  const tvAus = tv || satBox
+    ? [config.tv.entity, config.tv.surround, satId && istAn(entities[satId]) ? satId : null].filter(Boolean)
+    : null;
   const ruf = (aktionen) => aktionen.forEach(([d, s, data]) => callService?.(d, s, data));
   const stop = (fn) => (e) => { e.stopPropagation(); if (!editMode) fn(); };
   const oeffnen = () => { if (!editMode) setOffen(true); };
@@ -158,7 +167,7 @@ const MedienCard = ({ cardId, dragProps, controls, cardStyle, editMode, entities
       </div>
 
       {/* Lautstärke der Zone */}
-      {lautEntity && zoneAn && (
+      {lautEntity && (modus === 'zone' || modus === 'tv') && (
         <label className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
           <Volume2 className="h-3.5 w-3.5 flex-shrink-0 text-[var(--text-muted)]" />
           <input
