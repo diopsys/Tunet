@@ -16,7 +16,7 @@ import { beideZonenAktionen, playAktionen } from '../components/cards/MedienCard
  *         sat?: { entity, surroundQuelle, script? },    // Sat-Receiver über den Receiver-Eingang
  *         fernbedienung?: 'webostv' }                   // Steuerkreuz über webostv.button
  *   musik: { maEintrag, zoneQuelle?: 'HEOS Music',      // Music Assistant (config_entry_id)
- *            spotify?: { entity, geraet? } }            // Spotify-Integration, spielt per Connect
+ *            spotify?: { entity, geraet? } }            // SpotifyPlus-Player; spielt per Connect
  *                                                       // auf dem Gerät (z. B. 'Marantz SR7015')
  * Das Fenster hängt am <body> (Portal): die Kachel ist verschiebbar und schneidet ab.
  */
@@ -33,18 +33,36 @@ export async function maDienst(conn, service, data) {
   return r?.response ?? r?.service_response ?? null;
 }
 
-/** Medienbrowser eines Players (z. B. Spotify-Playlists). */
-async function durchsuchen(conn, entityId, typ, id) {
+/** SpotifyPlus-Dienst mit Antwort (Suche, Favoriten …); liefert response.result. */
+async function spDienst(conn, service, data) {
   if (!conn?.sendMessagePromise) return null;
-  return conn.sendMessagePromise({ type: 'media_player/browse_media', entity_id: entityId, media_content_type: typ, media_content_id: id });
+  const r = await conn.sendMessagePromise({
+    type: 'call_service', domain: 'spotifyplus', service, service_data: data, return_response: true,
+  });
+  return (r?.response ?? r?.service_response)?.result ?? null;
 }
 
-/** Music-Assistant-Adresse eines Spotify-Eintrags („spotify--x://track/ID“) als Spotify-URI. */
-export function spotifyUri(uri) {
-  const m = /^spotify[^:]*:\/\/(track|album|playlist|artist)\/([^/?]+)/.exec(uri || '');
-  return m ? { id: `spotify:${m[1]}:${m[2]}`, typ: m[1] } : null;
+/** Eintrag einer SpotifyPlus-Liste (Track, Album, Playlist, Künstler; auch {track}/{album}) vereinheitlichen. */
+export function spEintrag(x) {
+  const o = x?.track || x?.album || x;
+  if (!o?.uri) return null;
+  return { uri: o.uri, name: o.name, image: o.image_url || o.images?.[0]?.url || null, artists: o.artists, media_type: o.type };
 }
+const spListe = (r) => {
+  const gesehen = new Set();
+  return (r?.items || []).map(spEintrag).filter((e) => e && e.name && !gesehen.has(e.uri) && gesehen.add(e.uri));
+};
 const istSpotify = (item) => /^spotify/.test(item?.uri || '');
+
+// Listen im Spotify-Reiter: [Schlüssel, Name, SpotifyPlus-Dienst, Anzahl]
+const SP_LISTEN = [
+  ['playlists', 'Playlists', 'get_playlist_favorites', 50],
+  ['songs', 'Lieblingssongs', 'get_track_favorites', 30],
+  ['zuletzt', 'Zuletzt gehört', 'get_player_recent_tracks', 20],
+  ['top', 'Top-Titel', 'get_users_top_tracks', 20],
+  ['alben', 'Alben', 'get_album_favorites', 30],
+  ['kuenstler', 'Künstler', 'get_artists_followed', 30],
+];
 
 /** Läuft gerade der Sat-Receiver über den Receiver (statt einer App am Fernseher)? */
 export function satAktiv(tvCfg, entities) {
@@ -321,63 +339,68 @@ const filtern = (treffer, spotify) => Object.fromEntries(
   Object.entries(treffer || {}).map(([k, v]) => [k, Array.isArray(v) ? v.filter((t) => istSpotify(t) === spotify) : v]),
 );
 
+// Spotify über SpotifyPlus: Suche und Listen auch im Leerlauf, Abspielen per Spotify Connect
+// gezielt auf dem Gerät (Receiver), vorher der Raum auf HEOS
 function SpotifyReiter({ config, entities, callService, conn, bild }) {
   const sp = config.musik.spotify;
-  const eintrag = config.musik?.maEintrag;
-  const [listen, setListen] = useState({ playlists: [], alben: [] });
+  const [ansicht, setAnsicht] = useState('playlists');
+  const [listen, setListen] = useState({});
   const [treffer, setTreffer] = useState(null);
 
   useEffect(() => {
+    if (listen[ansicht]) return undefined;
+    const def = SP_LISTEN.find(([k]) => k === ansicht);
     let aus = false;
-    const laden = (typ, id) => Promise.resolve(durchsuchen(conn, sp.entity, typ, id))
-      .then((r) => (r?.children || []).filter((c) => c.title && c.can_play)
-        .map((c) => ({ uri: c.media_content_id, name: c.title, image: c.thumbnail, media_type: c.media_content_type })))
-      .catch(() => []);
-    Promise.all([laden('spotify://current_user_playlists', 'current_user_playlists'), laden('spotify://current_user_saved_albums', 'current_user_saved_albums')])
-      .then(([playlists, alben]) => { if (!aus) setListen({ playlists, alben }); });
+    spDienst(conn, def[2], { entity_id: sp.entity, limit_total: def[3] })
+      .then((r) => { if (!aus) setListen((l) => ({ ...l, [ansicht]: spListe(r) })); })
+      .catch(() => { if (!aus) setListen((l) => ({ ...l, [ansicht]: [] })); });
     return () => { aus = true; };
-  }, [conn, sp.entity]);
+  }, [conn, sp.entity, ansicht, listen]);
 
-  // Spotify Connect: auf dem Gerät (Receiver) abspielen; gesucht wird über Music Assistant
+  const geraet = sp.geraet ? { device_id: sp.geraet } : {};
   const abspielen = (item) => {
-    const umgerechnet = spotifyUri(item.uri);
     raumVorbereiten(config, callService);
-    const spE = entities[sp.entity];
-    if (sp.geraet && spE?.attributes?.source !== sp.geraet && (spE?.attributes?.source_list || []).includes(sp.geraet)) {
-      callService('media_player', 'select_source', { entity_id: sp.entity, source: sp.geraet });
+    if (item.media_type === 'track' || /^spotify:track:/.test(item.uri)) {
+      callService('spotifyplus', 'player_media_play_tracks', { entity_id: sp.entity, uris: item.uri, ...geraet });
+    } else {
+      callService('spotifyplus', 'player_media_play_context', { entity_id: sp.entity, context_uri: item.uri, ...geraet });
     }
-    callService('media_player', 'play_media', {
-      entity_id: sp.entity, media_content_id: umgerechnet?.id || item.uri, media_content_type: umgerechnet?.typ || item.media_type,
-    });
+  };
+  const alleSongs = () => {
+    raumVorbereiten(config, callService);
+    callService('spotifyplus', 'player_media_play_track_favorites', { entity_id: sp.entity, shuffle: true, ...geraet });
   };
   const suchen = async (text) => {
-    try { setTreffer(filtern(await maDienst(conn, 'search', { config_entry_id: eintrag, name: text, limit: 5 }), true)); } catch { setTreffer({}); }
+    try {
+      const r = await spDienst(conn, 'search_all', { entity_id: sp.entity, criteria: text, criteria_type: 'track,album,artist,playlist', limit_total: 5 });
+      setTreffer({ tracks: spListe(r?.tracks), albums: spListe(r?.albums), artists: spListe(r?.artists), playlists: spListe(r?.playlists) });
+    } catch { setTreffer({}); }
   };
+  const liste = listen[ansicht];
 
   return (
     <div className="flex flex-col gap-5">
       <JetztLaeuft config={config} entities={entities} callService={callService} bild={bild} playerId={sp.entity} />
       <Raum config={config} entities={entities} callService={callService} />
-      {eintrag && (
-        <Abschnitt titel="Auf Spotify suchen">
-          <Suche onSuche={suchen} />
-          {treffer && <Trefferliste treffer={treffer} onPlay={abspielen} bild={bild} />}
-        </Abschnitt>
-      )}
-      {listen.playlists.length > 0 && (
-        <Abschnitt titel="Meine Playlists">
+      <Abschnitt titel="Auf Spotify suchen">
+        <Suche onSuche={suchen} />
+        {treffer && <Trefferliste treffer={treffer} onPlay={abspielen} bild={bild} />}
+      </Abschnitt>
+      <Abschnitt titel="Meine Musik">
+        <div className="flex flex-wrap gap-1.5">
+          {SP_LISTEN.map(([k, name]) => <Knopf key={k} klein aktiv={ansicht === k} onClick={() => setAnsicht(k)}>{name}</Knopf>)}
+        </div>
+        {ansicht === 'songs' && (
+          <div><Knopf onClick={alleSongs}><Play className="h-4 w-4" />Alle Lieblingssongs (Zufall)</Knopf></div>
+        )}
+        {!liste && <p className="text-xs text-[var(--text-muted)]">Lädt …</p>}
+        {liste && liste.length === 0 && <p className="text-xs text-[var(--text-muted)]">Nichts gefunden.</p>}
+        {liste && liste.length > 0 && (
           <div className="grid grid-cols-1 gap-0.5 sm:grid-cols-2">
-            {listen.playlists.map((p) => <Treffer key={p.uri} item={p} onPlay={abspielen} bild={bild} />)}
+            {liste.map((p) => <Treffer key={p.uri} item={p} onPlay={abspielen} bild={bild} />)}
           </div>
-        </Abschnitt>
-      )}
-      {listen.alben.length > 0 && (
-        <Abschnitt titel="Gespeicherte Alben">
-          <div className="grid grid-cols-1 gap-0.5 sm:grid-cols-2">
-            {listen.alben.map((p) => <Treffer key={p.uri} item={p} onPlay={abspielen} bild={bild} />)}
-          </div>
-        </Abschnitt>
-      )}
+        )}
+      </Abschnitt>
     </div>
   );
 }
