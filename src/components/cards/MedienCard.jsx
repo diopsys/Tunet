@@ -149,11 +149,13 @@ const MedienCard = ({ cardId, dragProps, controls, cardStyle, editMode, entities
   const zoneAn = modus !== 'aus';
   const spielt = player?.state === 'playing';
   const pa = player?.attributes || {};
-  const medienTitel = tv
-    ? tv.attributes?.friendly_name || 'Fernseher'
+  const belegt = Boolean(config.zone || config.player || config.tv?.entity);
+  const medienTitel = !belegt ? 'Noch nicht belegt'
+    : tv ? tv.attributes?.friendly_name || 'Fernseher'
     : satBox ? 'Sat-Receiver an'
     : player && pa.media_title ? pa.media_title : modus === 'zone' ? zone?.attributes?.source || 'An' : 'Aus';
-  const medienUnter = tv
+  const medienUnter = !belegt ? 'Zone, Player oder Fernseher in settings.medien eintragen'
+    : tv
     ? tv.attributes?.source || tv.attributes?.media_title || ''
     : satBox ? [satBox.attributes?.media_channel || satBox.attributes?.source, 'Fernseher aus'].filter(Boolean).join(' · ')
     : player && pa.media_title ? pa.media_artist || pa.media_album_name || '' : '';
@@ -167,7 +169,7 @@ const MedienCard = ({ cardId, dragProps, controls, cardStyle, editMode, entities
     : null;
   const ruf = (aktionen) => aktionen.forEach(([d, s, data]) => callService?.(d, s, data));
   const stop = (fn) => (e) => { e.stopPropagation(); if (!editMode) fn(); };
-  const oeffnen = () => { if (!editMode) setOffen(true); };
+  const oeffnen = () => { if (!editMode && belegt) setOffen(true); };
 
   return (
     <div

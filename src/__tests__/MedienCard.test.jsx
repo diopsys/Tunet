@@ -140,4 +140,11 @@ describe('Medien-Kachel', () => {
     expect(screen.getAllByText('Aus')).toHaveLength(2); // Zustand und Knopf
     expect(screen.queryByLabelText('Lautstärke')).toBeNull();
   });
+
+  it('shows a hint instead of an empty card while not configured', () => {
+    render(<MedienCard cardId="m" entities={{}} settings={{}} callService={vi.fn()} />);
+    expect(screen.getByText('Noch nicht belegt')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Medien öffnen' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
 });

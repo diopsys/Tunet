@@ -1269,6 +1269,13 @@ function AddCardContent({
                     onSelect={setAddCardType}
                   />
                   <TypeButton
+                    type="medien"
+                    icon={Speaker}
+                    label="Medien"
+                    isActive={addCardType === 'medien'}
+                    onSelect={setAddCardType}
+                  />
+                  <TypeButton
                     type="navimow"
                     icon={Sprout}
                     label={t('addCard.type.navimow') || 'Navimow'}
@@ -1356,6 +1363,8 @@ function AddCardContent({
                 renderSimpleAddSection(Flame, 'Heizung-Kachel: Wärmepumpe mit Zustand (Verdichter, Heizstab, Abtauen), Vorlauf und Pumpe', 'Heizung hinzufügen')
               ) : addCardType === 'puffer' ? (
                 renderSimpleAddSection(Thermometer, 'Speicher-Kachel: Energieinhalt und 24-h-Verlauf des 500-l-Speichers', 'Speicher hinzufügen')
+              ) : addCardType === 'medien' ? (
+                renderSimpleAddSection(Speaker, 'Medien-Kachel für einen Raum: Zone, Musik (Music Assistant, Spotify) und Fernseher mit Fenster. Belegt wird sie über die Kartenoptionen (settings.medien).', 'Medien hinzufügen')
               ) : addCardType === 'navimow' ? (
                 renderSimpleAddSection(Sprout, 'Navimow Mähroboter Karte hinzufügen', t('addCard.type.navimow') || 'Navimow hinzufügen')
               ) : addCardType === 'room' ? (
