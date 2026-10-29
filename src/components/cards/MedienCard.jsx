@@ -262,6 +262,7 @@ const MedienCard = ({ cardId, dragProps, controls, cardStyle, editMode, entities
             conn={conn}
             getEntityImageUrl={getEntityImageUrl}
             titel={titel}
+            raum={cardId}
           />
         </Suspense>
         </div>

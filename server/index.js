@@ -10,6 +10,7 @@ import profilesRouter from './routes/profiles.js';
 import iconsRouter from './routes/icons.js';
 import settingsRouter from './routes/settings.js';
 import maintenanceRouter from './routes/maintenance.js';
+import medienRouter from './routes/medien.js';
 import { createHomeAssistantAuthMiddleware } from './haAuth.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -103,6 +104,7 @@ export const createApp = ({
   app.use('/api/icons', iconsRouter);
   app.use('/api/settings', homeAssistantAuth, settingsRouter);
   app.use('/api/maintenance', homeAssistantAuth, maintenanceRouter);
+  app.use('/api/medien', homeAssistantAuth, medienRouter);
 
   // Health check
   app.get('/api/health', (_req, res) => {

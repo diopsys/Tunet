@@ -133,3 +133,16 @@ export function publishCurrentSettings({
     body: JSON.stringify({ ha_user_id, source_device_id, target_device_id, history_keep_limit }),
   });
 }
+
+/** Playlist der Medien-Kachel (Winamp-Fenster) eines Raums lesen. */
+export function fetchMedienPlaylist(raum) {
+  return request(`/medien/playlist?raum=${encodeURIComponent(raum)}`);
+}
+
+/** Playlist der Medien-Kachel eines Raums speichern ({ items, index }). */
+export function saveMedienPlaylist(raum, { items, index }) {
+  return request('/medien/playlist', {
+    method: 'PUT',
+    body: JSON.stringify({ raum, items, index }),
+  });
+}

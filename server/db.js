@@ -53,6 +53,16 @@ db.exec(`
 
   CREATE INDEX IF NOT EXISTS idx_current_settings_history_lookup
     ON current_settings_history(ha_user_id, device_id, revision DESC);
+
+  -- Playlist der Medien-Kachel je Raum (Kachel-ID); bewusst außerhalb der Einstellungen,
+  -- damit häufiges Abspielen keine Einstellungs-Revisionen erzeugt
+  CREATE TABLE IF NOT EXISTS medien_playlists (
+    ha_user_id TEXT NOT NULL,
+    raum TEXT NOT NULL,
+    data TEXT NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (ha_user_id, raum)
+  );
 `);
 
 const ensureColumn = (tableName, columnName, columnSql) => {

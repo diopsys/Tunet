@@ -1,7 +1,13 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import MedienCard from '../components/cards/MedienCard';
-import { satAktiv, spEintrag } from '../modals/MedienModal';
+import { satAktiv } from '../modals/MedienModal';
+import { laufenderIndex, maAbspielen, spAbspielen, spSpringen, spTitel, zeit } from '../modals/medien/musik';
+
+vi.mock('../services/settingsApi', () => ({
+  fetchMedienPlaylist: vi.fn(async () => ({ items: [], index: 0 })),
+  saveMedienPlaylist: vi.fn(async () => ({})),
+}));
 
 const medien = {
   zone: 'media_player.zone2',
@@ -76,13 +82,28 @@ describe('Medien-Fenster', () => {
     expect(callService).toHaveBeenCalledWith('webostv', 'button', { entity_id: 'media_player.tv', button: 'ENTER' });
   });
 
-  it('normalises SpotifyPlus list entries', () => {
-    expect(spEintrag({ added_at: 'x', track: { uri: 'spotify:track:1', name: 'A', type: 'track', image_url: 'b' } }))
-      .toEqual({ uri: 'spotify:track:1', name: 'A', image: 'b', artists: undefined, media_type: 'track' });
-    expect(spEintrag({})).toBeNull();
+  it('normalises SpotifyPlus entries and formats times like Winamp', () => {
+    expect(spTitel({ added_at: 'x', track: { uri: 'spotify:track:1', name: 'A', type: 'track', image_url: 'b', duration_ms: 164750, artists: [{ name: 'X' }] } }))
+      .toEqual({ uri: 'spotify:track:1', name: 'A', artist: 'X', dauer: 165, image: 'b', media_type: 'track', quelle: 'spotify' });
+    expect(spTitel({})).toBeNull();
+    expect(zeit(162)).toBe('2:42');
+    expect(zeit(34665)).toBe('9:37:45');
   });
 
-  it('plays Spotify on the receiver and keeps the library free of Spotify', async () => {
+  it('plays a list from the clicked title on, like Winamp', () => {
+    const cfg = { ...medien, musik: { ...medien.musik, spotify: { entity: 'media_player.sp', geraet: 'Marantz' } } };
+    const items = [{ uri: 'library://track/1', name: 'Eins' }, { uri: 'library://track/2', name: 'Zwei' }, { uri: 'library://track/3', name: 'Drei' }];
+    expect(maAbspielen(cfg, items, 1).at(-1)).toEqual(['music_assistant', 'play_media', {
+      entity_id: 'media_player.ma', media_id: ['library://track/2', 'library://track/3'], media_type: 'track', enqueue: 'replace',
+    }]);
+    expect(spAbspielen(cfg, [{ uri: 'spotify:track:1' }, { uri: 'spotify:track:2' }], 1, 'spotify:playlist:9').at(-1))
+      .toEqual(['spotifyplus', 'player_media_play_context', { entity_id: 'media_player.sp', context_uri: 'spotify:playlist:9', offset_position: 1, device_id: 'Marantz' }]);
+    expect(spAbspielen(cfg, [{ uri: 'spotify:track:1' }, { uri: 'spotify:track:2' }], 0).at(-1)[2].uris).toBe('spotify:track:1,spotify:track:2');
+    expect(spSpringen(cfg, 2)).toHaveLength(2);
+    expect(laufenderIndex(items, { attributes: { media_title: 'drei' } }, 0)).toBe(2);
+  });
+
+  it('shows the Winamp windows and plays from the local library and Spotify playlists', async () => {
     const callService = vi.fn();
     const mitSpotify = { ...medien, musik: { ...medien.musik, spotify: { entity: 'media_player.spotifyplus', geraet: 'Marantz' } } };
     const spConn = {
@@ -90,58 +111,76 @@ describe('Medien-Fenster', () => {
         if (msg.domain === 'spotifyplus' && msg.service === 'get_playlist_favorites') {
           return { response: { result: { items: [{ uri: 'spotify:playlist:5G', name: 'Deutscher Rock', type: 'playlist' }] } } };
         }
-        if (msg.domain === 'spotifyplus' && msg.service === 'get_track_favorites') {
-          return { response: { result: { items: [{ track: { uri: 'spotify:track:7', name: 'Lieblingslied', type: 'track' } }] } } };
+        if (msg.domain === 'spotifyplus' && msg.service === 'get_playlist_items') {
+          return { response: { result: { items: [{ track: { uri: 'spotify:track:7', name: 'Lieblingslied', type: 'track', duration_ms: 200000 } }] } } };
         }
-        if (msg.domain === 'spotifyplus' && msg.service === 'search_all') {
-          return { response: { result: { tracks: { items: [{ uri: 'spotify:track:9', name: 'Whiskey in the Jar', type: 'track' }] } } } };
-        }
-        if (msg.service === 'search') {
-          return { response: { tracks: [
-            { uri: 'spotify--x://track/9', name: 'Whiskey in the Jar', media_type: 'track' },
-            { uri: 'filesystem_smb--y://track/3', name: 'Whiskey vom NAS', media_type: 'track' },
+        if (msg.service === 'get_library') {
+          return { response: { items: [
+            { uri: 'library://track/1', name: 'Vom NAS', media_type: 'track', artists: [{ name: 'Band' }] },
+            { uri: 'library://track/2', name: 'Auch vom NAS', media_type: 'track' },
+            { uri: 'spotify--x://track/9', name: 'Importiert', media_type: 'track' },
           ] } };
         }
-        if (msg.service === 'get_library') return { response: { items: [{ uri: 'library://playlist/1', name: 'Sommer' }] } };
         return {};
       }),
     };
-    const ents = { ...basis, 'media_player.spotifyplus': { state: 'idle', attributes: {} } };
+    const ents = {
+      ...basis,
+      'media_player.tv': { state: 'off', attributes: {} },
+      'media_player.vu': { state: 'off', attributes: {} },
+      'media_player.spotifyplus': { state: 'idle', attributes: {} },
+    };
     const r = render(<MedienCard cardId="m" entities={ents} settings={{ medien: mitSpotify }} callService={callService} conn={spConn} getEntityImageUrl={(u) => u} />);
     fireEvent.click(r.container.firstChild);
     await screen.findByRole('dialog');
-    expect(screen.getByRole('tab', { name: 'Bibliothek' })).toBeTruthy();
-    fireEvent.click(screen.getByRole('tab', { name: 'Spotify' }));
-    fireEvent.click(await screen.findByText('Deutscher Rock'));
+    expect(screen.getByRole('tab', { name: 'Musik' }).getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByLabelText('Playlist Editor')).toBeTruthy();
+
+    // Lokale Bibliothek: Spotify-Importe ausgeblendet, Doppeltippen spielt ab dort
+    fireEvent.doubleClick(await screen.findByText('Band - Vom NAS'));
+    expect(screen.queryByText('Importiert')).toBeNull();
     expect(callService).toHaveBeenCalledWith('media_player', 'select_source', { entity_id: 'media_player.zone2', source: 'HEOS Music' });
-    expect(callService).toHaveBeenCalledWith('spotifyplus', 'player_media_play_context', { entity_id: 'media_player.spotifyplus', context_uri: 'spotify:playlist:5G', device_id: 'Marantz' });
+    expect(callService).toHaveBeenCalledWith('music_assistant', 'play_media', {
+      entity_id: 'media_player.ma', media_id: ['library://track/1', 'library://track/2'], media_type: 'track', enqueue: 'replace',
+    });
+    expect(await screen.findByText('Auch vom NAS', { selector: '.wa-playlist .name' })).toBeTruthy();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Lieblingssongs' }));
-    fireEvent.click(await screen.findByText('Lieblingslied'));
-    expect(callService).toHaveBeenCalledWith('spotifyplus', 'player_media_play_tracks', { entity_id: 'media_player.spotifyplus', uris: 'spotify:track:7', device_id: 'Marantz' });
-
-    fireEvent.change(screen.getByLabelText('Musik suchen'), { target: { value: 'Whiskey' } });
-    await act(async () => { fireEvent.submit(screen.getByLabelText('Musik suchen').closest('form')); });
-    fireEvent.click(await screen.findByText('Whiskey in the Jar'));
-    expect(callService).toHaveBeenCalledWith('spotifyplus', 'player_media_play_tracks', { entity_id: 'media_player.spotifyplus', uris: 'spotify:track:9', device_id: 'Marantz' });
-
-    fireEvent.click(screen.getByRole('tab', { name: 'Bibliothek' }));
-    fireEvent.change(await screen.findByLabelText('Musik suchen'), { target: { value: 'Whiskey' } });
-    await act(async () => { fireEvent.submit(screen.getByLabelText('Musik suchen').closest('form')); });
-    expect(await screen.findByText('Whiskey vom NAS')).toBeTruthy();
-    expect(screen.queryByText('Whiskey in the Jar')).toBeNull();
+    // Spotify-Playlist öffnen (zweimal antippen) und Titel im Kontext abspielen
+    const spOrdner = screen.getAllByRole('button', { name: 'Playlists' }).at(-1);
+    fireEvent.click(spOrdner);
+    const pl = await screen.findByText('Deutscher Rock');
+    fireEvent.click(pl);
+    fireEvent.click(pl);
+    fireEvent.doubleClick(await screen.findByText('Lieblingslied'));
+    expect(callService).toHaveBeenCalledWith('spotifyplus', 'player_media_play_context', {
+      entity_id: 'media_player.spotifyplus', context_uri: 'spotify:playlist:5G', offset_position: 0, device_id: 'Marantz',
+    });
   });
 
-  it('lists playlists, searches and plays in the room', async () => {
-    const callService = oeffnen();
+  it('shows the Spotify queue as playlist and jumps there with skip', async () => {
+    const callService = vi.fn();
+    const mitSpotify = { ...medien, musik: { ...medien.musik, spotify: { entity: 'media_player.spotifyplus', geraet: 'Marantz' } } };
+    const spConn = {
+      sendMessagePromise: vi.fn(async (msg) => {
+        if (msg.service === 'get_player_queue_info') {
+          return { response: { result: {
+            currently_playing: { uri: 'spotify:track:1', name: 'Jetzt', type: 'track' },
+            queue: [{ uri: 'spotify:track:2', name: 'Danach', type: 'track' }, { uri: 'spotify:track:3', name: 'Später', type: 'track' }],
+          } } };
+        }
+        return { response: { items: [] } };
+      }),
+    };
+    const ents = {
+      ...basis,
+      'media_player.tv': { state: 'off', attributes: {} },
+      'media_player.vu': { state: 'off', attributes: {} },
+      'media_player.spotifyplus': { state: 'playing', attributes: { source: 'Marantz', media_title: 'Jetzt' } },
+    };
+    const r = render(<MedienCard cardId="m" entities={ents} settings={{ medien: mitSpotify }} callService={callService} conn={spConn} getEntityImageUrl={(u) => u} />);
+    fireEvent.click(r.container.firstChild);
     await screen.findByRole('dialog');
-    fireEvent.click(screen.getByRole('tab', { name: 'Musik' }));
-    expect(await screen.findByText('Sommer')).toBeTruthy();
-    fireEvent.change(screen.getByLabelText('Musik suchen'), { target: { value: 'Beatles' } });
-    await act(async () => { fireEvent.submit(screen.getByLabelText('Musik suchen').closest('form')); });
-    fireEvent.click(await screen.findByText('Yesterday'));
-    expect(callService).toHaveBeenCalledWith('media_player', 'select_source', { entity_id: 'media_player.zone2', source: 'HEOS Music' });
-    expect(callService).toHaveBeenCalledWith('music_assistant', 'play_media', { entity_id: 'media_player.ma', media_id: 'spotify:track:1', media_type: 'track' });
-    expect(conn.sendMessagePromise).toHaveBeenCalledWith(expect.objectContaining({ service: 'search', service_data: { config_entry_id: 'ma1', name: 'Beatles', limit: 5 } }));
+    fireEvent.doubleClick(await screen.findByText('Später'));
+    expect(callService.mock.calls.filter(([d, s]) => d === 'spotifyplus' && s === 'player_media_skip_next')).toHaveLength(2);
   });
 });
