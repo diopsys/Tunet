@@ -142,7 +142,7 @@ describe('Medien-Fenster', () => {
     fireEvent.keyDown(window, { key: 'Enter' });
     await waitFor(() => expect(callService).toHaveBeenCalledWith('media_player', 'media_stop', { entity_id: 'media_player.ma' }), { timeout: 2000 });
     const lautstaerken = callService.mock.calls.filter(([, s, d]) => s === 'volume_set' && d.entity_id === 'media_player.ma').map(([, , d]) => d.volume_level);
-    expect(lautstaerken.slice(0, 2)).toEqual([0.25, 0]);
+    expect(lautstaerken[0]).toBe(0);
     // Zone bleibt unberührt, danach startet der gewählte Titel
     expect(callService.mock.calls.some(([, s, d]) => s === 'volume_set' && d.entity_id === 'media_player.zone2')).toBe(false);
     await waitFor(() => expect(callService).toHaveBeenCalledWith('music_assistant', 'play_media', {

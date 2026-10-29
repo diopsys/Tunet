@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Power, Tv, Volume2, X } from '../icons';
 import { getIconComponent } from '../icons';
 import AccessibleModalShell from '../components/ui/AccessibleModalShell';
 import WinampMusik from './medien/WinampMusik';
+import useLautstaerke from './medien/useLautstaerke';
 
 /*
  * Medien-Fenster der Medien-Kachel mit den Reitern „Musik“ (Winamp-Stil: Spotify und eigene
@@ -46,16 +47,13 @@ const Knopf = ({ aktiv, onClick, children, label, klein }) => (
 );
 
 const Lautstaerke = ({ entity, entityId, callService }) => {
-  const wert = Math.round((entity?.attributes?.volume_level ?? 0) * 100);
+  const setzen = useCallback((id, v) => callService('media_player', 'volume_set', { entity_id: id, volume_level: v }), [callService]);
+  const regler = useLautstaerke(entity, entityId, setzen);
   return (
     <label className="flex items-center gap-3">
       <Volume2 className="h-4 w-4 flex-shrink-0 text-[var(--text-muted)]" />
-      <input
-        type="range" min={0} max={100} step={1} value={wert} aria-label="Lautstärke"
-        onChange={(e) => callService('media_player', 'volume_set', { entity_id: entityId, volume_level: Number(e.target.value) / 100 })}
-        className="min-w-0 flex-1 accent-[var(--accent-color)]"
-      />
-      <span className="w-10 text-right text-xs text-[var(--text-muted)]">{wert} %</span>
+      <input type="range" min={0} max={100} step={1} aria-label="Lautstärke" className="min-w-0 flex-1 accent-[var(--accent-color)]" {...regler.props} />
+      <span className="w-10 text-right text-xs text-[var(--text-muted)]">{regler.wert} %</span>
     </label>
   );
 };

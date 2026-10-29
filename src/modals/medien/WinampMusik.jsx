@@ -8,6 +8,7 @@ import {
   auswahlKlick, ausblendenKonfig, blockSchieben, browseTitel, istSpotifyUri, laufenderIndex, maAbspielen, maEinreihen,
   maRestErsetzen, maTitel, ohneAuswahl, position, spAbspielen, spListe, spSpringen, spTitel, spWarteschlange, zeit,
 } from './musik';
+import useLautstaerke from './useLautstaerke';
 import './winamp.css';
 
 /*
@@ -125,7 +126,8 @@ function Hauptfenster({ config, entities, ruf, playerId, index, onEject, onAusbl
   const nr = index >= 0 ? `${index + 1}. ` : '';
   const text = pa.media_title ? `${nr}${[pa.media_artist, pa.media_title].filter(Boolean).join(' - ')}` : 'Nichts ausgewählt';
   const zeichen = faded ? '↘' : spielt ? '▶' : player?.state === 'paused' ? '❚❚' : '■';
-  const lautstaerke = Math.round((laut?.attributes?.volume_level ?? 0) * 100);
+  const setzen = useCallback((id, v) => ruf([['media_player', 'volume_set', { entity_id: id, volume_level: v }]]), [ruf]);
+  const regler = useLautstaerke(laut, lautId, setzen);
   const p = (service, data = {}) => ruf([['media_player', service, { entity_id: playerId, ...data }]]);
   const shuffle = Boolean(pa.shuffle);
   const repeat = pa.repeat && pa.repeat !== 'off';
@@ -148,11 +150,7 @@ function Hauptfenster({ config, entities, ruf, playerId, index, onEject, onAusbl
             <span className={spielt ? 'an' : 'aus'} style={{ marginLeft: 'auto' }}>mono</span>
             <span className={spielt ? 'an' : 'aus'}>stereo</span>
           </div>
-          <input
-            type="range" className="wa-regler" min={0} max={100} value={lautstaerke} aria-label="Lautstärke"
-            disabled={!istAn(laut)}
-            onChange={(e) => ruf([['media_player', 'volume_set', { entity_id: lautId, volume_level: Number(e.target.value) / 100 }]])}
-          />
+          <input type="range" className="wa-regler" min={0} max={100} aria-label="Lautstärke" disabled={!istAn(laut)} {...regler.props} />
         </div>
       </div>
       <input
@@ -182,15 +180,13 @@ function Hauptfenster({ config, entities, ruf, playerId, index, onEject, onAusbl
 
 function Fader({ name, entityId, entities, ruf }) {
   const e = entityId ? entities[entityId] : null;
+  const setzen = useCallback((id, v) => ruf([['media_player', 'volume_set', { entity_id: id, volume_level: v }]]), [ruf]);
+  const regler = useLautstaerke(e, entityId, setzen);
   if (!e) return null;
-  const wert = Math.round((e.attributes?.volume_level ?? 0) * 100);
   return (
     <label className="wa-fader">
-      <input
-        type="range" min={0} max={100} value={wert} aria-label={`Lautstärke ${name}`} disabled={!istAn(e)}
-        onChange={(ev) => ruf([['media_player', 'volume_set', { entity_id: entityId, volume_level: Number(ev.target.value) / 100 }]])}
-      />
-      <span className="wa-lcd">{istAn(e) ? wert : '--'}</span>
+      <input type="range" min={0} max={100} aria-label={`Lautstärke ${name}`} disabled={!istAn(e)} {...regler.props} />
+      <span className="wa-lcd">{istAn(e) ? regler.wert : '--'}</span>
       <span>{name}</span>
     </label>
   );
@@ -626,8 +622,8 @@ export default function WinampMusik({ config, entities, callService, conn, raum 
     const vol = ziel ? entitiesRef.current[ziel]?.attributes?.volume_level : null;
     const spielt = entitiesRef.current[playerId]?.state === 'playing';
     const setzen = (v) => callService?.('media_player', 'volume_set', { entity_id: ziel, volume_level: Math.round(v * 1000) / 1000 });
-    // Spotify (Web-API) verträgt weniger Schritte als Music Assistant
-    const proSek = istSp ? 4 : 8;
+    // wenige Schritte: langsame Geräte (HEOS) und die Spotify-Web-API stauen sonst Befehle auf
+    const proSek = istSp ? 2 : 3;
     const rampe = async (von, bis, sek) => {
       const n = Math.max(1, Math.round(sek * proSek));
       for (let k = 1; k <= n; k += 1) {

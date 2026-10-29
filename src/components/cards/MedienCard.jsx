@@ -1,7 +1,8 @@
-import { lazy, memo, Suspense, useState } from 'react';
+import { lazy, memo, Suspense, useCallback, useState } from 'react';
 import { Music, Pause, Play, Power, SkipBack, SkipForward, Volume2 } from '../../icons';
 import { getIconComponent } from '../../icons';
 import { openHaPath, safeHaUrl } from './HeizungCard';
+import useLautstaerke from '../../modals/medien/useLautstaerke';
 
 const MedienModal = lazy(() => import('../../modals/MedienModal'));
 
@@ -161,7 +162,9 @@ const MedienCard = ({ cardId, dragProps, controls, cardStyle, editMode, entities
     : player && pa.media_title ? pa.media_artist || pa.media_album_name || '' : '';
   const bild = tv ? tv.attributes?.entity_picture : player ? pa.entity_picture : null;
   const cover = bild && getEntityImageUrl ? getEntityImageUrl(bild) : null;
-  const lautstaerke = Math.round((lautEntity?.attributes?.volume_level ?? 0) * 100);
+  // gedrosselt: langsame Receiver (HEOS) stauen sonst jeden Zwischenwert auf
+  const setzen = useCallback((id, v) => callService?.('media_player', 'volume_set', { entity_id: id, volume_level: v }), [callService]);
+  const regler = useLautstaerke(lautEntity, lautId, setzen);
   // „Aus“ im TV- bzw. Sat-Betrieb: Fernseher, Surround und ein noch laufender Sat-Receiver
   const satId = config.tv?.sat?.entity;
   const tvAus = tv || satBox
@@ -215,12 +218,12 @@ const MedienCard = ({ cardId, dragProps, controls, cardStyle, editMode, entities
         <label className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
           <Volume2 className="h-3.5 w-3.5 flex-shrink-0 text-[var(--text-muted)]" />
           <input
-            type="range" min={0} max={100} step={1} value={lautstaerke} aria-label="Lautstärke"
-            onChange={(e) => callService?.('media_player', 'volume_set', { entity_id: lautId, volume_level: Number(e.target.value) / 100 })}
+            type="range" min={0} max={100} step={1} aria-label="Lautstärke"
             className="min-w-0 flex-1 accent-[var(--accent-color)]"
             disabled={editMode}
+            {...regler.props}
           />
-          <span className="w-8 text-right text-[10px] text-[var(--text-muted)]">{lautstaerke} %</span>
+          <span className="w-8 text-right text-[10px] text-[var(--text-muted)]">{regler.wert} %</span>
         </label>
       )}
 

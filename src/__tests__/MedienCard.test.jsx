@@ -147,4 +147,17 @@ describe('Medien-Kachel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Medien öffnen' }));
     expect(screen.queryByRole('dialog')).toBeNull();
   });
+
+  it('throttles the volume slider so slow receivers do not lag behind', () => {
+    const callService = vi.fn();
+    const ents = { ...entities, 'media_player.zone2': { state: 'on', attributes: { source: 'HEOS Music', volume_level: 0.2 } } };
+    render(<MedienCard cardId="m" entities={ents} settings={{ medien }} callService={callService} />);
+    const regler = screen.getByLabelText('Lautstärke');
+    [25, 30, 35, 40, 45].forEach((v) => fireEvent.change(regler, { target: { value: String(v) } }));
+    const lautstaerke = () => callService.mock.calls.filter(([, s]) => s === 'volume_set').map(([, , d]) => d.volume_level);
+    expect(lautstaerke()).toEqual([0.25]);
+    expect(regler.value).toBe('45');
+    fireEvent.pointerUp(regler);
+    expect(lautstaerke()).toEqual([0.25, 0.45]);
+  });
 });
