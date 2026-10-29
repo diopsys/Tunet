@@ -2,11 +2,16 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest';
 import MedienCard from '../components/cards/MedienCard';
 import { satAktiv } from '../modals/MedienModal';
-import { laufenderIndex, maAbspielen, spAbspielen, spSpringen, spTitel, zeit } from '../modals/medien/musik';
+import {
+  auswahlKlick, ausblendenKonfig, blockSchieben, laufenderIndex, maAbspielen, ohneAuswahl, spAbspielen, spSpringen, spTitel, zeit,
+} from '../modals/medien/musik';
+import { fetchMedienPlaylist, saveMedienPlaylist } from '../services/settingsApi';
 
 vi.mock('../services/settingsApi', () => ({
   fetchMedienPlaylist: vi.fn(async () => ({ items: [], index: 0 })),
   saveMedienPlaylist: vi.fn(async () => ({})),
+  fetchMedienListen: vi.fn(async () => []),
+  deleteMedienPlaylist: vi.fn(async () => ({})),
 }));
 
 const medien = {
@@ -101,6 +106,63 @@ describe('Medien-Fenster', () => {
     expect(spAbspielen(cfg, [{ uri: 'spotify:track:1' }, { uri: 'spotify:track:2' }], 0).at(-1)[2].uris).toBe('spotify:track:1,spotify:track:2');
     expect(spSpringen(cfg, 2)).toHaveLength(2);
     expect(laufenderIndex(items, { attributes: { media_title: 'drei' } }, 0)).toBe(2);
+  });
+
+  it('selects, removes and moves several titles like Winamp', () => {
+    expect(auswahlKlick([], 2)).toEqual([2]);
+    expect(auswahlKlick([2], 4, { shift: true }, 2)).toEqual([2, 3, 4]);
+    expect(auswahlKlick([2, 4], 4, { mehrfach: true })).toEqual([2]);
+    const items = ['a', 'b', 'c', 'd', 'e'].map((uri) => ({ uri }));
+    expect(ohneAuswahl(items, [0, 1], 3)).toEqual({ items: [{ uri: 'c' }, { uri: 'd' }, { uri: 'e' }], index: 1 });
+    const hoch = blockSchieben(items, [2, 3], 3, -1);
+    expect(hoch.items.map((t) => t.uri)).toEqual(['a', 'c', 'd', 'b', 'e']);
+    expect(hoch.index).toBe(2);
+    expect(hoch.auswahl).toEqual([1, 2]);
+    expect(blockSchieben(items, [0], 0, -1)).toBeNull();
+    expect(ausblendenKonfig({ zone: 'z', musik: { ausblenden: { sekunden: 2, ueber: 'zone' } } })).toEqual({ sekunden: 2, ueber: 'zone' });
+    expect(ausblendenKonfig({ musik: { ausblenden: { ueber: 'zone' } } })).toEqual({ sekunden: 4, ueber: 'player' });
+  });
+
+  it('fades the player out with Shift+V and plays the selected title after Enter', async () => {
+    fetchMedienPlaylist.mockResolvedValue({ items: [{ uri: 'library://track/1', name: 'Eins' }, { uri: 'library://track/2', name: 'Zwei' }], index: 0 });
+    const callService = vi.fn();
+    const cfg = { ...medien, musik: { ...medien.musik, ausblenden: { sekunden: 0.25 } } };
+    const ents = {
+      ...basis,
+      'media_player.tv': { state: 'off', attributes: {} },
+      'media_player.vu': { state: 'off', attributes: {} },
+      'media_player.zone2': { state: 'on', attributes: { source: 'HEOS Music', volume_level: 0.4 } },
+      'media_player.ma': { state: 'playing', attributes: { media_title: 'Eins', volume_level: 0.5 } },
+    };
+    const r = render(<MedienCard cardId="m" entities={ents} settings={{ medien: cfg }} callService={callService} conn={{ sendMessagePromise: vi.fn(async () => ({ response: { items: [] } })) }} getEntityImageUrl={(u) => u} />);
+    fireEvent.click(r.container.firstChild);
+    await screen.findByRole('dialog');
+    fireEvent.click(await screen.findByText('Zwei', { selector: '.wa-playlist .name' }));
+    fireEvent.keyDown(window, { key: 'V', shiftKey: true });
+    fireEvent.keyDown(window, { key: 'Enter' });
+    await waitFor(() => expect(callService).toHaveBeenCalledWith('media_player', 'media_stop', { entity_id: 'media_player.ma' }), { timeout: 2000 });
+    const lautstaerken = callService.mock.calls.filter(([, s, d]) => s === 'volume_set' && d.entity_id === 'media_player.ma').map(([, , d]) => d.volume_level);
+    expect(lautstaerken.slice(0, 2)).toEqual([0.25, 0]);
+    // Zone bleibt unberührt, danach startet der gewählte Titel
+    expect(callService.mock.calls.some(([, s, d]) => s === 'volume_set' && d.entity_id === 'media_player.zone2')).toBe(false);
+    await waitFor(() => expect(callService).toHaveBeenCalledWith('music_assistant', 'play_media', {
+      entity_id: 'media_player.ma', media_id: ['library://track/2'], media_type: 'track', enqueue: 'replace',
+    }), { timeout: 2000 });
+    fetchMedienPlaylist.mockResolvedValue({ items: [], index: 0 });
+  });
+
+  it('saves the playlist under a name', async () => {
+    fetchMedienPlaylist.mockResolvedValue({ items: [{ uri: 'library://track/1', name: 'Eins' }], index: 0 });
+    const ents = { ...basis, 'media_player.tv': { state: 'off', attributes: {} }, 'media_player.vu': { state: 'off', attributes: {} } };
+    const r = render(<MedienCard cardId="m" entities={ents} settings={{ medien }} callService={vi.fn()} conn={{ sendMessagePromise: vi.fn(async () => ({ response: { items: [] } })) }} getEntityImageUrl={(u) => u} />);
+    fireEvent.click(r.container.firstChild);
+    await screen.findByRole('dialog');
+    await screen.findByText('Eins', { selector: '.wa-playlist .name' });
+    fireEvent.click(screen.getByRole('button', { name: 'Als Playlist speichern' }));
+    fireEvent.change(screen.getByLabelText('Name der Playlist'), { target: { value: 'Party' } });
+    fireEvent.submit(screen.getByLabelText('Name der Playlist').closest('form'));
+    await waitFor(() => expect(saveMedienPlaylist).toHaveBeenCalledWith('m/listen/Party', { items: [{ uri: 'library://track/1', name: 'Eins' }], index: 0 }));
+    fetchMedienPlaylist.mockResolvedValue({ items: [], index: 0 });
   });
 
   it('shows the Winamp windows and plays from the local library and Spotify playlists', async () => {

@@ -1,27 +1,34 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pause, Play, Repeat, Shuffle, SkipBack, SkipForward } from '../../icons';
 import { beideZonenAktionen, playAktionen } from '../../components/cards/MedienCard';
-import { fetchMedienPlaylist, saveMedienPlaylist } from '../../services/settingsApi';
 import {
-  browseTitel, istSpotifyUri, laufenderIndex, maAbspielen, maEinreihen, maRestErsetzen, maTitel, position,
-  spAbspielen, spListe, spSpringen, spTitel, spWarteschlange, zeit,
+  deleteMedienPlaylist, fetchMedienListen, fetchMedienPlaylist, saveMedienPlaylist,
+} from '../../services/settingsApi';
+import {
+  auswahlKlick, ausblendenKonfig, blockSchieben, browseTitel, istSpotifyUri, laufenderIndex, maAbspielen, maEinreihen,
+  maRestErsetzen, maTitel, ohneAuswahl, position, spAbspielen, spListe, spSpringen, spTitel, spWarteschlange, zeit,
 } from './musik';
 import './winamp.css';
 
 /*
  * Musik-Reiter des Medien-Fensters im Winamp-Stil:
- *   Hauptfenster  – Lauftext, Zeit, Spulen, Lautstärke des Raums, Steuerung, Shuffle/Repeat
+ *   Hauptfenster  – Lauftext, Zeit, Spulen, Lautstärke, Steuerung, Shuffle/Repeat
  *   Zonen         – an Stelle des Equalizers: Quellen des Raums, „Beide Zonen“, Lautstärken
  *   Playlist      – Spotify: Warteschlange; sonst die Liste, die über Music Assistant läuft
- *                   (gemeinsam für alle Geräte auf dem Tunet-Server gespeichert)
- *   Media Library – Lokale Bibliothek (Music Assistant) und Spotify (SpotifyPlus) mit Suche
- * Wie in Winamp: Antippen wählt, Doppeltippen spielt – aus der Library die ganze angezeigte
- * Liste ab diesem Titel.
+ *                   (gemeinsam auf dem Tunet-Server, auch unter einem Namen speicherbar)
+ *   Media Library – Lokale Bibliothek (Music Assistant), Meine Playlists, Spotify (SpotifyPlus)
+ * Wie in Winamp: Antippen wählt (Shift/Strg bzw. „Sel“ für mehrere), Doppeltippen spielt –
+ * aus der Library die ganze angezeigte Liste ab diesem Titel. Shift+V blendet aus und
+ * stoppt, Enter (auch währenddessen) spielt danach den gewählten Titel; „Fade“ macht beides.
+ * Ausgeblendet wird die Lautstärke des Players (settings.medien.musik.ausblenden:
+ * { sekunden: 4, ueber: 'player' | 'zone' }), damit es auch ohne steuerbaren Verstärker geht.
  */
 
 const AN = ['on', 'playing', 'paused', 'idle', 'buffering'];
 const istAn = (e) => Boolean(e) && AN.includes(e.state);
 const idAus = (uri) => String(uri || '').split(':').pop();
+const schlaf = (ms) => new Promise((r) => { setTimeout(r, ms); });
+const istTitel = (t) => Boolean(t) && (!t.media_type || t.media_type === 'track');
 
 async function dienst(conn, domain, service, data) {
   if (!conn?.sendMessagePromise) return null;
@@ -37,9 +44,15 @@ async function aufklappen(conn, entityId, item) {
   });
   return (r?.children || []).map(browseTitel).filter(Boolean);
 }
+const listenSchluessel = (raum, name) => `${raum}/listen/${name}`;
+async function gespeicherteLaden(schluessel) {
+  const r = await fetchMedienPlaylist(schluessel);
+  return (r?.items || []).map((t) => ({ ...t, quelle: 'ma' }));
+}
 
-// Ordner der Media Library: [Schlüssel, Name, Gruppe]
+// Ordner der Media Library: [Schlüssel, Name, …]
 const MA_ORDNER = [['ma_titel', 'Alle Titel'], ['ma_kuenstler', 'Künstler'], ['ma_alben', 'Alben'], ['ma_playlists', 'Playlists']];
+const MEINE = ['ma_meine', 'Meine Playlists'];
 const SP_ORDNER = [
   ['sp_playlists', 'Playlists', 'get_playlist_favorites', 50],
   ['sp_songs', 'Lieblingssongs', 'get_track_favorites', 200],
@@ -50,10 +63,14 @@ const SP_ORDNER = [
 ];
 const MA_ART = { ma_titel: 'track', ma_kuenstler: 'artist', ma_alben: 'album', ma_playlists: 'playlist' };
 const SEITE = 200;
-const ART_NAME = { album: 'Album', playlist: 'Playlist', artist: 'Künstler', folder: 'Ordner', radio: 'Radio' };
+const ART_NAME = { album: 'Album', playlist: 'Playlist', artist: 'Künstler', folder: 'Ordner', radio: 'Radio', gespeichert: 'Liste' };
+const TASTEN_AUS = ['INPUT', 'TEXTAREA', 'SELECT'];
 
-const Knopf = ({ onClick, label, aktiv, led, gross, disabled, children }) => (
-  <button type="button" className={`wa-knopf${gross ? ' gross' : ''}`} aria-label={label} title={label} onClick={onClick} disabled={disabled} aria-pressed={aktiv === undefined ? undefined : Boolean(aktiv)}>
+const Knopf = ({ onClick, label, aktiv, led, gross, disabled, children, ...rest }) => (
+  <button
+    type="button" className={`wa-knopf${gross ? ' gross' : ''}`} aria-label={label} title={label} onClick={onClick} disabled={disabled}
+    aria-pressed={aktiv === undefined ? undefined : Boolean(aktiv)} {...rest}
+  >
     {led && <span className="wa-led" />}
     {children}
   </button>
@@ -74,34 +91,48 @@ function Zeile({ nr, item, laeuft, gewaehlt, onWaehlen, onSpielen }) {
       onClick={onWaehlen}
       onDoubleClick={onSpielen}
       aria-current={laeuft ? 'true' : undefined}
+      aria-selected={gewaehlt}
     >
       {nr !== undefined && <span className="nr">{nr}.</span>}
       <span className="name">{[item.artist, item.name].filter(Boolean).join(' - ') || item.uri}</span>
-      {ART_NAME[item.media_type] && <span className="art">{ART_NAME[item.media_type]}</span>}
+      {ART_NAME[item.media_type] && <span className="art">{ART_NAME[item.media_type]}{item.anzahl ? ` · ${item.anzahl}` : ''}</span>}
       <span className="dauer">{zeit(item.dauer)}</span>
     </button>
   );
 }
 
-function Hauptfenster({ config, entities, ruf, playerId, liste, index, onEject }) {
+// Klick in einer Liste: Auswahl nach Winamp-Regeln (Shift, Strg/Cmd, Mehrfach-Modus)
+function klickAuswahl(e, i, liste, mehrfach) {
+  const neu = auswahlKlick(liste.auswahl, i, { shift: e?.shiftKey, mehrfach: mehrfach || e?.ctrlKey || e?.metaKey }, liste.anker);
+  return { auswahl: neu, anker: e?.shiftKey && liste.anker >= 0 ? liste.anker : i };
+}
+
+function Hauptfenster({ config, entities, ruf, playerId, index, onEject, onAusblenden, faded }) {
   const player = playerId ? entities[playerId] : null;
   const pa = player?.attributes || {};
-  const zone = config.zone ? entities[config.zone] : null;
+  // ohne Zone regelt der Lautstärke-Regler den Player selbst
+  const lautId = config.zone || playerId;
+  const laut = lautId ? entities[lautId] : null;
   const [, setTakt] = useState(0);
   useEffect(() => {
     if (player?.state !== 'playing') return undefined;
     const t = setInterval(() => setTakt((x) => x + 1), 1000);
     return () => clearInterval(t);
   }, [player?.state]);
+  const lang = useRef(null);
   const pos = position(player);
   const spielt = player?.state === 'playing';
   const nr = index >= 0 ? `${index + 1}. ` : '';
-  const text = pa.media_title ? `${nr}${[pa.media_artist, pa.media_title].filter(Boolean).join(' - ')}` : liste.length ? 'Bereit' : 'Nichts ausgewählt';
-  const zeichen = spielt ? '▶' : player?.state === 'paused' ? '❚❚' : '■';
-  const lautstaerke = Math.round((zone?.attributes?.volume_level ?? 0) * 100);
+  const text = pa.media_title ? `${nr}${[pa.media_artist, pa.media_title].filter(Boolean).join(' - ')}` : 'Nichts ausgewählt';
+  const zeichen = faded ? '↘' : spielt ? '▶' : player?.state === 'paused' ? '❚❚' : '■';
+  const lautstaerke = Math.round((laut?.attributes?.volume_level ?? 0) * 100);
   const p = (service, data = {}) => ruf([['media_player', service, { entity_id: playerId, ...data }]]);
   const shuffle = Boolean(pa.shuffle);
   const repeat = pa.repeat && pa.repeat !== 'off';
+  // ■ lange drücken: ausblenden und stoppen
+  const stoppDruck = () => { lang.current = setTimeout(() => { lang.current = 'lang'; onAusblenden(); }, 600); };
+  const stoppLos = () => { if (lang.current && lang.current !== 'lang') clearTimeout(lang.current); };
+  const stoppKlick = () => { if (lang.current === 'lang') { lang.current = null; return; } lang.current = null; p('media_stop'); };
   return (
     <Fenster titel="Winamp" className="wa-haupt">
       <div className="wa-oben">
@@ -119,8 +150,8 @@ function Hauptfenster({ config, entities, ruf, playerId, liste, index, onEject }
           </div>
           <input
             type="range" className="wa-regler" min={0} max={100} value={lautstaerke} aria-label="Lautstärke"
-            disabled={!istAn(zone)}
-            onChange={(e) => ruf([['media_player', 'volume_set', { entity_id: config.zone, volume_level: Number(e.target.value) / 100 }]])}
+            disabled={!istAn(laut)}
+            onChange={(e) => ruf([['media_player', 'volume_set', { entity_id: lautId, volume_level: Number(e.target.value) / 100 }]])}
           />
         </div>
       </div>
@@ -130,11 +161,16 @@ function Hauptfenster({ config, entities, ruf, playerId, liste, index, onEject }
         onChange={(e) => p('media_seek', { seek_position: Number(e.target.value) })}
       />
       <div className="wa-knopfreihe" style={{ marginTop: 6 }}>
-        <Knopf gross label="Zurück" disabled={!player} onClick={() => p('media_previous_track')}><SkipBack /></Knopf>
-        <Knopf gross label="Abspielen" disabled={!player} onClick={() => (spielt ? null : ruf(playAktionen(config, entities, playerId)))}><Play /></Knopf>
-        <Knopf gross label="Pause" disabled={!player} onClick={() => p('media_pause')}><Pause /></Knopf>
-        <Knopf gross label="Stopp" disabled={!player} onClick={() => p('media_stop')}><span style={{ width: 10, height: 10, background: 'currentColor' }} /></Knopf>
-        <Knopf gross label="Weiter" disabled={!player} onClick={() => p('media_next_track')}><SkipForward /></Knopf>
+        <Knopf gross label="Zurück (Z)" disabled={!player} onClick={() => p('media_previous_track')}><SkipBack /></Knopf>
+        <Knopf gross label="Abspielen (X)" disabled={!player} onClick={() => (spielt ? null : ruf(playAktionen(config, entities, playerId)))}><Play /></Knopf>
+        <Knopf gross label="Pause (C)" disabled={!player} onClick={() => p('media_pause')}><Pause /></Knopf>
+        <Knopf
+          gross label="Stopp (V), lange drücken: ausblenden (Shift+V)" disabled={!player}
+          onPointerDown={stoppDruck} onPointerUp={stoppLos} onPointerLeave={stoppLos} onClick={stoppKlick}
+        >
+          <span style={{ width: 10, height: 10, background: 'currentColor' }} />
+        </Knopf>
+        <Knopf gross label="Weiter (B)" disabled={!player} onClick={() => p('media_next_track')}><SkipForward /></Knopf>
         <Knopf gross label="Library" onClick={onEject}><span style={{ fontSize: 12 }}>⏏︎</span></Knopf>
         <span style={{ flex: 1 }} />
         <Knopf label="Shuffle" led aktiv={shuffle} disabled={!player} onClick={() => p('shuffle_set', { shuffle: !shuffle })}><Shuffle /></Knopf>
@@ -194,58 +230,88 @@ function ZonenFenster({ config, entities, ruf }) {
   );
 }
 
-function PlaylistEditor({ spotify, liste, laufend, gewaehlt, setGewaehlt, onSpielen, onEntfernen, onSchieben, onLeeren, onAdd }) {
+function PlaylistEditor({
+  spotify, liste, laufend, auswahl, mehrfach, setMehrfach, onKlick, onSpielen, onEntfernen, onSchieben, onLeeren, onAdd,
+  onFade, onSpeichern, onFokus,
+}) {
   const gesamt = liste.reduce((s, t) => s + (t.dauer || 0), 0);
   const listeRef = useRef(null);
+  const [name, setName] = useState(null);
   useEffect(() => {
     listeRef.current?.querySelector('[aria-current="true"]')?.scrollIntoView?.({ block: 'nearest' });
   }, [laufend]);
+  const erster = auswahl.length ? auswahl[0] : -1;
+  const speichern = (e) => {
+    e.preventDefault();
+    if (!name?.trim()) return;
+    onSpeichern(name.trim());
+    setName(null);
+  };
   return (
     <Fenster titel={spotify ? 'Playlist Editor · Spotify' : 'Playlist Editor'} className="wa-playlist">
-      <div ref={listeRef} className="wa-lcd wa-liste" role="listbox" aria-label="Playlist">
+      <div ref={listeRef} className="wa-lcd wa-liste" role="listbox" aria-label="Playlist" aria-multiselectable="true" onPointerDown={onFokus}>
         {liste.length === 0 && <div className="wa-hinweis">{spotify ? 'Spotify-Warteschlange ist leer.' : 'Leer – in der Media Library doppelt tippen.'}</div>}
         {liste.map((t, i) => (
           <Zeile
-            key={`${t.uri}-${i}`} nr={i + 1} item={t} laeuft={i === laufend} gewaehlt={i === gewaehlt}
-            onWaehlen={() => setGewaehlt(i)} onSpielen={() => onSpielen(i)}
+            key={`${t.uri}-${i}`} nr={i + 1} item={t} laeuft={i === laufend} gewaehlt={auswahl.includes(i)}
+            onWaehlen={(e) => onKlick(e, i)} onSpielen={() => onSpielen(i)}
           />
         ))}
       </div>
+      {name !== null && (
+        <form className="wa-suche" style={{ paddingTop: 5 }} onSubmit={speichern}>
+          <span>Name:</span>
+          <input autoFocus value={name} onChange={(e) => setName(e.target.value)} aria-label="Name der Playlist" maxLength={80} />
+          <Knopf label="Speichern" type="submit" onClick={undefined}>OK</Knopf>
+          <Knopf label="Abbrechen" onClick={() => setName(null)}>×</Knopf>
+        </form>
+      )}
       <div className="wa-fuss">
         <Knopf label="Hinzufügen" onClick={onAdd}>Add</Knopf>
-        <Knopf label="Entfernen" disabled={spotify || gewaehlt < 0} onClick={onEntfernen}>Rem</Knopf>
-        <Knopf label="Nach oben" disabled={spotify || gewaehlt <= 0} onClick={() => onSchieben(-1)}>▲</Knopf>
-        <Knopf label="Nach unten" disabled={spotify || gewaehlt < 0 || gewaehlt >= liste.length - 1} onClick={() => onSchieben(1)}>▼</Knopf>
+        <Knopf label="Entfernen (Entf)" disabled={spotify || !auswahl.length} onClick={onEntfernen}>Rem</Knopf>
+        <Knopf label="Mehrere wählen" led aktiv={mehrfach} onClick={() => setMehrfach(!mehrfach)}>Sel</Knopf>
+        <Knopf label="Nach oben" disabled={spotify || !auswahl.length || auswahl[0] <= 0} onClick={() => onSchieben(-1)}>▲</Knopf>
+        <Knopf label="Nach unten" disabled={spotify || !auswahl.length || auswahl[auswahl.length - 1] >= liste.length - 1} onClick={() => onSchieben(1)}>▼</Knopf>
         <Knopf label="Leeren" disabled={spotify || liste.length === 0} onClick={onLeeren}>Clr</Knopf>
-        <Knopf label="Abspielen" disabled={gewaehlt < 0} onClick={() => onSpielen(gewaehlt)}>Play</Knopf>
+        <Knopf label="Als Playlist speichern" disabled={spotify || liste.length === 0} onClick={() => setName('')}>Save</Knopf>
+        <Knopf label="Abspielen (Enter)" disabled={erster < 0} onClick={() => onSpielen(erster)}>Play</Knopf>
+        <Knopf label="Ausblenden und Gewählten spielen" onClick={onFade}>Fade</Knopf>
         <span className="wa-lcd">{liste.length} · {zeit(gesamt) || '0:00'}</span>
       </div>
     </Fenster>
   );
 }
 
-function MediaLibrary({ config, conn, suchRef, onAbspielen, onEinreihen }) {
+function MediaLibrary({ config, conn, raum, apiRef, suchRef, mehrfach, setMehrfach, listenStand, onAbspielen, onEinreihen, onFade, onFokus }) {
   const maEintrag = config.musik?.maEintrag;
   const sp = config.musik?.spotify;
   const start = maEintrag ? 'ma_titel' : sp?.entity ? 'sp_playlists' : null;
   const [ordner, setOrdner] = useState(start);
-  // Ansicht: { titel, items, kontext, quelle, mehr } – Stapel für „Zurück“ beim Aufklappen
+  // Ansicht: { titel, items, kontext, quelle, mehr, ordner } – Stapel für „Zurück“ beim Aufklappen
   const [stapel, setStapel] = useState([]);
   const [ansicht, setAnsicht] = useState(null);
   const [laedt, setLaedt] = useState(false);
-  const [gewaehlt, setGewaehlt] = useState(-1);
+  const [wahl, setWahl] = useState({ auswahl: [], anker: -1 });
   const [text, setText] = useState('');
+  const [loeschen, setLoeschen] = useState(null);
 
   const zeigen = useCallback((a, neu = true) => {
     setAnsicht(a);
-    setGewaehlt(-1);
+    setWahl({ auswahl: [], anker: -1 });
+    setLoeschen(null);
     if (neu) setStapel([]);
   }, []);
 
   const ordnerLaden = useCallback(async (key, offset = 0) => {
     setLaedt(true);
     try {
-      if (MA_ART[key]) {
+      if (key === MEINE[0]) {
+        const listen = raum ? await fetchMedienListen(raum) : [];
+        zeigen({
+          titel: MEINE[1], quelle: 'ma', ordner: key, mehr: null,
+          items: (listen || []).map((l) => ({ uri: l.schluessel, name: l.name, artist: '', dauer: null, media_type: 'gespeichert', quelle: 'ma', anzahl: l.anzahl })),
+        });
+      } else if (MA_ART[key]) {
         const r = await maDienst(conn, 'get_library', { config_entry_id: maEintrag, media_type: MA_ART[key], limit: SEITE, offset, order_by: 'sort_name' });
         // mit eigenem Spotify-Ordner zeigt die lokale Bibliothek nur die eigene Musik
         const items = (r?.items || []).map(maTitel).filter((t) => t && !(sp?.entity && istSpotifyUri(t.uri)));
@@ -255,7 +321,7 @@ function MediaLibrary({ config, conn, suchRef, onAbspielen, onEinreihen }) {
           items: offset && alt?.ordner === key ? [...alt.items, ...items] : items,
           mehr: (r?.items || []).length === SEITE ? offset + SEITE : null,
         }));
-        if (!offset) { setStapel([]); setGewaehlt(-1); }
+        if (!offset) { setStapel([]); setWahl({ auswahl: [], anker: -1 }); }
       } else {
         const def = SP_ORDNER.find(([k]) => k === key);
         const r = await spDienst(conn, def[2], { entity_id: sp.entity, limit_total: def[3] });
@@ -266,9 +332,11 @@ function MediaLibrary({ config, conn, suchRef, onAbspielen, onEinreihen }) {
     } finally {
       setLaedt(false);
     }
-  }, [conn, maEintrag, sp?.entity, zeigen]);
+  }, [conn, maEintrag, raum, sp?.entity, zeigen]);
 
   useEffect(() => { if (ordner) ordnerLaden(ordner); }, [ordner, ordnerLaden]);
+  // neu gespeicherte Playlist sofort in „Meine Playlists“ zeigen
+  useEffect(() => { if (listenStand && ordner === MEINE[0] && !stapel.length) ordnerLaden(MEINE[0]); }, [listenStand]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const quelle = ordner?.startsWith('sp_') ? 'spotify' : 'ma';
   const suchen = async (e) => {
@@ -294,13 +362,15 @@ function MediaLibrary({ config, conn, suchRef, onAbspielen, onEinreihen }) {
     }
   };
 
-  // Album, Playlist oder Künstler öffnen (Winamp: einfacher Klick in der Ansicht)
+  // Album, Playlist, Künstler oder gespeicherte Liste öffnen
   const oeffnen = async (item) => {
     setLaedt(true);
     try {
       let items = [];
       let kontext = null;
-      if (item.quelle === 'spotify') {
+      if (item.media_type === 'gespeichert') {
+        items = await gespeicherteLaden(item.uri);
+      } else if (item.quelle === 'spotify') {
         const id = idAus(item.uri);
         if (item.media_type === 'playlist') {
           items = spListe(await spDienst(conn, 'get_playlist_items', { entity_id: sp.entity, playlist_id: id, limit_total: 200 }));
@@ -318,7 +388,8 @@ function MediaLibrary({ config, conn, suchRef, onAbspielen, onEinreihen }) {
       }
       setStapel((s) => [...s, ansicht]);
       setAnsicht({ titel: [item.artist, item.name].filter(Boolean).join(' - '), quelle: item.quelle, kontext, items, mehr: null });
-      setGewaehlt(-1);
+      setWahl({ auswahl: [], anker: -1 });
+      setLoeschen(null);
     } catch {
       /* bleibt auf der bisherigen Ansicht */
     } finally {
@@ -328,30 +399,52 @@ function MediaLibrary({ config, conn, suchRef, onAbspielen, onEinreihen }) {
   const zurueck = () => {
     const vorher = stapel[stapel.length - 1];
     setStapel((s) => s.slice(0, -1));
-    if (vorher) { setAnsicht(vorher); setGewaehlt(-1); }
+    if (vorher) { setAnsicht(vorher); setWahl({ auswahl: [], anker: -1 }); }
   };
 
   const items = ansicht?.items || [];
-  const istTitel = (t) => !t.media_type || t.media_type === 'track';
-  const waehlen = (i) => {
+  const auswahl = wahl.auswahl;
+  const erster = auswahl.length ? auswahl[0] : -1;
+  const gewaehlteTitel = auswahl.map((i) => items[i]).filter(istTitel);
+  const klick = (e, i) => {
     const t = items[i];
-    if (gewaehlt === i && t && !istTitel(t) && (t.aufklappbar !== false)) oeffnen(t);
-    else setGewaehlt(i);
+    const einfach = !mehrfach && !e?.shiftKey && !e?.ctrlKey && !e?.metaKey;
+    // zweites Antippen eines Albums/einer Playlist öffnet sie
+    if (einfach && auswahl.length === 1 && auswahl[0] === i && t && !istTitel(t) && t.aufklappbar !== false) oeffnen(t);
+    else setWahl(klickAuswahl(e, i, wahl, mehrfach));
   };
   const spielen = (i) => onAbspielen(ansicht, i);
+  const loeschKnopf = async () => {
+    const t = items[erster];
+    if (!t || t.media_type !== 'gespeichert') return;
+    if (loeschen !== t.uri) { setLoeschen(t.uri); return; }
+    await deleteMedienPlaylist(t.uri).catch(() => {});
+    ordnerLaden(MEINE[0]);
+  };
+
+  // für Tasten (Enter, Pfeile) und „Fade“ aus dem übergeordneten Fenster
+  apiRef.current = {
+    spielen: () => (erster >= 0 ? () => spielen(erster) : null),
+    bewegen: (d) => {
+      if (!items.length) return;
+      const z = Math.max(0, Math.min(items.length - 1, (erster < 0 ? -1 : auswahl[auswahl.length - 1]) + d));
+      setWahl({ auswahl: [z], anker: z });
+    },
+  };
+
+  const ordnerKnopf = ([k, name]) => (
+    <button key={k} type="button" aria-pressed={ordner === k} onClick={() => (ordner === k ? ordnerLaden(k) : setOrdner(k))}>{name}</button>
+  );
 
   return (
     <Fenster titel="Media Library" className="wa-lib">
       <div className="wa-lib-innen">
         <nav className="wa-lcd wa-baum" aria-label="Library">
           {maEintrag && <div className="gruppe">Lokale Bibliothek</div>}
-          {maEintrag && MA_ORDNER.map(([k, name]) => (
-            <button key={k} type="button" aria-pressed={ordner === k} onClick={() => (ordner === k ? ordnerLaden(k) : setOrdner(k))}>{name}</button>
-          ))}
+          {maEintrag && MA_ORDNER.map(ordnerKnopf)}
+          {raum && ordnerKnopf(MEINE)}
           {sp?.entity && <div className="gruppe">Spotify</div>}
-          {sp?.entity && SP_ORDNER.map(([k, name]) => (
-            <button key={k} type="button" aria-pressed={ordner === k} onClick={() => (ordner === k ? ordnerLaden(k) : setOrdner(k))}>{name}</button>
-          ))}
+          {sp?.entity && SP_ORDNER.map(ordnerKnopf)}
         </nav>
         <div className="wa-lib-rechts">
           <form className="wa-suche" onSubmit={suchen}>
@@ -363,23 +456,28 @@ function MediaLibrary({ config, conn, suchRef, onAbspielen, onEinreihen }) {
             <span className="name">{ansicht?.titel || ''}</span>
             <span>Länge</span>
           </div>
-          <div className="wa-lcd wa-liste" role="listbox" aria-label="Media Library">
+          <div className="wa-lcd wa-liste" role="listbox" aria-label="Media Library" aria-multiselectable="true" onPointerDown={onFokus}>
             {laedt && <div className="wa-hinweis">Lädt …</div>}
-            {!laedt && items.length === 0 && <div className="wa-hinweis">Nichts gefunden.</div>}
+            {!laedt && items.length === 0 && <div className="wa-hinweis">{ansicht?.ordner === MEINE[0] ? 'Noch keine – im Playlist Editor „Save“.' : 'Nichts gefunden.'}</div>}
             {items.map((t, i) => (
-              <Zeile key={`${t.uri}-${i}`} item={t} gewaehlt={i === gewaehlt} onWaehlen={() => waehlen(i)} onSpielen={() => spielen(i)} />
+              <Zeile key={`${t.uri}-${i}`} item={t} gewaehlt={auswahl.includes(i)} onWaehlen={(e) => klick(e, i)} onSpielen={() => spielen(i)} />
             ))}
             {!laedt && ansicht?.mehr && (
               <button type="button" className="wa-zeile" onClick={() => ordnerLaden(ansicht.ordner, ansicht.mehr)}><span className="name">… weitere laden</span></button>
             )}
           </div>
           <div className="wa-fuss">
-            <Knopf label="Abspielen" disabled={gewaehlt < 0} onClick={() => spielen(gewaehlt)}>Play</Knopf>
-            <Knopf label="Als Nächstes" disabled={gewaehlt < 0 || !istTitel(items[gewaehlt] || {})} onClick={() => onEinreihen(ansicht, [items[gewaehlt]], 'next')}>Enqueue</Knopf>
-            <Knopf label="Anhängen" disabled={gewaehlt < 0 || !istTitel(items[gewaehlt] || {})} onClick={() => onEinreihen(ansicht, [items[gewaehlt]], 'add')}>Add</Knopf>
-            <Knopf label="Alle anhängen" disabled={!items.some(istTitel)} onClick={() => onEinreihen(ansicht, items.filter(istTitel), 'add')}>Add all</Knopf>
-            {gewaehlt >= 0 && items[gewaehlt] && !istTitel(items[gewaehlt]) && (
-              <Knopf label="Öffnen" onClick={() => oeffnen(items[gewaehlt])}>Open</Knopf>
+            <Knopf label="Abspielen (Enter)" disabled={erster < 0} onClick={() => spielen(erster)}>Play</Knopf>
+            <Knopf label="Als Nächstes" disabled={!gewaehlteTitel.length} onClick={() => onEinreihen(gewaehlteTitel, 'next')}>Enqueue</Knopf>
+            <Knopf label="Anhängen" disabled={!gewaehlteTitel.length} onClick={() => onEinreihen(gewaehlteTitel, 'add')}>Add</Knopf>
+            <Knopf label="Alle anhängen" disabled={!items.some(istTitel)} onClick={() => onEinreihen(items.filter(istTitel), 'add')}>Add all</Knopf>
+            <Knopf label="Mehrere wählen" led aktiv={mehrfach} onClick={() => setMehrfach(!mehrfach)}>Sel</Knopf>
+            <Knopf label="Ausblenden und Gewählten spielen" onClick={() => onFade(erster >= 0 ? () => spielen(erster) : null)}>Fade</Knopf>
+            {erster >= 0 && items[erster] && !istTitel(items[erster]) && (
+              <Knopf label="Öffnen" onClick={() => oeffnen(items[erster])}>Open</Knopf>
+            )}
+            {erster >= 0 && items[erster]?.media_type === 'gespeichert' && (
+              <Knopf label="Playlist löschen" onClick={loeschKnopf}>{loeschen === items[erster].uri ? 'Del?' : 'Del'}</Knopf>
             )}
             <span className="wa-lcd">{items.length} items</span>
           </div>
@@ -398,11 +496,15 @@ export default function WinampMusik({ config, entities, callService, conn, raum 
   const playerId = spotify ? sp.entity : config.player;
   const player = playerId ? entities[playerId] : null;
   const [ansicht, setAnsicht] = useState('liste');
+  const [mehrfach, setMehrfach] = useState(false);
+  const [fokus, setFokus] = useState('liste');
+  const [listenStand, setListenStand] = useState(0);
   const suchRef = useRef(null);
+  const libApi = useRef(null);
 
   // Playlist über Music Assistant: gemeinsam auf dem Tunet-Server
   const [pl, setPl] = useState({ items: [], index: 0 });
-  const [gewaehlt, setGewaehlt] = useState(-1);
+  const [plWahl, setPlWahl] = useState({ auswahl: [], anker: -1 });
   const speichern = useCallback((neu) => {
     setPl(neu);
     if (raum) saveMedienPlaylist(raum, neu).catch(() => {});
@@ -435,7 +537,7 @@ export default function WinampMusik({ config, entities, callService, conn, raum 
   useEffect(() => {
     if (!spotify && laufend >= 0 && laufend !== pl.index) speichern({ ...pl, index: laufend });
   }, [spotify, laufend, pl, speichern]);
-  useEffect(() => { setGewaehlt(-1); }, [spotify]);
+  useEffect(() => { setPlWahl({ auswahl: [], anker: -1 }); }, [spotify]);
 
   const index = laufend >= 0 ? laufend : pl.index;
   const playlistSpielen = (i) => {
@@ -447,52 +549,60 @@ export default function WinampMusik({ config, entities, callService, conn, raum 
       speichern({ ...pl, index: i });
     }
   };
-  const aendern = (items, neuIndex) => {
-    const neu = { items, index: Math.max(0, Math.min(neuIndex, items.length - 1)) };
-    speichern(neu);
-    if (laufend >= 0) ruf(maRestErsetzen(config, items, neu.index));
+  const aendern = (neu) => {
+    speichern({ items: neu.items, index: neu.index });
+    if (laufend >= 0) ruf(maRestErsetzen(config, neu.items, neu.index));
   };
   const entfernen = () => {
-    if (gewaehlt < 0) return;
-    const items = pl.items.filter((_, i) => i !== gewaehlt);
-    aendern(items, gewaehlt < index ? index - 1 : index);
-    setGewaehlt(Math.min(gewaehlt, items.length - 1));
+    if (spotify || !plWahl.auswahl.length) return;
+    aendern(ohneAuswahl(pl.items, plWahl.auswahl, index));
+    setPlWahl({ auswahl: [], anker: -1 });
   };
   const schieben = (d) => {
-    const z = gewaehlt + d;
-    if (gewaehlt < 0 || z < 0 || z >= pl.items.length) return;
-    const items = [...pl.items];
-    [items[gewaehlt], items[z]] = [items[z], items[gewaehlt]];
-    const neuIndex = index === gewaehlt ? z : index === z ? gewaehlt : index;
-    aendern(items, neuIndex);
-    setGewaehlt(z);
+    if (spotify) return;
+    const neu = blockSchieben(pl.items, plWahl.auswahl, index, d);
+    if (!neu) return;
+    aendern(neu);
+    setPlWahl({ auswahl: neu.auswahl, anker: neu.auswahl[0] });
   };
   const leeren = () => {
     speichern({ items: [], index: 0 });
+    setPlWahl({ auswahl: [], anker: -1 });
     if (config.player) ruf([['media_player', 'clear_playlist', { entity_id: config.player }]]);
+  };
+  const alsListeSpeichern = (name) => {
+    if (!raum || !pl.items.length) return;
+    saveMedienPlaylist(listenSchluessel(raum, name), { items: pl.items, index: 0 })
+      .then(() => setListenStand((x) => x + 1)).catch(() => {});
   };
 
   // Aus der Library: ganze Ansicht ab Titel i abspielen (Winamp)
-  const abspielen = (a, i) => {
+  const abspielen = async (a, i) => {
     const t = a?.items?.[i];
     if (!t) return;
+    if (t.media_type === 'gespeichert') {
+      const items = await gespeicherteLaden(t.uri).catch(() => []);
+      if (!items.length) return;
+      ruf(maAbspielen(config, items, 0));
+      speichern({ items, index: 0 });
+      return;
+    }
     if (t.quelle === 'spotify') {
       ruf(spAbspielen(config, a.items, i, a.kontext));
       return;
     }
     ruf(maAbspielen(config, a.items, i));
-    if (!t.media_type || t.media_type === 'track') {
-      const titelListe = a.items.filter((x) => !x.media_type || x.media_type === 'track');
+    if (istTitel(t)) {
+      const titelListe = a.items.filter(istTitel);
       speichern({ items: titelListe, index: titelListe.indexOf(t) });
     } else {
       speichern({ items: [], index: 0 });
     }
   };
-  const einreihen = (a, items, art) => {
+  const einreihen = (items, art) => {
     if (!items.length) return;
     if (items[0].quelle === 'spotify') {
-      const sp2 = config.musik?.spotify;
-      ruf([['spotifyplus', 'add_player_queue_items', { entity_id: sp2.entity, uris: items.map((t) => t.uri).join(','), ...(sp2.geraet ? { device_id: sp2.geraet } : {}) }]]);
+      ruf([['spotifyplus', 'add_player_queue_items', { entity_id: sp.entity, uris: items.map((t) => t.uri).join(','), ...(sp.geraet ? { device_id: sp.geraet } : {}) }]]);
       return;
     }
     ruf(maEinreihen(config, items, art));
@@ -501,24 +611,110 @@ export default function WinampMusik({ config, entities, callService, conn, raum 
     speichern({ items: neu, index: pl.items.length ? pl.index : 0 });
   };
 
-  const zurLibrary = () => { setAnsicht('lib'); setTimeout(() => suchRef.current?.focus(), 0); };
-  const umschalter = useMemo(() => (
-    <div className="wa-umschalter">
-      <Knopf led aktiv={ansicht === 'liste'} onClick={() => setAnsicht('liste')}>Playlist</Knopf>
-      <Knopf led aktiv={ansicht === 'lib'} onClick={() => setAnsicht('lib')}>Library</Knopf>
-    </div>
-  ), [ansicht]);
+  // Ausblenden über die Lautstärke des Players (oder der Zone), danach stoppen und ggf. weiter
+  const entitiesRef = useRef(entities);
+  entitiesRef.current = entities;
+  const fade = useRef({ laeuft: false, danach: null, weg: false });
+  const [faded, setFaded] = useState(false);
+  useEffect(() => () => { fade.current.weg = true; }, []);
+  const ausblenden = useCallback(async (danach = null) => {
+    const f = fade.current;
+    if (f.laeuft) { if (danach) f.danach = danach; return; }
+    const { sekunden, ueber } = ausblendenKonfig(config);
+    const ziel = ueber === 'zone' ? config.zone : playerId;
+    const istSp = playerId && playerId === sp?.entity;
+    const vol = ziel ? entitiesRef.current[ziel]?.attributes?.volume_level : null;
+    const spielt = entitiesRef.current[playerId]?.state === 'playing';
+    const setzen = (v) => callService?.('media_player', 'volume_set', { entity_id: ziel, volume_level: Math.round(v * 1000) / 1000 });
+    // Spotify (Web-API) verträgt weniger Schritte als Music Assistant
+    const proSek = istSp ? 4 : 8;
+    const rampe = async (von, bis, sek) => {
+      const n = Math.max(1, Math.round(sek * proSek));
+      for (let k = 1; k <= n; k += 1) {
+        await schlaf(1000 / proSek);
+        setzen(von + ((bis - von) * k) / n);
+      }
+    };
+    f.laeuft = true;
+    f.danach = danach;
+    setFaded(true);
+    const mitLautstaerke = spielt && ziel && Number.isFinite(vol) && vol > 0;
+    if (mitLautstaerke) await rampe(vol, 0, sekunden);
+    if (spielt) callService?.('media_player', istSp ? 'media_pause' : 'media_stop', { entity_id: playerId });
+    const weiter = f.weg ? null : f.danach;
+    f.laeuft = false;
+    f.danach = null;
+    if (!f.weg) setFaded(false);
+    if (weiter) {
+      weiter();
+      if (mitLautstaerke) { await schlaf(1500); await rampe(0, vol, 1); }
+    } else if (mitLautstaerke) {
+      // still zurück, damit der nächste Start nicht bei 0 beginnt
+      await schlaf(800);
+      setzen(vol);
+    }
+  }, [callService, config, playerId, sp?.entity]);
+
+  const playlistAuswahlSpielen = () => (plWahl.auswahl.length ? () => playlistSpielen(plWahl.auswahl[0]) : null);
+  const gewaehltesSpielen = () => (fokus === 'lib' ? libApi.current?.spielen() : playlistAuswahlSpielen());
+
+  // Winamp-Tasten (nur außerhalb von Eingabefeldern)
+  const tastenRef = useRef(null);
+  tastenRef.current = (e) => {
+    if (TASTEN_AUS.includes(e.target?.tagName) || e.target?.isContentEditable || e.altKey) return;
+    const k = e.key;
+    const p = (service) => playerId && ruf([['media_player', service, { entity_id: playerId }]]);
+    if (e.shiftKey && (k === 'V' || k === 'v')) { e.preventDefault(); ausblenden(null); return; }
+    if (e.ctrlKey || e.metaKey) return;
+    if (k === 'Enter') {
+      const los = gewaehltesSpielen();
+      if (!los) return;
+      e.preventDefault();
+      if (fade.current.laeuft) fade.current.danach = los; else los();
+    } else if (k === 'z' || k === 'Z') p('media_previous_track');
+    else if (k === 'x' || k === 'X') { if (player?.state !== 'playing') ruf(playAktionen(config, entities, playerId)); }
+    else if (k === 'c' || k === 'C') p('media_pause');
+    else if (k === 'v') p('media_stop');
+    else if (k === 'b' || k === 'B') p('media_next_track');
+    else if (k === 'ArrowDown' || k === 'ArrowUp') {
+      e.preventDefault();
+      const d = k === 'ArrowDown' ? 1 : -1;
+      if (fokus === 'lib') { libApi.current?.bewegen(d); return; }
+      if (!liste.length) return;
+      const z = Math.max(0, Math.min(liste.length - 1, (plWahl.auswahl.length ? plWahl.auswahl[plWahl.auswahl.length - 1] : -1) + d));
+      setPlWahl({ auswahl: [z], anker: z });
+    } else if (k === 'Delete' && fokus === 'liste') entfernen();
+  };
+  useEffect(() => {
+    const h = (e) => tastenRef.current?.(e);
+    window.addEventListener('keydown', h);
+    return () => window.removeEventListener('keydown', h);
+  }, []);
+
+  const zurLibrary = () => { setAnsicht('lib'); setFokus('lib'); setTimeout(() => suchRef.current?.focus(), 0); };
 
   return (
     <div className="wa" data-ansicht={ansicht}>
-      <Hauptfenster config={config} entities={entities} ruf={ruf} playerId={playerId} liste={liste} index={laufend} onEject={zurLibrary} />
-      <ZonenFenster config={config} entities={entities} ruf={ruf} />
-      {umschalter}
-      <PlaylistEditor
-        spotify={spotify} liste={liste} laufend={laufend} gewaehlt={gewaehlt} setGewaehlt={setGewaehlt}
-        onSpielen={playlistSpielen} onEntfernen={entfernen} onSchieben={schieben} onLeeren={leeren} onAdd={zurLibrary}
+      <Hauptfenster
+        config={config} entities={entities} ruf={ruf} playerId={playerId} index={laufend} onEject={zurLibrary}
+        onAusblenden={() => ausblenden(null)} faded={faded}
       />
-      <MediaLibrary config={config} conn={conn} suchRef={suchRef} onAbspielen={abspielen} onEinreihen={einreihen} />
+      <ZonenFenster config={config} entities={entities} ruf={ruf} />
+      <div className="wa-umschalter">
+        <Knopf led aktiv={ansicht === 'liste'} onClick={() => { setAnsicht('liste'); setFokus('liste'); }}>Playlist</Knopf>
+        <Knopf led aktiv={ansicht === 'lib'} onClick={() => { setAnsicht('lib'); setFokus('lib'); }}>Library</Knopf>
+      </div>
+      <PlaylistEditor
+        spotify={spotify} liste={liste} laufend={laufend} auswahl={plWahl.auswahl} mehrfach={mehrfach} setMehrfach={setMehrfach}
+        onKlick={(e, i) => setPlWahl(klickAuswahl(e, i, plWahl, mehrfach))}
+        onSpielen={playlistSpielen} onEntfernen={entfernen} onSchieben={schieben} onLeeren={leeren} onAdd={zurLibrary}
+        onFade={() => ausblenden(playlistAuswahlSpielen())} onSpeichern={alsListeSpeichern} onFokus={() => setFokus('liste')}
+      />
+      <MediaLibrary
+        config={config} conn={conn} raum={raum} apiRef={libApi} suchRef={suchRef} mehrfach={mehrfach} setMehrfach={setMehrfach}
+        listenStand={listenStand} onAbspielen={abspielen} onEinreihen={einreihen} onFade={(los) => ausblenden(los)}
+        onFokus={() => setFokus('lib')}
+      />
     </div>
   );
 }

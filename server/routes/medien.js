@@ -12,7 +12,9 @@ const MAX_TITEL = 1000;
 const MAX_BYTES = 512 * 1024;
 
 const besitzer = (req) => (process.env.HA_TOKEN ? '__shared__' : req.authenticatedHaUser?.id);
-const gueltigerRaum = (raum) => typeof raum === 'string' && raum.length > 0 && raum.length <= 120;
+// Schlüssel: Kachel-ID für die laufende Playlist, „<Kachel-ID>/listen/<Name>“ für gespeicherte
+const gueltigerRaum = (raum) => typeof raum === 'string' && raum.length > 0 && raum.length <= 240;
+const LISTEN = '/listen/';
 
 /** Eingehende Playlist auf das Nötige beschränken (Titel, Position). */
 export function playlistBereinigen(body) {
@@ -56,6 +58,35 @@ router.put('/playlist', (req, res) => {
      ON CONFLICT (ha_user_id, raum) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at`
   ).run(owner, raum, text, updatedAt);
   return res.json({ raum, ...data, updated_at: updatedAt });
+});
+
+router.delete('/playlist', (req, res) => {
+  const owner = besitzer(req);
+  if (!owner) return res.status(401).json({ error: 'Missing authenticated Home Assistant user' });
+  const { raum } = req.query;
+  if (!gueltigerRaum(raum)) return res.status(400).json({ error: 'raum is required' });
+  const info = db.prepare('DELETE FROM medien_playlists WHERE ha_user_id = ? AND raum = ?').run(owner, raum);
+  return res.json({ raum, deleted: info.changes > 0 });
+});
+
+// Gespeicherte Playlists eines Raums (Name, Anzahl Titel), nach Name sortiert
+router.get('/listen', (req, res) => {
+  const owner = besitzer(req);
+  if (!owner) return res.status(401).json({ error: 'Missing authenticated Home Assistant user' });
+  const { raum } = req.query;
+  if (!gueltigerRaum(raum)) return res.status(400).json({ error: 'raum is required' });
+  const praefix = `${raum}${LISTEN}`;
+  const rows = db
+    .prepare('SELECT raum, data, updated_at FROM medien_playlists WHERE ha_user_id = ? AND substr(raum, 1, ?) = ?')
+    .all(owner, praefix.length, praefix);
+  const listen = rows
+    .map((r) => {
+      let anzahl = 0;
+      try { anzahl = playlistBereinigen(JSON.parse(r.data)).items.length; } catch { /* leer */ }
+      return { schluessel: r.raum, name: r.raum.slice(praefix.length), anzahl, updated_at: r.updated_at };
+    })
+    .sort((a, b) => a.name.localeCompare(b.name, 'de'));
+  return res.json(listen);
 });
 
 export default router;

@@ -163,3 +163,47 @@ export function spWarteschlange(r) {
   const rest = (r?.queue || []).map(spTitel).filter(Boolean);
   return jetzt ? [jetzt, ...rest] : rest;
 }
+
+/** Ausblenden: Dauer und worüber (Player-Lautstärke, auf Wunsch die Zone). */
+export function ausblendenKonfig(config) {
+  const a = config?.musik?.ausblenden || {};
+  const sekunden = Number(a.sekunden) > 0 ? Number(a.sekunden) : 4;
+  return { sekunden, ueber: a.ueber === 'zone' && config?.zone ? 'zone' : 'player' };
+}
+
+/**
+ * Auswahl in einer Liste wie in Winamp: Klick wählt einen Titel, Shift wählt bis dorthin,
+ * Strg/Cmd bzw. der Mehrfach-Modus (Touch) schaltet einzelne Titel dazu oder weg.
+ */
+export function auswahlKlick(auswahl, i, { shift = false, mehrfach = false } = {}, anker = -1) {
+  if (shift && anker >= 0) {
+    const [a, b] = anker < i ? [anker, i] : [i, anker];
+    return Array.from({ length: b - a + 1 }, (_, k) => a + k);
+  }
+  if (mehrfach) return auswahl.includes(i) ? auswahl.filter((x) => x !== i) : [...auswahl, i].sort((x, y) => x - y);
+  return [i];
+}
+
+/** Gewählte Titel entfernen; liefert neue Liste und den verschobenen laufenden Index. */
+export function ohneAuswahl(items, auswahl, index) {
+  const weg = new Set(auswahl);
+  const neu = items.filter((_, i) => !weg.has(i));
+  const vorher = auswahl.filter((i) => i < index).length;
+  return { items: neu, index: Math.max(0, Math.min(index - vorher, neu.length - 1)) };
+}
+
+/** Gewählte Titel als Block um d (−1/+1) verschieben; laufender Index wandert mit. */
+export function blockSchieben(items, auswahl, index, d) {
+  const sortiert = [...auswahl].sort((a, b) => a - b);
+  if (!sortiert.length || sortiert[0] + d < 0 || sortiert[sortiert.length - 1] + d >= items.length) return null;
+  const neu = [...items];
+  const reihe = d < 0 ? sortiert : [...sortiert].reverse();
+  let lauf = index;
+  reihe.forEach((i) => {
+    const z = i + d;
+    [neu[i], neu[z]] = [neu[z], neu[i]];
+    if (lauf === i) lauf = z;
+    else if (lauf === z) lauf = i;
+  });
+  return { items: neu, index: lauf, auswahl: sortiert.map((i) => i + d) };
+}

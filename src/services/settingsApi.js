@@ -146,3 +146,13 @@ export function saveMedienPlaylist(raum, { items, index }) {
     body: JSON.stringify({ raum, items, index }),
   });
 }
+
+/** Gespeicherte Playlists eines Raums: [{ schluessel, name, anzahl, updated_at }]. */
+export function fetchMedienListen(raum) {
+  return request(`/medien/listen?raum=${encodeURIComponent(raum)}`);
+}
+
+/** Playlist (laufend oder gespeichert, über ihren Schlüssel) löschen. */
+export function deleteMedienPlaylist(schluessel) {
+  return request(`/medien/playlist?raum=${encodeURIComponent(schluessel)}`, { method: 'DELETE' });
+}
