@@ -1,8 +1,8 @@
-name: 'Casa'
-description: 'A modern, responsive dashboard for Home Assistant'
-version: "1.31.2"
-slug: 'tunet-gorbi87'
-url: 'https://github.com/oyvhov/Tunet'
+name: 'Casa (diopsys)'
+description: 'Tunet von gorbi87 plus eigene, noch nicht gemergte Änderungen (Zweig casa)'
+version: "1.31.2-casa.1"
+slug: 'casa'
+url: 'https://github.com/diopsys/Tunet/tree/casa'
 init: false
 startup: application
 arch:

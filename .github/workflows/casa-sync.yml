@@ -1,0 +1,60 @@
+name: Casa-Abgleich
+
+# Zweig casa: holt Jakobs main (gorbi87/Tunet) und merged ihn. Gibt es Neues,
+# steigt die App-Version, damit Home Assistant ein Update anbietet.
+# Konflikte in den Casa-Dateien (Dockerfile, config.yaml, repository.yaml)
+# werden über scripts/casa-patch.sh gelöst, alle anderen brechen den Lauf ab.
+
+on:
+  schedule:
+    - cron: '0 4 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: casa-sync
+  cancel-in-progress: false
+
+jobs:
+  abgleich:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: casa
+          fetch-depth: 0
+
+      - name: Jakobs main holen und mergen
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git remote add upstream https://github.com/gorbi87/Tunet.git
+          git fetch upstream main
+
+          if git merge-base --is-ancestor upstream/main HEAD; then
+            echo 'Nichts Neues bei gorbi87/main.'
+            exit 0
+          fi
+
+          vorher=$(sed -n 's/^version: *"\{0,1\}\([^"]*\)"\{0,1\}$/\1/p' hassio-addon/config.yaml)
+          casa_dateien='hassio-addon/Dockerfile hassio-addon/config.yaml repository.yaml'
+
+          if ! git merge --no-ff --no-edit --no-commit upstream/main; then
+            offen=$(git diff --name-only --diff-filter=U)
+            for f in $offen; do
+              case " $casa_dateien " in
+                *" $f "*) ;;
+                *) echo "::error::Merge-Konflikt in $f – bitte von Hand lösen."; exit 1 ;;
+              esac
+            done
+          fi
+
+          # Casa-Dateien immer aus Jakobs Stand neu ableiten
+          git checkout upstream/main -- $casa_dateien
+          neu=$(sh scripts/casa-patch.sh "$vorher")
+          git add $casa_dateien
+          git commit --no-edit -m "Abgleich mit gorbi87/main, Version $neu"
+          git push origin HEAD:casa
+          echo "Neue Version: $neu" >> "$GITHUB_STEP_SUMMARY"

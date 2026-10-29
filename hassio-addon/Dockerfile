@@ -5,7 +5,7 @@ ARG BUILD_VERSION
 RUN apk add --no-cache curl tar python3 make g++ \
  && set -eux \
  && echo "Building Tunet version ${BUILD_VERSION}" \
- && curl -fsSL "https://codeload.github.com/gorbi87/Tunet/tar.gz/refs/heads/main" -o /tmp/tunet.tar.gz \
+ && curl -fsSL "https://codeload.github.com/diopsys/Tunet/tar.gz/refs/heads/casa" -o /tmp/tunet.tar.gz \
  && mkdir -p /src \
  && tar -xzf /tmp/tunet.tar.gz --strip-components=1 -C /src \
  && cd /src \
