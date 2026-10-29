@@ -52,7 +52,7 @@ const Lautstaerke = ({ entity, entityId, callService }) => {
   return (
     <label className="flex items-center gap-3">
       <Volume2 className="h-4 w-4 flex-shrink-0 text-[var(--text-muted)]" />
-      <input type="range" min={0} max={100} step={1} aria-label="Lautstärke" className="min-w-0 flex-1 accent-[var(--accent-color)]" {...regler.props} />
+      <input type="range" min={0} max={100} step={1} aria-label="Lautstärke" className="min-w-0 flex-1 rounded accent-[var(--accent-color)] focus:ring-2 focus:ring-[var(--accent-color)] focus:outline-none" title="Lautstärke – Pfeiltasten" {...regler.props} />
       <span className="w-10 text-right text-xs text-[var(--text-muted)]">{regler.wert} %</span>
     </label>
   );

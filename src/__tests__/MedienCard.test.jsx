@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import MedienCard, { beideZonenAktionen, medienModus, playAktionen, quelleAktiv, quellenAktionen, resolveMedienConfig } from '../components/cards/MedienCard';
 
@@ -148,7 +148,7 @@ describe('Medien-Kachel', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 
-  it('throttles the volume slider so slow receivers do not lag behind', () => {
+  it('sends only one volume command at a time so slow receivers do not lag behind', async () => {
     const callService = vi.fn();
     const ents = { ...entities, 'media_player.zone2': { state: 'on', attributes: { source: 'HEOS Music', volume_level: 0.2 } } };
     render(<MedienCard cardId="m" entities={ents} settings={{ medien }} callService={callService} />);
@@ -157,7 +157,7 @@ describe('Medien-Kachel', () => {
     const lautstaerke = () => callService.mock.calls.filter(([, s]) => s === 'volume_set').map(([, , d]) => d.volume_level);
     expect(lautstaerke()).toEqual([0.25]);
     expect(regler.value).toBe('45');
-    fireEvent.pointerUp(regler);
-    expect(lautstaerke()).toEqual([0.25, 0.45]);
+    // erst nach der Rückmeldung von HA folgt der neueste Wert, Zwischenwerte entfallen
+    await waitFor(() => expect(lautstaerke()).toEqual([0.25, 0.45]));
   });
 });

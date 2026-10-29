@@ -242,3 +242,11 @@
   .wa[data-ansicht='liste'] .wa-lib,
   .wa[data-ansicht='lib'] .wa-playlist { display: none; }
 }
+
+/* aktives Fenster (Tastaturfokus) und markierter Regler */
+.wa-aktiv .wa-titelleiste { color: #fff; }
+.wa-aktiv .wa-titelleiste::before,
+.wa-aktiv .wa-titelleiste::after { background: repeating-linear-gradient(180deg, #e8c64a 0 1px, transparent 1px 3px); opacity: 1; }
+.wa-regler.markiert,
+.wa-regler:focus,
+.wa-fader input:focus { outline: 1px dotted #e8c64a; outline-offset: 2px; box-shadow: 0 0 6px rgba(232, 198, 74, 0.6); }

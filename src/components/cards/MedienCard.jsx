@@ -219,7 +219,8 @@ const MedienCard = ({ cardId, dragProps, controls, cardStyle, editMode, entities
           <Volume2 className="h-3.5 w-3.5 flex-shrink-0 text-[var(--text-muted)]" />
           <input
             type="range" min={0} max={100} step={1} aria-label="Lautstärke"
-            className="min-w-0 flex-1 accent-[var(--accent-color)]"
+            className="min-w-0 flex-1 rounded accent-[var(--accent-color)] focus:ring-2 focus:ring-[var(--accent-color)] focus:outline-none"
+            title="Lautstärke – Pfeiltasten"
             disabled={editMode}
             {...regler.props}
           />

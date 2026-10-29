@@ -2,62 +2,66 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 /*
  * Lautstärke-Regler, der langsame Geräte (z. B. Receiver über HEOS) nicht überflutet:
- * beim Ziehen zeigt er sofort den eigenen Wert, schickt aber höchstens alle `abstandMs`
- * den jeweils neuesten Wert und beim Loslassen sicher den letzten. Bis das Gerät den neuen
- * Wert meldet (oder nach `haltenMs`), bleibt der eigene Wert stehen statt zurückzuspringen.
+ * Es ist immer nur ein Befehl unterwegs. Erst wenn HA ihn ausgeführt hat (das Promise von
+ * `setzen`), geht der jeweils neueste Wert hinterher – Zwischenwerte entfallen, egal wie
+ * langsam das Gerät ist. Beim Ziehen zeigt der Regler sofort den eigenen Wert und hält ihn,
+ * bis das Gerät ihn meldet (oder nach `haltenMs`), statt auf alte Werte zurückzuspringen.
  */
-export const LAUTSTAERKE_ABSTAND_MS = 400;
+export const LAUTSTAERKE_MIN_ABSTAND_MS = 150;
+const HAENGT_MS = 4000;
 
-export default function useLautstaerke(entity, entityId, setzen, { abstandMs = LAUTSTAERKE_ABSTAND_MS, haltenMs = 4000 } = {}) {
+export default function useLautstaerke(entity, entityId, setzen, { abstandMs = LAUTSTAERKE_MIN_ABSTAND_MS, haltenMs = 4000 } = {}) {
   const gemeldet = Math.round((entity?.attributes?.volume_level ?? 0) * 100);
   const [eigen, setEigen] = useState(null);
-  const r = useRef({ zuletzt: 0, timer: null, offen: null, bis: 0 });
+  const r = useRef({ unterwegs: false, offen: null, bis: 0, setzen, entityId });
+  r.current.setzen = setzen;
+  r.current.entityId = entityId;
 
-  const senden = useCallback((wert) => {
-    r.current.zuletzt = Date.now();
-    r.current.offen = null;
-    setzen?.(entityId, wert / 100);
-  }, [entityId, setzen]);
+  const weiter = useCallback(() => {
+    const s = r.current;
+    if (s.unterwegs || s.offen === null) return;
+    const wert = s.offen;
+    s.offen = null;
+    s.unterwegs = true;
+    let fertig = false;
+    const frei = () => {
+      if (fertig) return;
+      fertig = true;
+      // kurzer Mindestabstand, dann ggf. den neuesten Wert hinterher
+      setTimeout(() => { s.unterwegs = false; weiter(); }, abstandMs);
+    };
+    // hängt ein Aufruf, nach HAENGT_MS trotzdem weitermachen
+    const notfall = setTimeout(frei, HAENGT_MS);
+    Promise.resolve(s.setzen?.(s.entityId, wert / 100))
+      .catch(() => {})
+      .finally(() => { clearTimeout(notfall); frei(); });
+  }, [abstandMs]);
 
   const aendern = useCallback((wert) => {
     const s = r.current;
     setEigen(wert);
     s.bis = Date.now() + haltenMs;
-    const warten = abstandMs - (Date.now() - s.zuletzt);
-    if (warten <= 0 && !s.timer) { senden(wert); return; }
     s.offen = wert;
-    if (!s.timer) {
-      s.timer = setTimeout(() => {
-        s.timer = null;
-        if (s.offen !== null) senden(s.offen);
-      }, Math.max(0, warten));
-    }
-  }, [abstandMs, haltenMs, senden]);
-
-  const loslassen = useCallback(() => {
-    const s = r.current;
-    if (s.timer) { clearTimeout(s.timer); s.timer = null; }
-    if (s.offen !== null) senden(s.offen);
-  }, [senden]);
+    weiter();
+  }, [haltenMs, weiter]);
 
   // eigener Wert gilt, bis das Gerät ihn (ungefähr) meldet oder die Haltezeit um ist
   useEffect(() => {
     if (eigen === null) return undefined;
-    if (Math.abs(gemeldet - eigen) <= 1 && !r.current.timer && r.current.offen === null) { setEigen(null); return undefined; }
-    const t = setTimeout(() => setEigen(null), Math.max(0, r.current.bis - Date.now()));
+    const s = r.current;
+    if (Math.abs(gemeldet - eigen) <= 1 && !s.unterwegs && s.offen === null) { setEigen(null); return undefined; }
+    const t = setTimeout(() => setEigen(null), Math.max(250, s.bis - Date.now()));
     return () => clearTimeout(t);
   }, [eigen, gemeldet]);
 
-  useEffect(() => () => { if (r.current.timer) clearTimeout(r.current.timer); }, []);
-
+  const wert = eigen ?? gemeldet;
   return {
-    wert: eigen ?? gemeldet,
+    wert,
+    // um d Prozentpunkte ändern (Pfeiltasten, Winamp: ↑/↓ im Hauptfenster)
+    schritt: (d) => aendern(Math.max(0, Math.min(100, wert + d))),
     props: {
-      value: eigen ?? gemeldet,
+      value: wert,
       onChange: (e) => aendern(Number(e.target.value)),
-      onPointerUp: loslassen,
-      onKeyUp: loslassen,
-      onTouchEnd: loslassen,
     },
   };
 }

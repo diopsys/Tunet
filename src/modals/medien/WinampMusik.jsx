@@ -77,8 +77,9 @@ const Knopf = ({ onClick, label, aktiv, led, gross, disabled, children, ...rest 
   </button>
 );
 
-const Fenster = ({ titel, className = '', children }) => (
-  <section className={`wa-fenster ${className}`} aria-label={titel}>
+// aktiv: Fenster mit Tastaturfokus (Winamp: helle Titelleiste)
+const Fenster = ({ titel, className = '', aktiv, onFokus, children }) => (
+  <section className={`wa-fenster ${className}${aktiv ? ' wa-aktiv' : ''}`} aria-label={titel} onPointerDown={onFokus}>
     <div className="wa-titelleiste"><span>{titel}</span></div>
     {children}
   </section>
@@ -108,7 +109,7 @@ function klickAuswahl(e, i, liste, mehrfach) {
   return { auswahl: neu, anker: e?.shiftKey && liste.anker >= 0 ? liste.anker : i };
 }
 
-function Hauptfenster({ config, entities, ruf, playerId, index, onEject, onAusblenden, faded }) {
+function Hauptfenster({ config, entities, ruf, lautSetzen, playerId, index, onEject, onAusblenden, faded, aktiv, onFokus, apiRef }) {
   const player = playerId ? entities[playerId] : null;
   const pa = player?.attributes || {};
   // ohne Zone regelt der Lautstärke-Regler den Player selbst
@@ -126,9 +127,15 @@ function Hauptfenster({ config, entities, ruf, playerId, index, onEject, onAusbl
   const nr = index >= 0 ? `${index + 1}. ` : '';
   const text = pa.media_title ? `${nr}${[pa.media_artist, pa.media_title].filter(Boolean).join(' - ')}` : 'Nichts ausgewählt';
   const zeichen = faded ? '↘' : spielt ? '▶' : player?.state === 'paused' ? '❚❚' : '■';
-  const setzen = useCallback((id, v) => ruf([['media_player', 'volume_set', { entity_id: id, volume_level: v }]]), [ruf]);
-  const regler = useLautstaerke(laut, lautId, setzen);
+  const regler = useLautstaerke(laut, lautId, lautSetzen);
   const p = (service, data = {}) => ruf([['media_player', service, { entity_id: playerId, ...data }]]);
+  // Winamp: ↑/↓ Lautstärke, ←/→ spulen, solange das Hauptfenster aktiv ist
+  apiRef.current = {
+    lauter: (d) => { if (istAn(laut)) regler.schritt(d); },
+    spulen: (d) => {
+      if (player && pa.media_duration) p('media_seek', { seek_position: Math.max(0, Math.min(pa.media_duration, Math.round((pos || 0) + d))) });
+    },
+  };
   const shuffle = Boolean(pa.shuffle);
   const repeat = pa.repeat && pa.repeat !== 'off';
   // ■ lange drücken: ausblenden und stoppen
@@ -136,7 +143,7 @@ function Hauptfenster({ config, entities, ruf, playerId, index, onEject, onAusbl
   const stoppLos = () => { if (lang.current && lang.current !== 'lang') clearTimeout(lang.current); };
   const stoppKlick = () => { if (lang.current === 'lang') { lang.current = null; return; } lang.current = null; p('media_stop'); };
   return (
-    <Fenster titel="Winamp" className="wa-haupt">
+    <Fenster titel="Winamp" className="wa-haupt" aktiv={aktiv} onFokus={onFokus}>
       <div className="wa-oben">
         <div className="wa-lcd wa-zeitfeld">
           <span className="wa-status" aria-hidden="true">{zeichen}</span>
@@ -150,7 +157,10 @@ function Hauptfenster({ config, entities, ruf, playerId, index, onEject, onAusbl
             <span className={spielt ? 'an' : 'aus'} style={{ marginLeft: 'auto' }}>mono</span>
             <span className={spielt ? 'an' : 'aus'}>stereo</span>
           </div>
-          <input type="range" className="wa-regler" min={0} max={100} aria-label="Lautstärke" disabled={!istAn(laut)} {...regler.props} />
+          <input
+            type="range" className={`wa-regler${aktiv ? ' markiert' : ''}`} min={0} max={100} aria-label="Lautstärke (↑/↓)"
+            title="Lautstärke – Pfeiltasten ↑/↓" disabled={!istAn(laut)} {...regler.props}
+          />
         </div>
       </div>
       <input
@@ -178,10 +188,9 @@ function Hauptfenster({ config, entities, ruf, playerId, index, onEject, onAusbl
   );
 }
 
-function Fader({ name, entityId, entities, ruf }) {
+function Fader({ name, entityId, entities, lautSetzen }) {
   const e = entityId ? entities[entityId] : null;
-  const setzen = useCallback((id, v) => ruf([['media_player', 'volume_set', { entity_id: id, volume_level: v }]]), [ruf]);
-  const regler = useLautstaerke(e, entityId, setzen);
+  const regler = useLautstaerke(e, entityId, lautSetzen);
   if (!e) return null;
   return (
     <label className="wa-fader">
@@ -193,7 +202,7 @@ function Fader({ name, entityId, entities, ruf }) {
 }
 
 // Zonen: Quellen des Raums, „Beide Zonen“ und die Lautstärken als Equalizer-Regler
-function ZonenFenster({ config, entities, ruf }) {
+function ZonenFenster({ config, entities, ruf, lautSetzen }) {
   const zone = config.zone ? entities[config.zone] : null;
   if (!zone) return null;
   const haupt = config.tv?.surround;
@@ -219,8 +228,8 @@ function ZonenFenster({ config, entities, ruf }) {
           )}
           <div className="wa-lcd wa-hinweis">{istAn(zone) ? `${config.name || 'Raum'}: ${zone.attributes?.source || 'an'}` : `${config.name || 'Raum'}: aus`}</div>
         </div>
-        <Fader name={config.name || 'Raum'} entityId={config.zone} entities={entities} ruf={ruf} />
-        {haupt && <Fader name="Haupt" entityId={haupt} entities={entities} ruf={ruf} />}
+        <Fader name={config.name || 'Raum'} entityId={config.zone} entities={entities} lautSetzen={lautSetzen} />
+        {haupt && <Fader name="Haupt" entityId={haupt} entities={entities} lautSetzen={lautSetzen} />}
       </div>
     </Fenster>
   );
@@ -228,7 +237,7 @@ function ZonenFenster({ config, entities, ruf }) {
 
 function PlaylistEditor({
   spotify, liste, laufend, auswahl, mehrfach, setMehrfach, onKlick, onSpielen, onEntfernen, onSchieben, onLeeren, onAdd,
-  onFade, onSpeichern, onFokus,
+  onFade, onSpeichern, onFokus, aktiv,
 }) {
   const gesamt = liste.reduce((s, t) => s + (t.dauer || 0), 0);
   const listeRef = useRef(null);
@@ -244,8 +253,8 @@ function PlaylistEditor({
     setName(null);
   };
   return (
-    <Fenster titel={spotify ? 'Playlist Editor · Spotify' : 'Playlist Editor'} className="wa-playlist">
-      <div ref={listeRef} className="wa-lcd wa-liste" role="listbox" aria-label="Playlist" aria-multiselectable="true" onPointerDown={onFokus}>
+    <Fenster titel={spotify ? 'Playlist Editor · Spotify' : 'Playlist Editor'} className="wa-playlist" aktiv={aktiv} onFokus={onFokus}>
+      <div ref={listeRef} className="wa-lcd wa-liste" role="listbox" aria-label="Playlist" aria-multiselectable="true">
         {liste.length === 0 && <div className="wa-hinweis">{spotify ? 'Spotify-Warteschlange ist leer.' : 'Leer – in der Media Library doppelt tippen.'}</div>}
         {liste.map((t, i) => (
           <Zeile
@@ -278,7 +287,7 @@ function PlaylistEditor({
   );
 }
 
-function MediaLibrary({ config, conn, raum, apiRef, suchRef, mehrfach, setMehrfach, listenStand, onAbspielen, onEinreihen, onFade, onFokus }) {
+function MediaLibrary({ config, conn, raum, apiRef, suchRef, mehrfach, setMehrfach, listenStand, onAbspielen, onEinreihen, onFade, onFokus, aktiv }) {
   const maEintrag = config.musik?.maEintrag;
   const sp = config.musik?.spotify;
   const start = maEintrag ? 'ma_titel' : sp?.entity ? 'sp_playlists' : null;
@@ -433,7 +442,7 @@ function MediaLibrary({ config, conn, raum, apiRef, suchRef, mehrfach, setMehrfa
   );
 
   return (
-    <Fenster titel="Media Library" className="wa-lib">
+    <Fenster titel="Media Library" className="wa-lib" aktiv={aktiv} onFokus={onFokus}>
       <div className="wa-lib-innen">
         <nav className="wa-lcd wa-baum" aria-label="Library">
           {maEintrag && <div className="gruppe">Lokale Bibliothek</div>}
@@ -452,7 +461,7 @@ function MediaLibrary({ config, conn, raum, apiRef, suchRef, mehrfach, setMehrfa
             <span className="name">{ansicht?.titel || ''}</span>
             <span>Länge</span>
           </div>
-          <div className="wa-lcd wa-liste" role="listbox" aria-label="Media Library" aria-multiselectable="true" onPointerDown={onFokus}>
+          <div className="wa-lcd wa-liste" role="listbox" aria-label="Media Library" aria-multiselectable="true">
             {laedt && <div className="wa-hinweis">Lädt …</div>}
             {!laedt && items.length === 0 && <div className="wa-hinweis">{ansicht?.ordner === MEINE[0] ? 'Noch keine – im Playlist Editor „Save“.' : 'Nichts gefunden.'}</div>}
             {items.map((t, i) => (
@@ -493,10 +502,14 @@ export default function WinampMusik({ config, entities, callService, conn, raum 
   const player = playerId ? entities[playerId] : null;
   const [ansicht, setAnsicht] = useState('liste');
   const [mehrfach, setMehrfach] = useState(false);
-  const [fokus, setFokus] = useState('liste');
+  // Fenster mit Tastaturfokus: 'haupt' (↑/↓ Lautstärke), 'liste' (Playlist), 'lib'
+  const [fokus, setFokus] = useState('haupt');
   const [listenStand, setListenStand] = useState(0);
   const suchRef = useRef(null);
   const libApi = useRef(null);
+  const hauptApi = useRef(null);
+  // Lautstärke mit Rückmeldung (Promise), damit der Regler nur einen Befehl gleichzeitig schickt
+  const lautSetzen = useCallback((id, v) => callService?.('media_player', 'volume_set', { entity_id: id, volume_level: v }), [callService]);
 
   // Playlist über Music Assistant: gemeinsam auf dem Tunet-Server
   const [pl, setPl] = useState({ items: [], index: 0 });
@@ -672,7 +685,13 @@ export default function WinampMusik({ config, entities, callService, conn, raum 
     else if (k === 'c' || k === 'C') p('media_pause');
     else if (k === 'v') p('media_stop');
     else if (k === 'b' || k === 'B') p('media_next_track');
-    else if (k === 'ArrowDown' || k === 'ArrowUp') {
+    else if (fokus === 'haupt' && (k === 'ArrowUp' || k === 'ArrowDown')) {
+      e.preventDefault();
+      hauptApi.current?.lauter(k === 'ArrowUp' ? 2 : -2);
+    } else if (fokus === 'haupt' && (k === 'ArrowLeft' || k === 'ArrowRight')) {
+      e.preventDefault();
+      hauptApi.current?.spulen(k === 'ArrowRight' ? 5 : -5);
+    } else if (k === 'ArrowDown' || k === 'ArrowUp') {
       e.preventDefault();
       const d = k === 'ArrowDown' ? 1 : -1;
       if (fokus === 'lib') { libApi.current?.bewegen(d); return; }
@@ -692,10 +711,10 @@ export default function WinampMusik({ config, entities, callService, conn, raum 
   return (
     <div className="wa" data-ansicht={ansicht}>
       <Hauptfenster
-        config={config} entities={entities} ruf={ruf} playerId={playerId} index={laufend} onEject={zurLibrary}
-        onAusblenden={() => ausblenden(null)} faded={faded}
+        config={config} entities={entities} ruf={ruf} lautSetzen={lautSetzen} playerId={playerId} index={laufend} onEject={zurLibrary}
+        onAusblenden={() => ausblenden(null)} faded={faded} aktiv={fokus === 'haupt'} onFokus={() => setFokus('haupt')} apiRef={hauptApi}
       />
-      <ZonenFenster config={config} entities={entities} ruf={ruf} />
+      <ZonenFenster config={config} entities={entities} ruf={ruf} lautSetzen={lautSetzen} />
       <div className="wa-umschalter">
         <Knopf led aktiv={ansicht === 'liste'} onClick={() => { setAnsicht('liste'); setFokus('liste'); }}>Playlist</Knopf>
         <Knopf led aktiv={ansicht === 'lib'} onClick={() => { setAnsicht('lib'); setFokus('lib'); }}>Library</Knopf>
@@ -704,12 +723,12 @@ export default function WinampMusik({ config, entities, callService, conn, raum 
         spotify={spotify} liste={liste} laufend={laufend} auswahl={plWahl.auswahl} mehrfach={mehrfach} setMehrfach={setMehrfach}
         onKlick={(e, i) => setPlWahl(klickAuswahl(e, i, plWahl, mehrfach))}
         onSpielen={playlistSpielen} onEntfernen={entfernen} onSchieben={schieben} onLeeren={leeren} onAdd={zurLibrary}
-        onFade={() => ausblenden(playlistAuswahlSpielen())} onSpeichern={alsListeSpeichern} onFokus={() => setFokus('liste')}
+        onFade={() => ausblenden(playlistAuswahlSpielen())} onSpeichern={alsListeSpeichern} onFokus={() => setFokus('liste')} aktiv={fokus === 'liste'}
       />
       <MediaLibrary
         config={config} conn={conn} raum={raum} apiRef={libApi} suchRef={suchRef} mehrfach={mehrfach} setMehrfach={setMehrfach}
         listenStand={listenStand} onAbspielen={abspielen} onEinreihen={einreihen} onFade={(los) => ausblenden(los)}
-        onFokus={() => setFokus('lib')}
+        onFokus={() => setFokus('lib')} aktiv={fokus === 'lib'}
       />
     </div>
   );

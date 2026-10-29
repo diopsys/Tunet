@@ -165,6 +165,27 @@ describe('Medien-Fenster', () => {
     fetchMedienPlaylist.mockResolvedValue({ items: [], index: 0 });
   });
 
+  it('controls the volume with the arrow keys while the main window is active', async () => {
+    const callService = vi.fn();
+    const ents = {
+      ...basis,
+      'media_player.tv': { state: 'off', attributes: {} },
+      'media_player.vu': { state: 'off', attributes: {} },
+      'media_player.zone2': { state: 'on', attributes: { source: 'HEOS Music', volume_level: 0.4 } },
+    };
+    const r = render(<MedienCard cardId="m" entities={ents} settings={{ medien }} callService={callService} conn={{ sendMessagePromise: vi.fn(async () => ({ response: { items: [] } })) }} getEntityImageUrl={(u) => u} />);
+    fireEvent.click(r.container.firstChild);
+    await screen.findByRole('dialog');
+    expect(screen.getByLabelText('Winamp').className).toContain('wa-aktiv');
+    fireEvent.keyDown(window, { key: 'ArrowUp' });
+    expect(callService).toHaveBeenCalledWith('media_player', 'volume_set', { entity_id: 'media_player.zone2', volume_level: 0.42 });
+    // Playlist anklicken: Pfeiltasten wählen dort, die Lautstärke bleibt
+    fireEvent.pointerDown(screen.getByLabelText('Playlist Editor'));
+    callService.mockClear();
+    fireEvent.keyDown(window, { key: 'ArrowUp' });
+    expect(callService).not.toHaveBeenCalled();
+  });
+
   it('shows the Winamp windows and plays from the local library and Spotify playlists', async () => {
     const callService = vi.fn();
     const mitSpotify = { ...medien, musik: { ...medien.musik, spotify: { entity: 'media_player.spotifyplus', geraet: 'Marantz' } } };
