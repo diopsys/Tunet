@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pause, Play, Repeat, Shuffle, SkipBack, SkipForward } from '../../icons';
-import { beideZonenAktionen, playAktionen } from '../../components/cards/MedienCard';
+import { beideZonenAktionen, nacheinander, playAktionen } from '../../components/cards/MedienCard';
 import {
   deleteMedienPlaylist, fetchMedienListen, fetchMedienPlaylist, saveMedienPlaylist,
 } from '../../services/settingsApi';
@@ -506,7 +506,8 @@ function MediaLibrary({ config, conn, raum, apiRef, suchRef, mehrfach, setMehrfa
 }
 
 export default function WinampMusik({ config, entities, callService, conn, raum }) {
-  const ruf = useCallback((aktionen) => aktionen.forEach(([d, s, data]) => callService?.(d, s, data)), [callService]);
+  // nacheinander: Quelle erst nach dem Einschalten, Abspielen erst nach der Quellenwahl
+  const ruf = useCallback((aktionen) => nacheinander(callService, aktionen), [callService]);
   const sp = config.musik?.spotify;
   const spE = sp?.entity ? entities[sp.entity] : null;
   // Spotify spielt auf dem Gerät des Raums → Spotify steuern und seine Warteschlange zeigen

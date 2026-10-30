@@ -4,6 +4,7 @@ import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Power, Tv, Volume2, 
 import { getIconComponent } from '../icons';
 import AccessibleModalShell from '../components/ui/AccessibleModalShell';
 import WinampMusik from './medien/WinampMusik';
+import { nacheinander } from '../components/cards/MedienCard';
 import useLautstaerke from './medien/useLautstaerke';
 
 /*
@@ -81,12 +82,17 @@ function FernseherReiter({ config, entities, callService, bild }) {
   const unter = sat
     ? [ja.media_series_title, ja.media_start_time && ja.media_end_time ? `${ja.media_start_time}–${ja.media_end_time}` : null].filter(Boolean).join(' · ')
     : !tvAn && satAn ? [satBox.attributes?.media_channel || satBox.attributes?.source, 'Fernseher aus'].filter(Boolean).join(' · ') : '';
+  // Quelle erst nach dem Einschalten wählen (je Gerät nacheinander, die Geräte parallel)
   const app = (a) => {
-    callService('media_player', 'turn_on', { entity_id: tvCfg.entity });
-    callService('media_player', 'select_source', { entity_id: tvCfg.entity, source: a.source });
+    nacheinander(callService, [
+      ['media_player', 'turn_on', { entity_id: tvCfg.entity }],
+      ['media_player', 'select_source', { entity_id: tvCfg.entity, source: a.source }],
+    ]);
     if (surround && tvCfg.surroundTvQuelle) {
-      callService('media_player', 'turn_on', { entity_id: tvCfg.surround });
-      callService('media_player', 'select_source', { entity_id: tvCfg.surround, source: tvCfg.surroundTvQuelle });
+      nacheinander(callService, [
+        ['media_player', 'turn_on', { entity_id: tvCfg.surround }],
+        ['media_player', 'select_source', { entity_id: tvCfg.surround, source: tvCfg.surroundTvQuelle }],
+      ]);
     }
   };
   const taste = (button) => callService('webostv', 'button', { entity_id: tvCfg.entity, button });

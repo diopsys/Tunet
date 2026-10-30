@@ -75,11 +75,13 @@ export function quelleAktiv(quelle, zone, entities) {
   return false;
 }
 
-/** Abspielen/Pause: ist der Raum aus, erst auf den Eingang des Players stellen – sonst
- *  weckt der Player (z. B. HEOS) die Hauptzone des Receivers statt des Raums. */
+/** Abspielen/Pause: ist der Raum aus, vor dem Starten erst auf den Eingang des Players stellen –
+ *  sonst weckt der Player (z. B. HEOS) die Hauptzone des Receivers statt des Raums. Pause weckt
+ *  nichts (Spotify kann z. B. gerade auf einem anderen Gerät laufen). */
 export function playAktionen(config, entities, playerId = config.player) {
   const zone = config.zone ? entities[config.zone] : null;
-  const vorher = config.zone && config.musik?.zoneQuelle && !istAn(zone)
+  const startet = entities[playerId]?.state !== 'playing';
+  const vorher = startet && config.zone && config.musik?.zoneQuelle && !istAn(zone)
     ? [
         ['media_player', 'turn_on', { entity_id: config.zone }],
         ['media_player', 'select_source', { entity_id: config.zone, source: config.musik.zoneQuelle }],
@@ -110,6 +112,14 @@ export function beideZonenAktionen(zoneId, hauptId, entities, hauptZuerst = fals
   if (istAn(zone)) return an(hauptId, quelleFuer(haupt, zone.attributes?.source));
   if (istAn(haupt)) return an(zoneId, quelleFuer(zone, haupt.attributes?.source));
   return [];
+}
+
+/** Aktionen der Reihe nach: jede erst, wenn HA die vorige ausgeführt hat (z. B. Quelle erst nach
+ *  dem Einschalten, manche Geräte verlieren sie sonst). */
+export async function nacheinander(callService, aktionen) {
+  for (const [d, s, data] of aktionen) {
+    try { await callService?.(d, s, data); } catch { /* nächste trotzdem */ }
+  }
 }
 
 /** Aktionen eines Quellen-Knopfs als Liste von [domain, service, data]. */
@@ -170,7 +180,7 @@ const MedienCard = ({ cardId, dragProps, controls, cardStyle, editMode, entities
   const tvAus = tv || satBox
     ? [config.tv.entity, config.tv.surround, satId && istAn(entities[satId]) ? satId : null].filter(Boolean)
     : null;
-  const ruf = (aktionen) => aktionen.forEach(([d, s, data]) => callService?.(d, s, data));
+  const ruf = (aktionen) => nacheinander(callService, aktionen);
   const stop = (fn) => (e) => { e.stopPropagation(); if (!editMode) fn(); };
   const oeffnen = () => { if (!editMode && belegt) setOffen(true); };
 
@@ -180,7 +190,7 @@ const MedienCard = ({ cardId, dragProps, controls, cardStyle, editMode, entities
       {...dragProps}
       className={`glass-texture touch-feedback relative flex h-full flex-col gap-2 overflow-hidden rounded-3xl border p-3.5 font-sans select-none ${editMode ? 'cursor-move' : 'cursor-pointer'}`}
       style={cardStyle}
-      {...(!editMode ? { role: 'button', tabIndex: 0, 'aria-label': `${titel} öffnen`, onClick: oeffnen, onKeyDown: (e) => e.key === 'Enter' && oeffnen() } : {})}
+      {...(!editMode ? { role: 'button', tabIndex: 0, 'aria-label': `${titel} öffnen`, onClick: oeffnen, onKeyDown: (e) => e.key === 'Enter' && e.target === e.currentTarget && oeffnen() } : {})}
     >
       {controls}
       <div className="flex items-center justify-between gap-2">

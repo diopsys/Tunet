@@ -57,7 +57,7 @@ const oeffnen = (callService = vi.fn(), entities = basis) => {
 };
 
 describe('Medien-Fenster', () => {
-  it('detects the satellite receiver by the receiver input', () => {
+  it('detects the satellite receiver by the receiver input', async () => {
     expect(satAktiv(medien.tv, basis)).toBe(true);
     expect(satAktiv(medien.tv, { ...basis, 'media_player.surround': { state: 'on', attributes: { source: 'TV Audio' } } })).toBe(false);
   });
@@ -75,19 +75,19 @@ describe('Medien-Fenster', () => {
     const callService = oeffnen();
     await screen.findByRole('dialog');
     fireEvent.click(screen.getByRole('button', { name: 'Das Erste HD' }));
-    expect(callService).toHaveBeenCalledWith('media_player', 'select_source', { entity_id: 'media_player.vu', source: 'Das Erste HD' });
+    await waitFor(() => expect(callService).toHaveBeenCalledWith('media_player', 'select_source', { entity_id: 'media_player.vu', source: 'Das Erste HD' }));
     fireEvent.click(screen.getByRole('button', { name: 'Programm hoch' }));
-    expect(callService).toHaveBeenCalledWith('media_player', 'media_next_track', { entity_id: 'media_player.vu' });
+    await waitFor(() => expect(callService).toHaveBeenCalledWith('media_player', 'media_next_track', { entity_id: 'media_player.vu' }));
     fireEvent.click(screen.getByRole('button', { name: /Netflix/ }));
-    expect(callService).toHaveBeenCalledWith('media_player', 'select_source', { entity_id: 'media_player.tv', source: 'Netflix' });
-    expect(callService).toHaveBeenCalledWith('media_player', 'select_source', { entity_id: 'media_player.surround', source: 'TV Audio' });
+    await waitFor(() => expect(callService).toHaveBeenCalledWith('media_player', 'select_source', { entity_id: 'media_player.tv', source: 'Netflix' }));
+    await waitFor(() => expect(callService).toHaveBeenCalledWith('media_player', 'select_source', { entity_id: 'media_player.surround', source: 'TV Audio' }));
     fireEvent.click(screen.getByRole('button', { name: /Sat-TV/ }));
-    expect(callService).toHaveBeenCalledWith('script', 'turn_on', { entity_id: 'script.sat_tv' });
+    await waitFor(() => expect(callService).toHaveBeenCalledWith('script', 'turn_on', { entity_id: 'script.sat_tv' }));
     fireEvent.click(screen.getByRole('button', { name: 'OK' }));
-    expect(callService).toHaveBeenCalledWith('webostv', 'button', { entity_id: 'media_player.tv', button: 'ENTER' });
+    await waitFor(() => expect(callService).toHaveBeenCalledWith('webostv', 'button', { entity_id: 'media_player.tv', button: 'ENTER' }));
   });
 
-  it('normalises SpotifyPlus entries and formats times like Winamp', () => {
+  it('normalises SpotifyPlus entries and formats times like Winamp', async () => {
     expect(spTitel({ added_at: 'x', track: { uri: 'spotify:track:1', name: 'A', type: 'track', image_url: 'b', duration_ms: 164750, artists: [{ name: 'X' }] } }))
       .toEqual({ uri: 'spotify:track:1', name: 'A', artist: 'X', dauer: 165, image: 'b', media_type: 'track', quelle: 'spotify' });
     expect(spTitel({})).toBeNull();
@@ -95,7 +95,7 @@ describe('Medien-Fenster', () => {
     expect(zeit(34665)).toBe('9:37:45');
   });
 
-  it('plays a list from the clicked title on, like Winamp', () => {
+  it('plays a list from the clicked title on, like Winamp', async () => {
     const cfg = { ...medien, musik: { ...medien.musik, spotify: { entity: 'media_player.sp', geraet: 'Marantz' } } };
     const items = [{ uri: 'library://track/1', name: 'Eins' }, { uri: 'library://track/2', name: 'Zwei' }, { uri: 'library://track/3', name: 'Drei' }];
     expect(maAbspielen(cfg, items, 1).at(-1)).toEqual(['music_assistant', 'play_media', {
@@ -108,7 +108,7 @@ describe('Medien-Fenster', () => {
     expect(laufenderIndex(items, { attributes: { media_title: 'drei' } }, 0)).toBe(2);
   });
 
-  it('selects, removes and moves several titles like Winamp', () => {
+  it('selects, removes and moves several titles like Winamp', async () => {
     expect(auswahlKlick([], 2)).toEqual([2]);
     expect(auswahlKlick([2], 4, { shift: true }, 2)).toEqual([2, 3, 4]);
     expect(auswahlKlick([2, 4], 4, { mehrfach: true })).toEqual([2]);
@@ -183,7 +183,7 @@ describe('Medien-Fenster', () => {
     await screen.findByRole('dialog');
     expect(screen.getByLabelText('Winamp').className).toContain('wa-aktiv');
     fireEvent.keyDown(window, { key: 'ArrowUp' });
-    expect(callService).toHaveBeenCalledWith('media_player', 'volume_set', { entity_id: 'media_player.zone2', volume_level: 0.42 });
+    await waitFor(() => expect(callService).toHaveBeenCalledWith('media_player', 'volume_set', { entity_id: 'media_player.zone2', volume_level: 0.42 }));
     // Playlist anklicken: Pfeiltasten wählen dort, die Lautstärke bleibt
     fireEvent.pointerDown(screen.getByLabelText('Playlist Editor'));
     callService.mockClear();
@@ -227,10 +227,10 @@ describe('Medien-Fenster', () => {
     // Lokale Bibliothek: Spotify-Importe ausgeblendet, Doppeltippen spielt ab dort
     fireEvent.doubleClick(await screen.findByText('Band - Vom NAS'));
     expect(screen.queryByText('Importiert')).toBeNull();
-    expect(callService).toHaveBeenCalledWith('media_player', 'select_source', { entity_id: 'media_player.zone2', source: 'HEOS Music' });
-    expect(callService).toHaveBeenCalledWith('music_assistant', 'play_media', {
+    await waitFor(() => expect(callService).toHaveBeenCalledWith('media_player', 'select_source', { entity_id: 'media_player.zone2', source: 'HEOS Music' }));
+    await waitFor(() => expect(callService).toHaveBeenCalledWith('music_assistant', 'play_media', {
       entity_id: 'media_player.ma', media_id: ['library://track/1', 'library://track/2'], media_type: 'track', enqueue: 'replace',
-    });
+    }));
     expect(await screen.findByText('Auch vom NAS', { selector: '.wa-playlist .name' })).toBeTruthy();
 
     // Spotify-Playlist öffnen (zweimal antippen) und Titel im Kontext abspielen
@@ -244,9 +244,9 @@ describe('Medien-Fenster', () => {
     const titel = await screen.findByText('Lieblingslied');
     expect(callService.mock.calls.some(([d]) => d === 'spotifyplus')).toBe(false);
     fireEvent.doubleClick(titel);
-    expect(callService).toHaveBeenCalledWith('spotifyplus', 'player_media_play_context', {
+    await waitFor(() => expect(callService).toHaveBeenCalledWith('spotifyplus', 'player_media_play_context', {
       entity_id: 'media_player.spotifyplus', context_uri: 'spotify:playlist:5G', offset_position: 0, device_id: 'Marantz',
-    });
+    }));
   });
 
   it('shows the Spotify queue as playlist and jumps there with skip', async () => {
@@ -273,6 +273,6 @@ describe('Medien-Fenster', () => {
     fireEvent.click(r.container.firstChild);
     await screen.findByRole('dialog');
     fireEvent.doubleClick(await screen.findByText('Später'));
-    expect(callService.mock.calls.filter(([d, s]) => d === 'spotifyplus' && s === 'player_media_skip_next')).toHaveLength(2);
+    await waitFor(() => expect(callService.mock.calls.filter(([d, s]) => d === 'spotifyplus' && s === 'player_media_skip_next')).toHaveLength(2));
   });
 });
