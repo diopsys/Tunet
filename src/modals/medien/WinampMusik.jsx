@@ -368,7 +368,11 @@ function MediaLibrary({ config, conn, raum, apiRef, suchRef, mehrfach, setMehrfa
   };
 
   // Album, Playlist, Künstler oder gespeicherte Liste öffnen
+  const oeffnet = useRef(null);
   const oeffnen = async (item) => {
+    // Klick + Doppelklick lösen beides aus – dasselbe nur einmal öffnen
+    if (oeffnet.current === item.uri) return;
+    oeffnet.current = item.uri;
     setLaedt(true);
     try {
       let items = [];
@@ -399,6 +403,7 @@ function MediaLibrary({ config, conn, raum, apiRef, suchRef, mehrfach, setMehrfa
       /* bleibt auf der bisherigen Ansicht */
     } finally {
       setLaedt(false);
+      oeffnet.current = null;
     }
   };
   const zurueck = () => {
@@ -419,6 +424,13 @@ function MediaLibrary({ config, conn, raum, apiRef, suchRef, mehrfach, setMehrfa
     else setWahl(klickAuswahl(e, i, wahl, mehrfach));
   };
   const spielen = (i) => onAbspielen(ansicht, i);
+  // Doppelklick: Titel spielen, Album/Playlist/Künstler nur öffnen (gespielt wird erst ein Titel daraus)
+  const doppelklick = (i) => {
+    const t = items[i];
+    if (!t) return;
+    if (istTitel(t)) spielen(i);
+    else if (t.aufklappbar !== false) oeffnen(t);
+  };
   const loeschKnopf = async () => {
     const t = items[erster];
     if (!t || t.media_type !== 'gespeichert') return;
@@ -429,7 +441,8 @@ function MediaLibrary({ config, conn, raum, apiRef, suchRef, mehrfach, setMehrfa
 
   // für Tasten (Enter, Pfeile) und „Fade“ aus dem übergeordneten Fenster
   apiRef.current = {
-    spielen: () => (erster >= 0 ? () => spielen(erster) : null),
+    // Enter wie Doppelklick: Titel spielen, Album & Co. öffnen
+    spielen: () => (erster >= 0 ? () => doppelklick(erster) : null),
     bewegen: (d) => {
       if (!items.length) return;
       const z = Math.max(0, Math.min(items.length - 1, (erster < 0 ? -1 : auswahl[auswahl.length - 1]) + d));
@@ -465,7 +478,7 @@ function MediaLibrary({ config, conn, raum, apiRef, suchRef, mehrfach, setMehrfa
             {laedt && <div className="wa-hinweis">Lädt …</div>}
             {!laedt && items.length === 0 && <div className="wa-hinweis">{ansicht?.ordner === MEINE[0] ? 'Noch keine – im Playlist Editor „Save“.' : 'Nichts gefunden.'}</div>}
             {items.map((t, i) => (
-              <Zeile key={`${t.uri}-${i}`} item={t} gewaehlt={auswahl.includes(i)} onWaehlen={(e) => klick(e, i)} onSpielen={() => spielen(i)} />
+              <Zeile key={`${t.uri}-${i}`} item={t} gewaehlt={auswahl.includes(i)} onWaehlen={(e) => klick(e, i)} onSpielen={() => doppelklick(i)} />
             ))}
             {!laedt && ansicht?.mehr && (
               <button type="button" className="wa-zeile" onClick={() => ordnerLaden(ansicht.ordner, ansicht.mehr)}><span className="name">… weitere laden</span></button>
@@ -702,8 +715,9 @@ export default function WinampMusik({ config, entities, callService, conn, raum 
   };
   useEffect(() => {
     const h = (e) => tastenRef.current?.(e);
-    window.addEventListener('keydown', h);
-    return () => window.removeEventListener('keydown', h);
+    // Capture: die Medien-Kachel stoppt Tastendrücke aus dem Fenster (Verschieben), deshalb vorher mithören
+    window.addEventListener('keydown', h, true);
+    return () => window.removeEventListener('keydown', h, true);
   }, []);
 
   const zurLibrary = () => { setAnsicht('lib'); setFokus('lib'); setTimeout(() => suchRef.current?.focus(), 0); };

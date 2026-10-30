@@ -138,8 +138,9 @@ describe('Medien-Fenster', () => {
     fireEvent.click(r.container.firstChild);
     await screen.findByRole('dialog');
     fireEvent.click(await screen.findByText('Zwei', { selector: '.wa-playlist .name' }));
-    fireEvent.keyDown(window, { key: 'V', shiftKey: true });
-    fireEvent.keyDown(window, { key: 'Enter' });
+    // Tasten aus dem Fenster heraus (die Kachel stoppt sie beim Hochblubbern)
+    fireEvent.keyDown(screen.getByLabelText('Playlist Editor'), { key: 'V', shiftKey: true });
+    fireEvent.keyDown(screen.getByLabelText('Playlist Editor'), { key: 'Enter' });
     await waitFor(() => expect(callService).toHaveBeenCalledWith('media_player', 'media_stop', { entity_id: 'media_player.ma' }), { timeout: 2000 });
     const lautstaerken = callService.mock.calls.filter(([, s, d]) => s === 'volume_set' && d.entity_id === 'media_player.ma').map(([, , d]) => d.volume_level);
     expect(lautstaerken[0]).toBe(0);
@@ -232,9 +233,13 @@ describe('Medien-Fenster', () => {
     const spOrdner = screen.getAllByRole('button', { name: 'Playlists' }).at(-1);
     fireEvent.click(spOrdner);
     const pl = await screen.findByText('Deutscher Rock');
+    // echter Doppelklick (Klick, Klick, Doppelklick) öffnet nur – kein Abspielen
     fireEvent.click(pl);
     fireEvent.click(pl);
-    fireEvent.doubleClick(await screen.findByText('Lieblingslied'));
+    fireEvent.doubleClick(pl);
+    const titel = await screen.findByText('Lieblingslied');
+    expect(callService.mock.calls.some(([d]) => d === 'spotifyplus')).toBe(false);
+    fireEvent.doubleClick(titel);
     expect(callService).toHaveBeenCalledWith('spotifyplus', 'player_media_play_context', {
       entity_id: 'media_player.spotifyplus', context_uri: 'spotify:playlist:5G', offset_position: 0, device_id: 'Marantz',
     });
