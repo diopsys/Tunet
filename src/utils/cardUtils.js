@@ -42,6 +42,7 @@ const REMOVABLE_PREFIXES = [
   'beregnung_card_',
   'pool_card_',
   'heizung_card_',
+  'medien_card_',
   'puffer_card_',
   'fan.',
 ];
@@ -75,6 +76,7 @@ const SPECIAL_CARD_PREFIXES = [
   'cover_panel_card_',
   'security_panel_card_',
   'heizung_card_',
+  'medien_card_',
   'puffer_card_',
   'haushaltsgeraete_card_',
   'frigate_events_card_',

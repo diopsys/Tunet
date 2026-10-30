@@ -399,6 +399,12 @@ export const handleAddSelected = (ctx) => {
       return;
     }
 
+    case 'medien': {
+      // Ohne Vorbelegung: Zone, Player und Fernseher sind je Haushalt verschieden (settings.medien)
+      commitSingleCard(`medien_card_${Date.now()}`, {});
+      return;
+    }
+
     case 'car': {
       const cardId = `car_card_${Date.now()}`;
       commitSingleCard(cardId, { type: 'car', size: 'large' }, { openEdit: true });

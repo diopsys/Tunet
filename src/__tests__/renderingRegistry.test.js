@@ -38,6 +38,7 @@ const rendererMocks = vi.hoisted(() => ({
   renderHaushaltsgeraeteCard: vi.fn(() => ({ renderer: 'haushaltsgeraete' })),
   renderFrigateEventsCard: vi.fn(() => ({ renderer: 'frigate_events' })),
   renderPoolCard: vi.fn(() => ({ renderer: 'pool' })),
+  renderMedienCard: vi.fn(() => ({ renderer: 'medien' })),
 }));
 
 vi.mock('../rendering/cards', () => rendererMocks);
