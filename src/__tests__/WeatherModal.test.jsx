@@ -97,7 +97,7 @@ describe('WeatherModal', () => {
         conn={{}}
         weatherEntity={weatherEntity}
         tempEntity={null}
-        language="nn"
+        language="de"
         t={t}
       />
     );

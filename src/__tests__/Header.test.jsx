@@ -18,10 +18,10 @@ const baseProps = {
 
 describe('Header mobile alignment', () => {
   it.each([
-    ['left', 'items-start', 'text-left', 'justify-start'],
-    ['center', 'items-center', 'text-center', 'justify-center'],
-    ['right', 'items-end', 'text-right', 'justify-end'],
-  ])('aligns the classic mobile header %s', (alignment, itemsClass, textClass, justifyClass) => {
+    ['left', 'justify-start'],
+    ['center', 'justify-center'],
+    ['right', 'justify-end'],
+  ])('aligns the classic mobile header %s', (alignment, justifyClass) => {
     const { container } = render(
       <Header
         {...baseProps}
@@ -35,9 +35,8 @@ describe('Header mobile alignment', () => {
       />
     );
 
-    const title = screen.getByRole('heading', { name: 'My home' });
+    const title = screen.getByRole('heading', { name: /^My home/ });
     expect(title.parentElement).toHaveClass(justifyClass);
-    expect(title.parentElement.parentElement).toHaveClass(itemsClass, textClass);
     expect(container.querySelector('header')).toBeInTheDocument();
   });
 

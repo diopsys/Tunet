@@ -42,7 +42,6 @@ const PoolCard = memo(function PoolCard({
   isMobile,
   isTwoColMobile,
   onOpen,
-  t,
 }) {
   const name = customNames?.[cardId] || 'Pool';
   const isUltraCompact = isTwoColMobile;

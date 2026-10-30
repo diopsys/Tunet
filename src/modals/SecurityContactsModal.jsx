@@ -16,8 +16,6 @@ export default function SecurityContactsModal({ show, onClose, contactsInfo, ent
   });
 
   const openItems = items.filter((i) => i.isOpen);
-  const closedItems = items.filter((i) => !i.isOpen && !i.isUnavailable);
-  const unavailableItems = items.filter((i) => i.isUnavailable);
 
   return (
     <AccessibleModalShell

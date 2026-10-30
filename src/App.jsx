@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback, useEffect, lazy, Suspense } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
-import { en, nb, nn, sv, de, zh, fr, es, DEFAULT_LANGUAGE, normalizeLanguage } from './i18n';
+import { en, de, DEFAULT_LANGUAGE, normalizeLanguage } from './i18n';
 import { LayoutGrid } from './icons';
 
 import { DashboardLayout } from './layouts';
@@ -134,7 +134,7 @@ export function AppContent({ showOnboarding, setShowOnboarding }) {
   } = usePages();
 
   const { entities, entitiesLoaded, connected, conn, activeUrl, authRef } = useHomeAssistant();
-  const translations = useMemo(() => ({ en, nb, nn, sv, de, zh, fr, es }), []);
+  const translations = useMemo(() => ({ en, de }), []);
   const appFontFamilyMap = useMemo(
     () => ({
       sans: 'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif',

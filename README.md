@@ -20,7 +20,7 @@
 - **Multi-Device Sync:** Server-side profiles allow saving and deploying layouts across multiple devices instantly.
 - **Secure by Design:** Validated backend auth with optional data-at-rest encryption for your profiles.
 - **Beautiful UI:** High-end glassmorphism design with dark/light modes and dynamic backgrounds.
-- **Multilingual:** Native support for English, German, Norwegian (NB/NN), Swedish, and Simplified Chinese.
+- **Multilingual:** Native support for English and German.
 
 ## 🚀 Installation
 

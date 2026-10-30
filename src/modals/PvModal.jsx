@@ -414,7 +414,6 @@ export default function PvModal({
   haUrl,
   haToken,
   settings,
-  t,
 }) {
   const ids = resolvePvIds(settings);
   // Monat/Jahr aus der Statistik der Gesamtzähler, wenn keine eigenen Sensoren eingetragen sind

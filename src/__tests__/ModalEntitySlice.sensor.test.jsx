@@ -35,7 +35,7 @@ function makeProps(showSensorInfoModal) {
       config: { authMethod: 'token', token: '' },
       t: (key) => key,
     },
-    modals: { showSensorInfoModal, setShowSensorInfoModal: vi.fn() },
+    modals: { showSensorInfoModal, setShowSensorInfoModal: vi.fn(), showEntityCountModal: null },
     cardConfig: {
       cardSettings: {},
       getCardSettingsKey: (id) => id,

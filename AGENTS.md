@@ -29,7 +29,7 @@ src/
   contexts/               # Global state (ConfigContext, PageContext, HomeAssistantContext)
   hooks/                  # Custom React hooks
   services/               # HA WebSocket client, card actions, OAuth, Nordpool utils
-  i18n/                   # Translation files (en.json, de.json, es.json, fr.json, nb.json, nn.json, sv.json, zh.json)
+  i18n/                   # Translation files (en.json, de.json)
   layouts/                # Header, StatusBar
   components/
     cards/                # Dashboard card widgets (SensorCard, LightCard, etc.)
@@ -59,7 +59,7 @@ playwright.config.js      # Playwright configuration (Chromium + Firefox)
 - **Sizing**: `settings.size` is `'small'|'large'`. Toggle capability checked via `canToggleSize()`.
 - **Hooks**: `useEnergyData(entity, now)` expects a single entity object.
 - **Icons**: import from the `src/icons/` barrel. Store selections as string names, mapped via `src/icons/iconMap.js`.
-- **i18n**: keys in `src/i18n/{en,de,es,fr,nb,nn,sv,zh}.json`. Setup is manual (no i18next).
+- **i18n**: keys in `src/i18n/{en,de}.json`. Setup is manual (no i18next).
 - **Units (Metric/Imperial)**:
   - Never hard-code units in UI logic.
   - Read Home Assistant unit preferences from `useHomeAssistantMeta()` (`haConfig`) and resolve final mode with `getEffectiveUnitMode(unitsMode, haConfig)`.

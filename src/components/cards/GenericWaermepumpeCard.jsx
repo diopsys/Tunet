@@ -135,8 +135,6 @@ const GenericWaermepumpeCard = memo(function GenericWaermepumpeCard({
   // State Machine
   const tagesmodus = entities?.[WAERMEPUMPE_ENTITY_IDS.tagesmodus]?.state || 'Standby';
   const modusMeta = MODUS_META[tagesmodus] || { color: '#94a3b8', label: tagesmodus };
-  const entscheidungslog = entities?.[WAERMEPUMPE_ENTITY_IDS.entscheidungslog]?.state || '';
-  const logReason = entscheidungslog.includes('|') ? entscheidungslog.split('|')[1]?.trim() : '';
   const wwTarget = (tagesmodus === 'WW_Heizen' || tagesmodus === 'WW_Boost') ? 63 : null;
   const wwPct = wwTemp != null && wwTarget != null
     ? Math.min(100, Math.max(0, (wwTemp - 40) / (wwTarget - 40) * 100))

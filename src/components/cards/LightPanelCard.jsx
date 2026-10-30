@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback, memo } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo, memo } from 'react';
 import { Lightbulb, ChevronRight, Zap, ToggleLeft, Workflow, Lock, Unlock, Edit2, Check, X } from '../../icons';
 import { getIconComponent } from '../../icons';
 import M3Slider from '../ui/M3Slider';
@@ -140,7 +140,7 @@ const SchedulerTile = ({ entityId, name, entity, callService, allEntities }) => 
 
   const isOn = entity?.state === 'on';
   const isUnavailable = !entity?.state || entity.state === 'unavailable';
-  const attrs = entity?.attributes || {};
+  const attrs = useMemo(() => entity?.attributes || {}, [entity?.attributes]);
 
   const timeslotStr = attrs.timeslots?.[0] || '';
   const timeslotLabel = formatTimeslot(timeslotStr);

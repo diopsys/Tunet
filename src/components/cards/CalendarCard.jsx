@@ -38,7 +38,7 @@ const CalendarCard = memo(/** @param {any} props */ function CalendarCard({
   settings,
   conn,
   t,
-  locale = 'nb-NO',
+  locale = 'en-US',
   className,
   style,
   dragProps,

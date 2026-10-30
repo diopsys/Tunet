@@ -313,7 +313,7 @@ export default function PersonModal({
     }, 200); // Slight delay for modal animation
 
     return () => clearTimeout(timer);
-  }, [show, currentLat, currentLon, tileUrl]);
+  }, [show, currentLat, currentLon, tileUrl, tileClassName]);
 
   useEffect(() => {
     if (!show && mapInstanceRef.current) {

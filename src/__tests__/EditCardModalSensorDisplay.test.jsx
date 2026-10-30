@@ -130,4 +130,30 @@ describe('EditCardModal sensor display settings', () => {
       screen.queryByRole('button', { name: en['sensor.variantGauge'] })
     ).not.toBeInTheDocument();
   });
+
+  it('opens the status settings of a non-sensor card without crashing', () => {
+    render(
+      <EditCardModal
+        {...props}
+        isEditSensor={false}
+        canEditStatus
+        editSettingsKey="settings::climate.room"
+        editSettings={{ showStatus: true }}
+      />
+    );
+    expect(screen.getByText(en['form.showStatus'])).toBeInTheDocument();
+  });
+
+  it('shows the settings of a light panel card', () => {
+    render(
+      <EditCardModal
+        {...props}
+        isEditSensor={false}
+        isEditLightPanel
+        editSettingsKey="light_panel_card_1"
+        editSettings={{ panelTabs: [{ id: 'eg', title: 'Erdgeschoss', entities: [] }] }}
+      />
+    );
+    expect(screen.getByRole('button', { name: /Erdgeschoss/ })).toBeInTheDocument();
+  });
 });
