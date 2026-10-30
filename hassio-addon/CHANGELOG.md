@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.31.3
+
+### Added
+- Media card for a room with a window and TV, Spotify and library tabs (#11, by diopsys)
+- Heat pump page: tank heater is detected live from its CAN power reading and shown in kW
+
+### Changed
+- Tunet is now available in German and English only; devices set to a removed language switch to English
+
+### Fixed
+- Edit dialog: fixed a crash on non-sensor cards with status settings
+- Light panel card: settings are available in the edit dialog again
+- Sensor and lock dialogs: fixed possible crashes caused by wrong hook order
+
 ## 1.31.2
 
 ### Added
