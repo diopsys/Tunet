@@ -149,6 +149,10 @@ describe('Medien-Fenster', () => {
     await waitFor(() => expect(callService).toHaveBeenCalledWith('music_assistant', 'play_media', {
       entity_id: 'media_player.ma', media_id: ['library://track/2'], media_type: 'track', enqueue: 'replace',
     }), { timeout: 2000 });
+    // alte Lautstärke ist schon vor dem Start des neuen Titels zurück
+    const reihenfolge = callService.mock.calls.map(([, s, d]) => (s === 'volume_set' ? `vol:${d.volume_level}` : s));
+    expect(reihenfolge.indexOf('vol:0.5')).toBeGreaterThan(reihenfolge.indexOf('media_stop'));
+    expect(reihenfolge.indexOf('vol:0.5')).toBeLessThan(reihenfolge.lastIndexOf('play_media'));
     fetchMedienPlaylist.mockResolvedValue({ items: [], index: 0 });
   });
 

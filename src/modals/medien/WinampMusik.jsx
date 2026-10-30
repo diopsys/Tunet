@@ -662,19 +662,18 @@ export default function WinampMusik({ config, entities, callService, conn, raum 
     setFaded(true);
     const mitLautstaerke = spielt && ziel && Number.isFinite(vol) && vol > 0;
     if (mitLautstaerke) await rampe(vol, 0, sekunden);
-    if (spielt) callService?.('media_player', istSp ? 'media_pause' : 'media_stop', { entity_id: playerId });
+    // erst stoppen, dann still die alte Lautstärke zurück, dann der nächste Titel – der beginnt
+    // so gleich in voller Lautstärke (viele Titel fangen leise an)
+    if (spielt) await Promise.resolve(callService?.('media_player', istSp ? 'media_pause' : 'media_stop', { entity_id: playerId })).catch(() => {});
+    if (mitLautstaerke) {
+      await schlaf(300);
+      await Promise.resolve(setzen(vol)).catch(() => {});
+    }
     const weiter = f.weg ? null : f.danach;
     f.laeuft = false;
     f.danach = null;
     if (!f.weg) setFaded(false);
-    if (weiter) {
-      weiter();
-      if (mitLautstaerke) { await schlaf(1500); await rampe(0, vol, 1); }
-    } else if (mitLautstaerke) {
-      // still zurück, damit der nächste Start nicht bei 0 beginnt
-      await schlaf(800);
-      setzen(vol);
-    }
+    if (weiter) weiter();
   }, [callService, config, playerId, sp?.entity]);
 
   const playlistAuswahlSpielen = () => (plWahl.auswahl.length ? () => playlistSpielen(plWahl.auswahl[0]) : null);
