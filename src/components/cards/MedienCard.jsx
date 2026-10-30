@@ -1,7 +1,8 @@
-import { lazy, memo, Suspense, useState } from 'react';
+import { lazy, memo, Suspense, useCallback, useState } from 'react';
 import { Music, Pause, Play, Power, SkipBack, SkipForward, Volume2 } from '../../icons';
 import { getIconComponent } from '../../icons';
 import { openHaPath, safeHaUrl } from './HeizungCard';
+import useLautstaerke from '../../modals/medien/useLautstaerke';
 
 const MedienModal = lazy(() => import('../../modals/MedienModal'));
 
@@ -74,11 +75,13 @@ export function quelleAktiv(quelle, zone, entities) {
   return false;
 }
 
-/** Abspielen/Pause: ist der Raum aus, erst auf den Eingang des Players stellen – sonst
- *  weckt der Player (z. B. HEOS) die Hauptzone des Receivers statt des Raums. */
+/** Abspielen/Pause: ist der Raum aus, vor dem Starten erst auf den Eingang des Players stellen –
+ *  sonst weckt der Player (z. B. HEOS) die Hauptzone des Receivers statt des Raums. Pause weckt
+ *  nichts (Spotify kann z. B. gerade auf einem anderen Gerät laufen). */
 export function playAktionen(config, entities, playerId = config.player) {
   const zone = config.zone ? entities[config.zone] : null;
-  const vorher = config.zone && config.musik?.zoneQuelle && !istAn(zone)
+  const startet = entities[playerId]?.state !== 'playing';
+  const vorher = startet && config.zone && config.musik?.zoneQuelle && !istAn(zone)
     ? [
         ['media_player', 'turn_on', { entity_id: config.zone }],
         ['media_player', 'select_source', { entity_id: config.zone, source: config.musik.zoneQuelle }],
@@ -109,6 +112,14 @@ export function beideZonenAktionen(zoneId, hauptId, entities, hauptZuerst = fals
   if (istAn(zone)) return an(hauptId, quelleFuer(haupt, zone.attributes?.source));
   if (istAn(haupt)) return an(zoneId, quelleFuer(zone, haupt.attributes?.source));
   return [];
+}
+
+/** Aktionen der Reihe nach: jede erst, wenn HA die vorige ausgeführt hat (z. B. Quelle erst nach
+ *  dem Einschalten, manche Geräte verlieren sie sonst). */
+export async function nacheinander(callService, aktionen) {
+  for (const [d, s, data] of aktionen) {
+    try { await callService?.(d, s, data); } catch { /* nächste trotzdem */ }
+  }
 }
 
 /** Aktionen eines Quellen-Knopfs als Liste von [domain, service, data]. */
@@ -161,13 +172,15 @@ const MedienCard = ({ cardId, dragProps, controls, cardStyle, editMode, entities
     : player && pa.media_title ? pa.media_artist || pa.media_album_name || '' : '';
   const bild = tv ? tv.attributes?.entity_picture : player ? pa.entity_picture : null;
   const cover = bild && getEntityImageUrl ? getEntityImageUrl(bild) : null;
-  const lautstaerke = Math.round((lautEntity?.attributes?.volume_level ?? 0) * 100);
+  // gedrosselt: langsame Receiver (HEOS) stauen sonst jeden Zwischenwert auf
+  const setzen = useCallback((id, v) => callService?.('media_player', 'volume_set', { entity_id: id, volume_level: v }), [callService]);
+  const regler = useLautstaerke(lautEntity, lautId, setzen);
   // „Aus“ im TV- bzw. Sat-Betrieb: Fernseher, Surround und ein noch laufender Sat-Receiver
   const satId = config.tv?.sat?.entity;
   const tvAus = tv || satBox
     ? [config.tv.entity, config.tv.surround, satId && istAn(entities[satId]) ? satId : null].filter(Boolean)
     : null;
-  const ruf = (aktionen) => aktionen.forEach(([d, s, data]) => callService?.(d, s, data));
+  const ruf = (aktionen) => nacheinander(callService, aktionen);
   const stop = (fn) => (e) => { e.stopPropagation(); if (!editMode) fn(); };
   const oeffnen = () => { if (!editMode && belegt) setOffen(true); };
 
@@ -177,7 +190,7 @@ const MedienCard = ({ cardId, dragProps, controls, cardStyle, editMode, entities
       {...dragProps}
       className={`glass-texture touch-feedback relative flex h-full flex-col gap-2 overflow-hidden rounded-3xl border p-3.5 font-sans select-none ${editMode ? 'cursor-move' : 'cursor-pointer'}`}
       style={cardStyle}
-      {...(!editMode ? { role: 'button', tabIndex: 0, 'aria-label': `${titel} öffnen`, onClick: oeffnen, onKeyDown: (e) => e.key === 'Enter' && oeffnen() } : {})}
+      {...(!editMode ? { role: 'button', tabIndex: 0, 'aria-label': `${titel} öffnen`, onClick: oeffnen, onKeyDown: (e) => e.key === 'Enter' && e.target === e.currentTarget && oeffnen() } : {})}
     >
       {controls}
       <div className="flex items-center justify-between gap-2">
@@ -215,12 +228,13 @@ const MedienCard = ({ cardId, dragProps, controls, cardStyle, editMode, entities
         <label className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
           <Volume2 className="h-3.5 w-3.5 flex-shrink-0 text-[var(--text-muted)]" />
           <input
-            type="range" min={0} max={100} step={1} value={lautstaerke} aria-label="Lautstärke"
-            onChange={(e) => callService?.('media_player', 'volume_set', { entity_id: lautId, volume_level: Number(e.target.value) / 100 })}
-            className="min-w-0 flex-1 accent-[var(--accent-color)]"
+            type="range" min={0} max={100} step={1} aria-label="Lautstärke"
+            className="min-w-0 flex-1 rounded accent-[var(--accent-color)] focus:ring-2 focus:ring-[var(--accent-color)] focus:outline-none"
+            title="Lautstärke – Pfeiltasten"
             disabled={editMode}
+            {...regler.props}
           />
-          <span className="w-8 text-right text-[10px] text-[var(--text-muted)]">{lautstaerke} %</span>
+          <span className="w-8 text-right text-[10px] text-[var(--text-muted)]">{regler.wert} %</span>
         </label>
       )}
 

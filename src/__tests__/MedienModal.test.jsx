@@ -46,7 +46,7 @@ const oeffnen = (callService = vi.fn(), entities = basis) => {
 };
 
 describe('Medien-Fenster', () => {
-  it('detects the satellite receiver by the receiver input', () => {
+  it('detects the satellite receiver by the receiver input', async () => {
     expect(satAktiv(medien.tv, basis)).toBe(true);
     expect(satAktiv(medien.tv, { ...basis, 'media_player.surround': { state: 'on', attributes: { source: 'TV Audio' } } })).toBe(false);
   });
@@ -64,19 +64,19 @@ describe('Medien-Fenster', () => {
     const callService = oeffnen();
     await screen.findByRole('dialog');
     fireEvent.click(screen.getByRole('button', { name: 'Das Erste HD' }));
-    expect(callService).toHaveBeenCalledWith('media_player', 'select_source', { entity_id: 'media_player.vu', source: 'Das Erste HD' });
+    await waitFor(() => expect(callService).toHaveBeenCalledWith('media_player', 'select_source', { entity_id: 'media_player.vu', source: 'Das Erste HD' }));
     fireEvent.click(screen.getByRole('button', { name: 'Programm hoch' }));
-    expect(callService).toHaveBeenCalledWith('media_player', 'media_next_track', { entity_id: 'media_player.vu' });
+    await waitFor(() => expect(callService).toHaveBeenCalledWith('media_player', 'media_next_track', { entity_id: 'media_player.vu' }));
     fireEvent.click(screen.getByRole('button', { name: /Netflix/ }));
-    expect(callService).toHaveBeenCalledWith('media_player', 'select_source', { entity_id: 'media_player.tv', source: 'Netflix' });
-    expect(callService).toHaveBeenCalledWith('media_player', 'select_source', { entity_id: 'media_player.surround', source: 'TV Audio' });
+    await waitFor(() => expect(callService).toHaveBeenCalledWith('media_player', 'select_source', { entity_id: 'media_player.tv', source: 'Netflix' }));
+    await waitFor(() => expect(callService).toHaveBeenCalledWith('media_player', 'select_source', { entity_id: 'media_player.surround', source: 'TV Audio' }));
     fireEvent.click(screen.getByRole('button', { name: /Sat-TV/ }));
-    expect(callService).toHaveBeenCalledWith('script', 'turn_on', { entity_id: 'script.sat_tv' });
+    await waitFor(() => expect(callService).toHaveBeenCalledWith('script', 'turn_on', { entity_id: 'script.sat_tv' }));
     fireEvent.click(screen.getByRole('button', { name: 'OK' }));
-    expect(callService).toHaveBeenCalledWith('webostv', 'button', { entity_id: 'media_player.tv', button: 'ENTER' });
+    await waitFor(() => expect(callService).toHaveBeenCalledWith('webostv', 'button', { entity_id: 'media_player.tv', button: 'ENTER' }));
   });
 
-  it('normalises SpotifyPlus list entries', () => {
+  it('normalises SpotifyPlus list entries', async () => {
     expect(spEintrag({ added_at: 'x', track: { uri: 'spotify:track:1', name: 'A', type: 'track', image_url: 'b' } }))
       .toEqual({ uri: 'spotify:track:1', name: 'A', image: 'b', artists: undefined, media_type: 'track' });
     expect(spEintrag({})).toBeNull();
@@ -113,17 +113,17 @@ describe('Medien-Fenster', () => {
     expect(screen.getByRole('tab', { name: 'Bibliothek' })).toBeTruthy();
     fireEvent.click(screen.getByRole('tab', { name: 'Spotify' }));
     fireEvent.click(await screen.findByText('Deutscher Rock'));
-    expect(callService).toHaveBeenCalledWith('media_player', 'select_source', { entity_id: 'media_player.zone2', source: 'HEOS Music' });
-    expect(callService).toHaveBeenCalledWith('spotifyplus', 'player_media_play_context', { entity_id: 'media_player.spotifyplus', context_uri: 'spotify:playlist:5G', device_id: 'Marantz' });
+    await waitFor(() => expect(callService).toHaveBeenCalledWith('media_player', 'select_source', { entity_id: 'media_player.zone2', source: 'HEOS Music' }));
+    await waitFor(() => expect(callService).toHaveBeenCalledWith('spotifyplus', 'player_media_play_context', { entity_id: 'media_player.spotifyplus', context_uri: 'spotify:playlist:5G', device_id: 'Marantz' }));
 
     fireEvent.click(screen.getByRole('button', { name: 'Lieblingssongs' }));
     fireEvent.click(await screen.findByText('Lieblingslied'));
-    expect(callService).toHaveBeenCalledWith('spotifyplus', 'player_media_play_tracks', { entity_id: 'media_player.spotifyplus', uris: 'spotify:track:7', device_id: 'Marantz' });
+    await waitFor(() => expect(callService).toHaveBeenCalledWith('spotifyplus', 'player_media_play_tracks', { entity_id: 'media_player.spotifyplus', uris: 'spotify:track:7', device_id: 'Marantz' }));
 
     fireEvent.change(screen.getByLabelText('Musik suchen'), { target: { value: 'Whiskey' } });
     await act(async () => { fireEvent.submit(screen.getByLabelText('Musik suchen').closest('form')); });
     fireEvent.click(await screen.findByText('Whiskey in the Jar'));
-    expect(callService).toHaveBeenCalledWith('spotifyplus', 'player_media_play_tracks', { entity_id: 'media_player.spotifyplus', uris: 'spotify:track:9', device_id: 'Marantz' });
+    await waitFor(() => expect(callService).toHaveBeenCalledWith('spotifyplus', 'player_media_play_tracks', { entity_id: 'media_player.spotifyplus', uris: 'spotify:track:9', device_id: 'Marantz' }));
 
     fireEvent.click(screen.getByRole('tab', { name: 'Bibliothek' }));
     fireEvent.change(await screen.findByLabelText('Musik suchen'), { target: { value: 'Whiskey' } });
@@ -138,10 +138,11 @@ describe('Medien-Fenster', () => {
     fireEvent.click(screen.getByRole('tab', { name: 'Musik' }));
     expect(await screen.findByText('Sommer')).toBeTruthy();
     fireEvent.change(screen.getByLabelText('Musik suchen'), { target: { value: 'Beatles' } });
-    await act(async () => { fireEvent.submit(screen.getByLabelText('Musik suchen').closest('form')); });
+    // Lupe statt Eingabetaste
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Suchen' })); });
     fireEvent.click(await screen.findByText('Yesterday'));
-    expect(callService).toHaveBeenCalledWith('media_player', 'select_source', { entity_id: 'media_player.zone2', source: 'HEOS Music' });
-    expect(callService).toHaveBeenCalledWith('music_assistant', 'play_media', { entity_id: 'media_player.ma', media_id: 'spotify:track:1', media_type: 'track' });
+    await waitFor(() => expect(callService).toHaveBeenCalledWith('media_player', 'select_source', { entity_id: 'media_player.zone2', source: 'HEOS Music' }));
+    await waitFor(() => expect(callService).toHaveBeenCalledWith('music_assistant', 'play_media', { entity_id: 'media_player.ma', media_id: 'spotify:track:1', media_type: 'track' }));
     expect(conn.sendMessagePromise).toHaveBeenCalledWith(expect.objectContaining({ service: 'search', service_data: { config_entry_id: 'ma1', name: 'Beatles', limit: 5 } }));
   });
 });

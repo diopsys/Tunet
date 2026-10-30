@@ -1,11 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Music, Pause, Play, Power, Search, SkipBack, SkipForward, Speaker, Tv, Volume2, X,
 } from '../icons';
 import { getIconComponent } from '../icons';
 import AccessibleModalShell from '../components/ui/AccessibleModalShell';
-import { beideZonenAktionen, playAktionen } from '../components/cards/MedienCard';
+import { beideZonenAktionen, nacheinander, playAktionen } from '../components/cards/MedienCard';
+import useLautstaerke from './medien/useLautstaerke';
 
 /*
  * Medien-Fenster der Medien-Kachel mit den Reitern „Fernseher“, „Spotify“ und „Bibliothek“
@@ -72,9 +73,9 @@ export function satAktiv(tvCfg, entities) {
   return istAn(entities[sat.entity]) && (!sat.surroundQuelle || surround?.attributes?.source === sat.surroundQuelle);
 }
 
-const Knopf = ({ aktiv, onClick, children, label, klein }) => (
+const Knopf = ({ aktiv, onClick, children, label, klein, type = 'button' }) => (
   <button
-    type="button"
+    type={type}
     aria-label={label}
     aria-pressed={aktiv}
     onClick={onClick}
@@ -88,16 +89,13 @@ const Knopf = ({ aktiv, onClick, children, label, klein }) => (
 );
 
 const Lautstaerke = ({ entity, entityId, callService }) => {
-  const wert = Math.round((entity?.attributes?.volume_level ?? 0) * 100);
+  const setzen = useCallback((id, v) => callService('media_player', 'volume_set', { entity_id: id, volume_level: v }), [callService]);
+  const regler = useLautstaerke(entity, entityId, setzen);
   return (
     <label className="flex items-center gap-3">
       <Volume2 className="h-4 w-4 flex-shrink-0 text-[var(--text-muted)]" />
-      <input
-        type="range" min={0} max={100} step={1} value={wert} aria-label="Lautstärke"
-        onChange={(e) => callService('media_player', 'volume_set', { entity_id: entityId, volume_level: Number(e.target.value) / 100 })}
-        className="min-w-0 flex-1 accent-[var(--accent-color)]"
-      />
-      <span className="w-10 text-right text-xs text-[var(--text-muted)]">{wert} %</span>
+      <input type="range" min={0} max={100} step={1} aria-label="Lautstärke" className="min-w-0 flex-1 rounded accent-[var(--accent-color)] focus:ring-2 focus:ring-[var(--accent-color)] focus:outline-none" title="Lautstärke – Pfeiltasten" {...regler.props} />
+      <span className="w-10 text-right text-xs text-[var(--text-muted)]">{regler.wert} %</span>
     </label>
   );
 };
@@ -125,12 +123,17 @@ function FernseherReiter({ config, entities, callService, bild }) {
   const unter = sat
     ? [ja.media_series_title, ja.media_start_time && ja.media_end_time ? `${ja.media_start_time}–${ja.media_end_time}` : null].filter(Boolean).join(' · ')
     : !tvAn && satAn ? [satBox.attributes?.media_channel || satBox.attributes?.source, 'Fernseher aus'].filter(Boolean).join(' · ') : '';
+  // Quelle erst nach dem Einschalten wählen (je Gerät nacheinander, die Geräte parallel)
   const app = (a) => {
-    callService('media_player', 'turn_on', { entity_id: tvCfg.entity });
-    callService('media_player', 'select_source', { entity_id: tvCfg.entity, source: a.source });
+    nacheinander(callService, [
+      ['media_player', 'turn_on', { entity_id: tvCfg.entity }],
+      ['media_player', 'select_source', { entity_id: tvCfg.entity, source: a.source }],
+    ]);
     if (surround && tvCfg.surroundTvQuelle) {
-      callService('media_player', 'turn_on', { entity_id: tvCfg.surround });
-      callService('media_player', 'select_source', { entity_id: tvCfg.surround, source: tvCfg.surroundTvQuelle });
+      nacheinander(callService, [
+        ['media_player', 'turn_on', { entity_id: tvCfg.surround }],
+        ['media_player', 'select_source', { entity_id: tvCfg.surround, source: tvCfg.surroundTvQuelle }],
+      ]);
     }
   };
   const taste = (button) => callService('webostv', 'button', { entity_id: tvCfg.entity, button });
@@ -240,7 +243,7 @@ function JetztLaeuft({ config, entities, callService, bild, playerId }) {
   const player = playerId ? entities[playerId] : null;
   const pa = player?.attributes || {};
   const spielt = player?.state === 'playing';
-  const ruf = (aktionen) => aktionen.forEach(([d, s, data]) => callService(d, s, data));
+  const ruf = (aktionen) => nacheinander(callService, aktionen);
   return (
     <div className="flex items-center gap-4">
       <div className="flex h-20 w-20 flex-shrink-0 items-center justify-center overflow-hidden rounded-2xl" style={{ backgroundColor: 'var(--glass-bg-hover)' }}>
@@ -268,7 +271,7 @@ function Raum({ config, entities, callService }) {
   const zone = config.zone ? entities[config.zone] : null;
   if (!zone) return null;
   const raumQuellen = config.quellen.filter((q) => q.source || q.aus);
-  const ruf = (aktionen) => aktionen.forEach(([d, s, data]) => callService(d, s, data));
+  const ruf = (aktionen) => nacheinander(callService, aktionen);
   // „Beide Zonen“: Raum und Hauptzone (Surround) mit derselben Quelle
   const haupt = config.tv?.surround;
   const beideAn = haupt && istAn(zone) && istAn(entities[haupt]);
@@ -283,7 +286,7 @@ function Raum({ config, entities, callService }) {
           return (
             <Knopf key={q.name} aktiv={aktiv && !q.aus} onClick={() => (q.aus
               ? callService('media_player', 'turn_off', { entity_id: config.zone })
-              : (callService('media_player', 'turn_on', { entity_id: config.zone }), callService('media_player', 'select_source', { entity_id: config.zone, source: q.source })))}
+              : ruf([['media_player', 'turn_on', { entity_id: config.zone }], ['media_player', 'select_source', { entity_id: config.zone, source: q.source }]]))}
             >
               <Icon className="h-4 w-4" />{q.name}
             </Knopf>
@@ -300,12 +303,14 @@ function Raum({ config, entities, callService }) {
   );
 }
 
-// Raum einschalten und auf den Eingang des Players stellen (HEOS), damit nicht die Hauptzone angeht
+// Raum einschalten und auf den Eingang des Players stellen (HEOS), damit nicht die Hauptzone angeht;
+// fertig, wenn HA beides ausgeführt hat (erst dann abspielen)
 function raumVorbereiten(config, callService) {
-  if (config.zone && config.musik?.zoneQuelle) {
-    callService('media_player', 'turn_on', { entity_id: config.zone });
-    callService('media_player', 'select_source', { entity_id: config.zone, source: config.musik.zoneQuelle });
-  }
+  if (!config.zone || !config.musik?.zoneQuelle) return Promise.resolve();
+  return nacheinander(callService, [
+    ['media_player', 'turn_on', { entity_id: config.zone }],
+    ['media_player', 'select_source', { entity_id: config.zone, source: config.musik.zoneQuelle }],
+  ]);
 }
 
 function Suche({ onSuche }) {
@@ -317,7 +322,7 @@ function Suche({ onSuche }) {
         className="min-w-0 flex-1 rounded-xl border px-3 py-2 text-sm"
         style={{ backgroundColor: 'var(--glass-bg)', borderColor: 'var(--glass-border)', color: 'var(--text-primary)' }}
       />
-      <Knopf label="Suchen"><Search className="h-4 w-4" /></Knopf>
+      <Knopf type="submit" label="Suchen"><Search className="h-4 w-4" /></Knopf>
     </form>
   );
 }
@@ -358,16 +363,16 @@ function SpotifyReiter({ config, entities, callService, conn, bild }) {
   }, [conn, sp.entity, ansicht, listen]);
 
   const geraet = sp.geraet ? { device_id: sp.geraet } : {};
-  const abspielen = (item) => {
-    raumVorbereiten(config, callService);
+  const abspielen = async (item) => {
+    await raumVorbereiten(config, callService);
     if (item.media_type === 'track' || /^spotify:track:/.test(item.uri)) {
       callService('spotifyplus', 'player_media_play_tracks', { entity_id: sp.entity, uris: item.uri, ...geraet });
     } else {
       callService('spotifyplus', 'player_media_play_context', { entity_id: sp.entity, context_uri: item.uri, ...geraet });
     }
   };
-  const alleSongs = () => {
-    raumVorbereiten(config, callService);
+  const alleSongs = async () => {
+    await raumVorbereiten(config, callService);
     callService('spotifyplus', 'player_media_play_track_favorites', { entity_id: sp.entity, shuffle: true, ...geraet });
   };
   const suchen = async (text) => {
@@ -427,8 +432,8 @@ function MusikReiter({ config, entities, callService, conn, bild }) {
       setTreffer(ohneSpotify ? filtern(r, false) : r);
     } catch { setTreffer({}); }
   };
-  const abspielen = (item) => {
-    raumVorbereiten(config, callService);
+  const abspielen = async (item) => {
+    await raumVorbereiten(config, callService);
     callService('music_assistant', 'play_media', { entity_id: config.player, media_id: item.uri, media_type: item.media_type });
   };
 
