@@ -2,7 +2,7 @@ import { memo } from 'react';
 import { getIconComponent } from '../../icons';
 import { Activity, AlertTriangle, Clapperboard, Lock, RefreshCw } from '../../icons';
 import { Icon as MdiIcon } from '@mdi/react';
-import { mdiShieldHome, mdiShieldLock, mdiShieldOff, mdiTrashCan, mdiNewspaper, mdiDeleteVariant } from '@mdi/js';
+import { mdiShieldHome, mdiShieldLock, mdiShieldOff } from '@mdi/js';
 import { evaluateEntityCondition } from '../../utils/conditionUtils';
 import {
   applyPlayerNameDisplayFilter,

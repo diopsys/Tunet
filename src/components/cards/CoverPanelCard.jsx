@@ -67,10 +67,6 @@ const CoverTile = memo(({ entityId, name, entity, callService, isMobile, onOpen 
 
   const TileIcon = ArrowUpDown;
 
-  const open  = useCallback(() => callService('cover', 'open_cover',  { entity_id: entityId }), [entityId, callService]);
-  const close = useCallback(() => callService('cover', 'close_cover', { entity_id: entityId }), [entityId, callService]);
-  const stop  = useCallback(() => callService('cover', 'stop_cover',  { entity_id: entityId }), [entityId, callService]);
-
   // Smart toggle: moving → stop → next tap reverses direction
   const handleToggle = useCallback(() => {
     if (isUnavailable) return;
@@ -269,7 +265,7 @@ const BeschattungsStatusPanel = memo(({ entities, isMobile }) => {
 
         {/* Per-room status */}
         <div className="flex flex-col gap-1.5">
-          {BESCHATTUNGS_ROOMS.map(({ name, dir, azFrom, azTo, actor, sensorId }) => {
+          {BESCHATTUNGS_ROOMS.map(({ name, dir, azFrom, azTo, actor }) => {
             const { mValue, sValue } = getActorDiag(actor);
 
             const sunInRange = azimut !== null && elevation !== null
@@ -327,7 +323,7 @@ const GROUP_ACTIONS = {
 
 const ALL_ROLLADEN_ENTITY = 'cover.alle_rolladen';
 
-const GroupActionBar = memo(({ tabId, callService, isMobile }) => {
+const GroupActionBar = memo(({ tabId, callService }) => {
   const tabActions = GROUP_ACTIONS[tabId] || [];
   if (tabActions.length === 0) return null;
 
@@ -459,7 +455,7 @@ const CoverPanelCard = ({
           <BeschattungsStatusPanel entities={entities} isMobile={isMobile} />
         )}
         {!isAutomatikTab && (
-          <GroupActionBar tabId={resolvedActiveTabId} callService={callService} isMobile={isMobile} />
+          <GroupActionBar tabId={resolvedActiveTabId} callService={callService} />
         )}
         {tabEntities.map(({ entityId, name }) => {
           const entity = entities[entityId];

@@ -32,20 +32,6 @@ function fmtDuration(ms) {
   return m > 0 ? `${h}h ${m}m` : `${h}h`;
 }
 
-function fmtDateTime(date) {
-  return date.toLocaleString('de-DE', {
-    weekday: 'short',
-    day: '2-digit',
-    month: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
-
-function fmtTime(date) {
-  return date.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
-}
-
 function parseMowingSessions(histData) {
   if (!Array.isArray(histData) || histData.length === 0) return [];
   const sessions = [];

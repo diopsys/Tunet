@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { en, nb, nn, sv, de, zh, fr, es } from '../i18n';
+import { en, de, SUPPORTED_LANGUAGES, getLocaleForLanguage, normalizeLanguage } from '../i18n';
 
 const getPlaceholders = (value) => {
   const matches = String(value).match(/\{[^}]+\}/g) || [];
@@ -32,26 +32,20 @@ const expectParityWithEnglish = (targetTranslations, languageCode) => {
 };
 
 describe('i18n', () => {
-  it('exports supported translation objects including French and Chinese', () => {
-    expect(en).toBeDefined();
-    expect(nb).toBeDefined();
-    expect(nn).toBeDefined();
-    expect(sv).toBeDefined();
-    expect(de).toBeDefined();
-    expect(zh).toBeDefined();
-    expect(fr).toBeDefined();
-    expect(es).toBeDefined();
+  it('offers only English and German', () => {
+    expect(SUPPORTED_LANGUAGES).toEqual(['en', 'de']);
     expect(typeof en).toBe('object');
-    expect(typeof nb).toBe('object');
-    expect(typeof nn).toBe('object');
-    expect(typeof sv).toBe('object');
     expect(typeof de).toBe('object');
-    expect(typeof zh).toBe('object');
-    expect(typeof fr).toBe('object');
-    expect(typeof es).toBe('object');
   });
 
-  it('fan keys exist across all supported locales including German', () => {
+  it('falls back to English for removed languages', () => {
+    expect(normalizeLanguage('de')).toBe('de');
+    expect(normalizeLanguage('fr')).toBe('en');
+    expect(getLocaleForLanguage('de')).toBe('de-DE');
+    expect(getLocaleForLanguage('en')).toBe('en-US');
+  });
+
+  it('fan keys exist in English and German', () => {
     const fanKeys = [
       'addCard.available.fans',
       'addCard.item.fans',
@@ -70,7 +64,7 @@ describe('i18n', () => {
       'fan.turnOn',
     ];
 
-    const locales = { en, nb, nn, sv, de, fr, es };
+    const locales = { en, de };
     Object.entries(locales).forEach(([code, locale]) => {
       fanKeys.forEach((key) => {
         expect(locale[key], `${code}.json is missing fan key "${key}"`).toBeDefined();
@@ -79,35 +73,15 @@ describe('i18n', () => {
   });
 
   it('en is source-of-truth for key and placeholder parity', () => {
-    expectParityWithEnglish(nb, 'nb');
-    expectParityWithEnglish(nn, 'nn');
-    expectParityWithEnglish(sv, 'sv');
     expectParityWithEnglish(de, 'de');
-    expectParityWithEnglish(fr, 'fr');
-    expectParityWithEnglish(es, 'es');
   });
 
   it('no empty translation values', () => {
     for (const [key, value] of Object.entries(en)) {
       expect(value, `en.json key "${key}" is empty`).not.toBe('');
     }
-    for (const [key, value] of Object.entries(nb)) {
-      expect(value, `nb.json key "${key}" is empty`).not.toBe('');
-    }
-    for (const [key, value] of Object.entries(nn)) {
-      expect(value, `nn.json key "${key}" is empty`).not.toBe('');
-    }
-    for (const [key, value] of Object.entries(sv)) {
-      expect(value, `sv.json key "${key}" is empty`).not.toBe('');
-    }
     for (const [key, value] of Object.entries(de)) {
       expect(value, `de.json key "${key}" is empty`).not.toBe('');
-    }
-    for (const [key, value] of Object.entries(fr)) {
-      expect(value, `fr.json key "${key}" is empty`).not.toBe('');
-    }
-    for (const [key, value] of Object.entries(es)) {
-      expect(value, `es.json key "${key}" is empty`).not.toBe('');
     }
   });
 });

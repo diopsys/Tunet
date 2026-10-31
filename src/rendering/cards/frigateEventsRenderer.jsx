@@ -148,7 +148,6 @@ function FrigateClipModal({ event, proxyUrl, onClose }) {
 }
 
 const FrigateEventsCard = memo(function FrigateEventsCard({
-  cardId,
   dragProps,
   controls,
   cardStyle,

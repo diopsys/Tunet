@@ -214,7 +214,31 @@ describe('useSettingsSync', () => {
     });
   });
 
-  it('does not adopt server settings on bootstrap when local config exists', async () => {
+  it('applies a server dashboard on bootstrap even when local config exists', async () => {
+    collectSnapshot.mockReturnValue({
+      version: 1,
+      layout: { pagesConfig: { header: [], pages: ['home'], home: ['local-card'] } },
+      appearance: {},
+    });
+    const data = {
+      version: 1,
+      layout: { pagesConfig: { header: ['from-server'], pages: ['home'], home: [] } },
+      appearance: {},
+    };
+    fetchCurrentSettings.mockResolvedValue({
+      revision: 2,
+      updated_at: '2026-02-22T12:20:00.000Z',
+      data,
+    });
+
+    renderHook(() => useSettingsSync({ haUserId: 'user-1', contextSettersRef: { current: {} } }));
+
+    await waitFor(() => {
+      expect(applySnapshot).toHaveBeenCalledWith(data, {});
+    });
+  });
+
+  it('keeps local config on bootstrap when the server dashboard is empty', async () => {
     collectSnapshot.mockReturnValue({
       version: 1,
       layout: { pagesConfig: { header: [], pages: ['home'], home: ['local-card'] } },
@@ -225,7 +249,7 @@ describe('useSettingsSync', () => {
       updated_at: '2026-02-22T12:20:00.000Z',
       data: {
         version: 1,
-        layout: { pagesConfig: { header: ['from-server'], pages: ['home'], home: [] } },
+        layout: { pagesConfig: { header: [], pages: ['home'], home: [] } },
         appearance: {},
       },
     });

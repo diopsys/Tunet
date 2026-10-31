@@ -1,6 +1,6 @@
 name: 'Casa (diopsys)'
 description: 'Tunet von gorbi87 plus eigene, noch nicht gemergte Änderungen (Zweig casa)'
-version: "1.31.2-casa.2"
+version: "1.31.3-casa.1"
 slug: 'casa'
 url: 'https://github.com/diopsys/Tunet/tree/casa'
 init: false
