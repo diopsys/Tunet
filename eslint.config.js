@@ -22,6 +22,7 @@ export default [
         setInterval: 'readonly',
         clearInterval: 'readonly',
         fetch: 'readonly',
+        MouseEvent: 'readonly',
         navigator: 'readonly',
         localStorage: 'readonly',
         FileReader: 'readonly',

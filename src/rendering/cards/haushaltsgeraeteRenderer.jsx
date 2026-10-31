@@ -77,7 +77,6 @@ const DISHWASHER = {
 };
 
 const HaushaltsgeraeteCard = memo(function HaushaltsgeraeteCard({
-  cardId,
   dragProps,
   controls,
   cardStyle,

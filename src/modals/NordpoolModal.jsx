@@ -152,7 +152,7 @@ function parseHistoryPoints(raw) {
 }
 
 // Extract rising-value phases, merging gaps ≤ gapMs
-function extractRisingPhases(pts, gapMs = MERGE_GAP_MS) {
+function extractRisingPhases(pts, gapMs) {
   const events = [];
   for (let i = 1; i < pts.length; i++) {
     if (pts[i].val - pts[i - 1].val > 0.001)
@@ -312,7 +312,7 @@ function StateChip({ state, small = false }) {
   );
 }
 
-function FensterText({ state, v, entities, statusRaw }) {
+function FensterText({ state, v, entities }) {
   // No window info for pausiert or inaktiv
   if (state === 'pausiert' || state === 'inaktiv') {
     return state === 'inaktiv'
@@ -423,7 +423,7 @@ function VariantCard({ variant, entities, statusRaw }) {
         <StateChip state={state} />
       </div>
 
-      <FensterText state={state} v={variant.key} entities={entities} statusRaw={statusRaw} />
+      <FensterText state={state} v={variant.key} entities={entities} />
 
       <div>
         <p className="text-[9px] font-bold tracking-wide text-[var(--text-muted)] uppercase">Ersparnis</p>

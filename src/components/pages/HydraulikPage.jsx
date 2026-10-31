@@ -27,7 +27,7 @@ const E = {
   room: 'sensor.klima_durchschnittliche_temperatur_haus',
   st: 'sensor.daikin_heizung_dhw_tank_temp',
   sts: 'select.daikin_heizung_t_ww_soll1',
-  buh: 'binary_sensor.wp_heizstab_aktiv',
+  buhPower: 'sensor.daikin_3_r_ech2o_seriell_can_heizstab_speicher_leistung_live',
   defrost: 'binary_sensor.daikin_heizung_abtauvorgang',
   defrosts: 'sensor.abtauungen_heute',
   progStart: 'select.daikin_3_r_ech2o_seriell_can_ww_programm_beginn',
@@ -208,7 +208,8 @@ function HydraulikPage({ entities, isMobile = false }) {
   const mix = clamp((num('mix') ?? 0) / 100, 0, 1);
   const bp = clamp((num('bpv') ?? 100) / 100, 0, 1);
   const defrost = raw('defrost') === 'on';
-  const buh = raw('buh') === 'on';
+  const buhPower = num('buhPower') ?? 0;
+  const buh = buhPower > 0;
   const waterRuns = flow > 0;
   const refRuns = rpm > 0;
 
@@ -380,7 +381,7 @@ function HydraulikPage({ entities, isMobile = false }) {
               <text className="hyd-val" x="84" y="514">{deg(storageSet)}</text>
               <text className="hyd-lbl" x="196" y="494">Heizstab</text>
               <text className="hyd-val" x="196" y="514" style={buh ? { fill: 'var(--hyd-warn)' } : undefined}>
-                {buh ? 'An' : 'Aus'}
+                {buh ? `An · ${fmt(buhPower / 1000)} kW` : 'Aus'}
               </text>
               <text className="hyd-lbl" x="84" y="550">Ladeprogramm</text>
               <text className="hyd-val" x="84" y="570">{program.range}</text>

@@ -347,19 +347,6 @@ export default function SensorModal({
     };
   }, [isOpen, entityId, conn, haUrl, haToken, historyHours]);
 
-  if (!isOpen || !entity) return null;
-
-  const name = customName || attrs.friendly_name || entityId;
-  const unit = attrs.unit_of_measurement ? `${attrs.unit_of_measurement}` : '';
-  const deviceClass = attrs.device_class;
-  const effectiveUnitMode = getEffectiveUnitMode(unitsMode, haConfig);
-  const inferredUnitKind = inferUnitKind(deviceClass, unit);
-  // Determine if entity should show activity timeline and log
-  const hasActivity = shouldShowEntityActivity(domain, state, isNumeric);
-
-  const lastChanged = entity.last_changed ? new Date(entity.last_changed).toLocaleString() : '--';
-  const lastUpdated = entity.last_updated ? new Date(entity.last_updated).toLocaleString() : '--';
-
   // Sub-entity groups: when attrs.entity_id is a list of sensor IDs (HA group sensors)
   const subEntityGroups = useMemo(() => {
     if (!entities || !Array.isArray(attrs.entity_id)) return [];
@@ -377,6 +364,19 @@ export default function SensorModal({
       })
       .filter(Boolean);
   }, [entities, attrs.entity_id]);
+
+  if (!isOpen || !entity) return null;
+
+  const name = customName || attrs.friendly_name || entityId;
+  const unit = attrs.unit_of_measurement ? `${attrs.unit_of_measurement}` : '';
+  const deviceClass = attrs.device_class;
+  const effectiveUnitMode = getEffectiveUnitMode(unitsMode, haConfig);
+  const inferredUnitKind = inferUnitKind(deviceClass, unit);
+  // Determine if entity should show activity timeline and log
+  const hasActivity = shouldShowEntityActivity(domain, state, isNumeric);
+
+  const lastChanged = entity.last_changed ? new Date(entity.last_changed).toLocaleString() : '--';
+  const lastUpdated = entity.last_updated ? new Date(entity.last_updated).toLocaleString() : '--';
 
   const hasSubEntities = subEntityGroups.length > 0;
 

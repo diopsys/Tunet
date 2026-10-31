@@ -1,4 +1,3 @@
-import { useCallback } from 'react';
 import { Lock, Unlock, X, AlertTriangle } from '../icons';
 import AccessibleModalShell from '../components/ui/AccessibleModalShell';
 
@@ -20,8 +19,8 @@ export default function SecurityLockModal({ show, onClose, lockInfo, entities, c
 
   const isDoorOpen = contact?.state === 'on';
 
-  const lock   = useCallback(() => callService('lock', 'lock',   { entity_id: entityId }), [entityId, callService]);
-  const unlock = useCallback(() => callService('lock', 'unlock', { entity_id: entityId }), [entityId, callService]);
+  const lock   = () => callService('lock', 'lock',   { entity_id: entityId });
+  const unlock = () => callService('lock', 'unlock', { entity_id: entityId });
 
   const stateLabel = isUnavailable ? 'Nicht verfügbar'
     : isLocking    ? 'Sperrt…'

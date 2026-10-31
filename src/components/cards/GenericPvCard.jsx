@@ -183,9 +183,7 @@ const GenericPvCard = memo(function GenericPvCard({
   isMobile,
   isTwoColMobile = false,
   settings = {},
-  t,
 }) {
-  const translate = t || ((key) => key);
   const name = customNames?.[cardId] || 'Solar';
   const Icon = customIcons?.[cardId] ? getIconComponent(customIcons[cardId]) || Sun : Sun;
   const isUltraCompact = isTwoColMobile && settings.size !== 'small';

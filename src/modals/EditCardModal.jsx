@@ -755,7 +755,6 @@ export default function EditCardModal({
   isEditCar,
   isEditSpacer,
   isEditCamera,
-  isEditFrigateEvents,
   isEditRoom,
   isEditAndroidTV,
   isEditAppleTV,
@@ -2567,58 +2566,6 @@ export default function EditCardModal({
                     </button>
                   </div>
 
-                  {canControl && (
-                    <div className="flex items-center justify-between">
-                      <div className="flex flex-col">
-                        <span className="text-xs font-bold tracking-widest text-[var(--text-muted)] uppercase">
-                          {t('form.showControls')}
-                        </span>
-                        <span className="text-[10px] text-[var(--text-muted)]">{t('form.controlsHint')}</span>
-                      </div>
-                      <button
-                        onClick={() =>
-                          editSettingsKey &&
-                          saveCardSetting(
-                            editSettingsKey,
-                            'showControls',
-                            !editSettings.showControls
-                          )
-                        }
-                        className={`relative h-6 w-12 rounded-full transition-colors ${editSettings.showControls ? 'border border-[var(--glass-border)] bg-[var(--glass-bg-hover)]' : 'bg-[var(--glass-bg-hover)]'}`}
-                      >
-                        <div
-                          className={`absolute top-1 h-4 w-4 rounded-full bg-[var(--text-primary)] transition-all ${editSettings.showControls ? 'left-7' : 'left-1'}`}
-                        />
-                      </button>
-                    </div>
-                  )}
-
-                  {canGraph && (
-                    <div className="flex items-center justify-between">
-                      <div className="flex flex-col">
-                        <span className="text-xs font-bold tracking-widest text-[var(--text-muted)] uppercase">
-                          {t('form.showGraph')}
-                        </span>
-                        <span className="text-[10px] text-[var(--text-muted)]">{t('form.graphHint')}</span>
-                      </div>
-                      <button
-                        onClick={() =>
-                          editSettingsKey &&
-                          saveCardSetting(
-                            editSettingsKey,
-                            'showGraph',
-                            !(editSettings.showGraph !== false)
-                          )
-                        }
-                        className={`relative h-6 w-12 rounded-full transition-colors ${editSettings.showGraph !== false ? 'border border-[var(--glass-border)] bg-[var(--glass-bg-hover)]' : 'bg-[var(--glass-bg-hover)]'}`}
-                      >
-                        <div
-                          className={`absolute top-1 h-4 w-4 rounded-full bg-[var(--text-primary)] transition-all ${editSettings.showGraph !== false ? 'left-7' : 'left-1'}`}
-                        />
-                      </button>
-                    </div>
-                  )}
-
                   <div className="flex flex-col gap-1">
                     <span className="text-xs font-bold tracking-widest text-[var(--text-muted)] uppercase">
                       Begleit-Sensor
@@ -3010,6 +2957,16 @@ export default function EditCardModal({
                     </p>
                   </div>
                 </div>
+              )}
+
+              {isEditLightPanel && editSettingsKey && (
+                <LightPanelSettingsSection
+                  editSettings={editSettings}
+                  editSettingsKey={editSettingsKey}
+                  saveCardSetting={saveCardSetting}
+                  entities={entities}
+                  t={t}
+                />
               )}
 
               {isEditRoom && editSettingsKey && (

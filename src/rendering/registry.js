@@ -8,7 +8,6 @@ import {
   renderAutomationCard,
   renderCarCard,
   renderVacuumCard,
-  renderMowerCard,
   renderNavimowCard,
   renderFanCard,
   renderMediaPlayerCard,

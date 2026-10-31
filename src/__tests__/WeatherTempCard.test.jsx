@@ -43,7 +43,7 @@ describe('WeatherTempCard', () => {
         weatherEntityId="weather.home"
         editMode={false}
         isMobile={false}
-        language="nn"
+        language="de"
         onOpen={vi.fn()}
         t={(key) =>
           ({
@@ -88,7 +88,7 @@ describe('WeatherTempCard', () => {
     );
     expect(screen.getByText('Rivenes')).toHaveClass('line-clamp-2', 'text-left');
     expect(screen.getByText('Rivenes')).not.toHaveClass('truncate');
-    expect(screen.getByText('Delvis skya')).toHaveClass('text-[10px]', 'leading-none');
+    expect(screen.queryByText('Delvis skya')).not.toBeInTheDocument(); // Zustand-Pill zu breit für 2 Spalten
     expect(container.querySelector('[data-haptic]')).toHaveClass('weather-card-swipe-shell');
     expect(container.querySelector('[data-haptic]').className).not.toContain('active:scale');
   });

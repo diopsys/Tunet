@@ -43,8 +43,6 @@ export const LUFTUNGSANLAGE_ENTITY_IDS = {
   tempOg: 'sensor.luftqualitatssensor_temperature',
 };
 
-const ACCENT = '#38bdf8';
-
 function getCo2Color(ppm) {
   if (ppm == null) return 'var(--text-primary)';
   if (ppm < 800) return '#4ade80';

@@ -59,15 +59,6 @@ const WP_CFG = {
   wwFensterEnde:   '19:30',
 };
 
-const NAECHSTER_ZUSTAND = {
-  Standby:   `WW HEIZEN — wenn WW < ${WP_CFG.wwStart}°C + PV ≥ ${WP_CFG.pvStart}kW + im Fenster ${WP_CFG.wwFensterStart}–${WP_CFG.wwFensterEnde}`,
-  WW_Heizen: `WW BOOST — wenn WW ≥ 55°C`,
-  WW_Pause:  `WW HEIZEN — nach BOH-Pause (${WP_CFG.bohPause} min)`,
-  WW_Boost:  `WW FERTIG — wenn WW ≥ ${WP_CFG.wwFertig}°C`,
-  WW_Fertig: `KÜHLEN — wenn Raum ≥ ${WP_CFG.kuehlTemp}°C + PV ok`,
-  Kühlen:    `STANDBY — wenn PV < ${WP_CFG.kuehlPv}kW\noder WW HEIZEN — wenn WW < ${WP_CFG.wwStart}°C + im Fenster ${WP_CFG.wwFensterStart}–${WP_CFG.wwFensterEnde}`,
-};
-
 function buildLogBullets(reason, curState) {
   let processed = (reason || '').trim();
   let hvSubNote = null;
@@ -162,7 +153,6 @@ export default function WaermepumpeModal({
   const [heizstabMonatKwh, setHeizstabMonatKwh] = useState(null);
   const [wwHistory, setWwHistory] = useState([]);
   const [logHistory, setLogHistory] = useState([]);
-  const [wwHistoryOpen, setWwHistoryOpen] = useState(false);
   const [wwHistoryLoading, setWwHistoryLoading] = useState(false);
   const modalTitleId = 'waermepumpe-modal-title';
 
@@ -1392,9 +1382,6 @@ export default function WaermepumpeModal({
                       segs.push({ state: histAsc[i].state, startMs, endMs });
                     }
                   }
-
-                  // Build log rows (today, newest first = histAsc reversed)
-                  const todayRows = histAsc.filter(e => e.time.getTime() >= todayStart.getTime()).reverse();
 
                   return (
                     <div className="popup-surface rounded-2xl p-4 space-y-3">

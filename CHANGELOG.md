@@ -1,3 +1,18 @@
+## [1.31.3] — 2026-10-30
+
+### Added
+- Medien-Kachel für einen Raum mit Fenster und den Reitern Fernseher, Spotify und Bibliothek (#11, von diopsys)
+- Wärmepumpen-Seite: Heizstab im Speicher wird live über die CAN-Leistung erkannt und in kW angezeigt
+
+### Changed
+- Tunet gibt es nur noch auf Deutsch und Englisch; Geräte mit einer entfernten Sprache wechseln auf Englisch
+
+### Fixed
+- Bearbeiten-Dialog: Absturz bei Karten mit Status-Einstellungen behoben, die keine Sensor-Karten sind
+- Licht-Panel-Kachel: Einstellungen sind wieder im Bearbeiten-Dialog erreichbar
+- Sensor- und Schloss-Dialog: mögliche Abstürze durch falsche Hook-Reihenfolge behoben
+- Testsuite und ESLint sind wieder ohne Fehler
+
 ## [1.31.2] — 2026-10-25
 
 ### Added
