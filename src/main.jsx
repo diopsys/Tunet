@@ -8,28 +8,33 @@ import { ConfigProvider } from './contexts/ConfigContext';
 import { PageProvider } from './contexts/PageContext';
 import { ToastProvider } from './contexts/ToastContext';
 import ToastContainer from './components/ui/ToastContainer';
+import { isNewBuildAvailable, reloadWithGuard } from './utils/appUpdate';
 
 function isChunkLoadError(error) {
   const message = String(error?.message || error || '').toLowerCase();
   return (
     message.includes('failed to fetch dynamically imported module') ||
+    message.includes('error loading dynamically imported module') ||
     message.includes('importing a module script failed') ||
     message.includes('loading chunk')
   );
 }
 
-function reloadForChunkErrorOnce() {
+function reloadForChunkError() {
   if (globalThis.window === undefined) return;
-  const key = 'tunet_chunk_reload_once';
-  if (globalThis.sessionStorage.getItem(key) === '1') return;
-  globalThis.sessionStorage.setItem(key, '1');
-  globalThis.window.history.go(0);
+  reloadWithGuard();
 }
 
 if (globalThis.window !== undefined) {
   globalThis.window.addEventListener('unhandledrejection', (event) => {
     if (!isChunkLoadError(event?.reason)) return;
-    reloadForChunkErrorOnce();
+    reloadForChunkError();
+  });
+  // Zurück aus dem Hintergrund: läuft inzwischen ein neuer Build, sofort neu laden,
+  // bevor ein Klick ein Modal aus dem neuen Build nachlädt
+  globalThis.document.addEventListener('visibilitychange', async () => {
+    if (globalThis.document.visibilityState !== 'visible') return;
+    if (await isNewBuildAvailable()) reloadWithGuard();
   });
 }
 
@@ -46,8 +51,11 @@ class ErrorBoundary extends Component {
   componentDidCatch(error, errorInfo) {
     console.error('App Error:', error, errorInfo);
     if (isChunkLoadError(error)) {
-      reloadForChunkErrorOnce();
+      reloadForChunkError();
+      return;
     }
+    // Absturz nach einem Update (alter und neuer Build gemischt): neu laden statt Fehlerseite
+    isNewBuildAvailable().then((neu) => neu && reloadWithGuard());
   }
 
   render() {
