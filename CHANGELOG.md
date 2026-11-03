@@ -1,3 +1,15 @@
+## [1.31.5] — 2026-11-03
+
+### Added
+- Kalender-Fenster: Termine eintragen (ganztägig oder mit Uhrzeit) und löschen, bei Kalendern, die das unterstützen, z. B. Lokaler Kalender oder CalDAV (#14, von diopsys)
+- Müllabholung-Pill: eigene Sensoren und Vorlauf (Heute bis 7 Tage vorher) in den Einstellungen wählbar; ohne eigene Auswahl bleibt alles wie bisher (#13, von diopsys)
+
+### Changed
+- Müllabholung-Pill hat jetzt dieselben Maße wie die Gruppen-Pills (#13)
+
+### Fixed
+- Medien-Kachel: ein noch wartender Lautstärkewert geht an das Gerät, an dem er eingestellt wurde, auch wenn die Kachel inzwischen umschaltet (#12, von diopsys)
+
 ## [1.31.4] — 2026-11-03
 
 ### Fixed
