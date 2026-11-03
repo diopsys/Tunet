@@ -5,6 +5,8 @@ export {
   getStatistics,
   getForecast,
   getCalendarEvents,
+  getCalendarEventsWithIds,
+  deleteCalendarEvent,
   getTodoItems,
   addTodoItem,
   updateTodoItem,

@@ -1,6 +1,11 @@
 import { useState, useEffect } from 'react';
-import { X, Calendar, Check, ChevronDown, ChevronUp } from '../icons';
-import { getCalendarEvents } from '../services';
+import { X, Calendar, Check, ChevronDown, ChevronUp, Plus, Trash2 } from '../icons';
+import {
+  callService,
+  deleteCalendarEvent,
+  getCalendarEvents,
+  getCalendarEventsWithIds,
+} from '../services';
 import { getLocaleForLanguage } from '../i18n';
 import AccessibleModalShell from '../components/ui/AccessibleModalShell';
 
@@ -28,6 +33,13 @@ export default function CalendarModal({ show, onClose, conn, entities, language,
       name: entities[id]?.attributes?.friendly_name || id,
       color: getCalendarColor(id),
     }));
+  // Kalender, die Termine annehmen (CalendarEntityFeature.CREATE_EVENT)
+  const writableCalendars = allCalendars.filter(
+    (c) => (Number(entities[c.id]?.attributes?.supported_features) & 1) === 1
+  );
+  // … und solche, in denen man löschen darf (DELETE_EVENT)
+  const canDelete = (calendarId) =>
+    (Number(entities[calendarId]?.attributes?.supported_features) & 2) === 2;
 
   const [selectedCalendars, setSelectedCalendars] = useState(() => {
     const stored = localStorage.getItem('tunet_calendar_modal_selection');
@@ -44,9 +56,19 @@ export default function CalendarModal({ show, onClose, conn, entities, language,
   const [events, setEvents] = useState({});
   const [loading, setLoading] = useState(false);
   const [showCalendarPicker, setShowCalendarPicker] = useState(false);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
+  const [confirmDeleteKey, setConfirmDeleteKey] = useState(null);
+  const [deletingKey, setDeletingKey] = useState(null);
+  const [deleteError, setDeleteError] = useState('');
 
   useEffect(() => {
-    if (show) setShowCalendarPicker(false);
+    if (show) {
+      setShowCalendarPicker(false);
+      setShowAddForm(false);
+      setConfirmDeleteKey(null);
+      setDeleteError('');
+    }
   }, [show]);
 
   // Fetch events for selected calendars
@@ -77,7 +99,7 @@ export default function CalendarModal({ show, onClose, conn, entities, language,
     };
 
     fetchEvents();
-  }, [show, conn, selectedCalendars]);
+  }, [show, conn, selectedCalendars, reloadKey]);
 
   // Save selection to localStorage
   useEffect(() => {
@@ -93,6 +115,39 @@ export default function CalendarModal({ show, onClose, conn, entities, language,
     setSelectedCalendars((prev) =>
       prev.includes(calendarId) ? prev.filter((id) => id !== calendarId) : [...prev, calendarId]
     );
+  };
+
+  // Termin löschen: uid über calendar/event/subscribe nachschlagen, dann calendar/event/delete
+  const deleteEvent = async (event, key) => {
+    setDeletingKey(key);
+    setDeleteError('');
+    try {
+      const dayStart = new Date(isAllDayEvent(event) ? `${event.start}T00:00:00` : event.start);
+      dayStart.setHours(0, 0, 0, 0);
+      const dayEnd = new Date(dayStart);
+      dayEnd.setDate(dayEnd.getDate() + 1);
+      const candidates = await getCalendarEventsWithIds(conn, {
+        entityId: event.calendarId,
+        start: dayStart,
+        end: dayEnd,
+      });
+      const match = candidates.find(
+        (c) => c.uid && c.summary === event.summary && isSameStart(c.start, event.start)
+      );
+      if (!match) throw new Error('Event not found');
+      await deleteCalendarEvent(conn, {
+        entityId: event.calendarId,
+        uid: match.uid,
+        recurrenceId: match.recurrence_id,
+      });
+      setConfirmDeleteKey(null);
+      setReloadKey((k) => k + 1);
+    } catch (error) {
+      console.error('Failed to delete calendar event:', error);
+      setDeleteError(key);
+    } finally {
+      setDeletingKey(null);
+    }
   };
 
   // Group events by date
@@ -177,24 +232,37 @@ export default function CalendarModal({ show, onClose, conn, entities, language,
                 </p>
               </div>
             </div>
-            {allCalendars.length > 0 && (
-              <button
-                type="button"
-                onClick={() => setShowCalendarPicker((current) => !current)}
-                aria-expanded={showCalendarPicker}
-                aria-controls="calendar-picker-panel"
-                className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-[10px] font-bold tracking-widest uppercase transition-colors ${showCalendarPicker ? 'border-[var(--glass-border)] bg-[var(--glass-bg-hover)] text-[var(--text-primary)]' : 'border-[var(--glass-border)] bg-[var(--glass-bg)] text-[var(--text-secondary)] hover:bg-[var(--glass-bg-hover)] hover:text-[var(--text-primary)]'}`}
-              >
-                {showCalendarPicker
-                  ? translate('common.hide')
-                  : translate('calendar.selectCalendars')}
-                {showCalendarPicker ? (
-                  <ChevronUp className="h-3.5 w-3.5" />
-                ) : (
-                  <ChevronDown className="h-3.5 w-3.5" />
-                )}
-              </button>
-            )}
+            <div className="flex flex-wrap items-center gap-2">
+              {writableCalendars.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setShowAddForm((current) => !current)}
+                  aria-expanded={showAddForm}
+                  className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-[10px] font-bold tracking-widest uppercase transition-colors ${showAddForm ? 'border-[var(--glass-border)] bg-[var(--glass-bg-hover)] text-[var(--text-primary)]' : 'border-[var(--glass-border)] bg-[var(--glass-bg)] text-[var(--text-secondary)] hover:bg-[var(--glass-bg-hover)] hover:text-[var(--text-primary)]'}`}
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  {translate('calendar.addEvent')}
+                </button>
+              )}
+              {allCalendars.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setShowCalendarPicker((current) => !current)}
+                  aria-expanded={showCalendarPicker}
+                  aria-controls="calendar-picker-panel"
+                  className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-[10px] font-bold tracking-widest uppercase transition-colors ${showCalendarPicker ? 'border-[var(--glass-border)] bg-[var(--glass-bg-hover)] text-[var(--text-primary)]' : 'border-[var(--glass-border)] bg-[var(--glass-bg)] text-[var(--text-secondary)] hover:bg-[var(--glass-bg-hover)] hover:text-[var(--text-primary)]'}`}
+                >
+                  {showCalendarPicker
+                    ? translate('common.hide')
+                    : translate('calendar.selectCalendars')}
+                  {showCalendarPicker ? (
+                    <ChevronUp className="h-3.5 w-3.5" />
+                  ) : (
+                    <ChevronDown className="h-3.5 w-3.5" />
+                  )}
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Main Content */}
@@ -203,6 +271,24 @@ export default function CalendarModal({ show, onClose, conn, entities, language,
           >
             {/* Calendar Events */}
             <div className="scrollbar-hide min-h-0 overflow-y-auto pr-1 sm:pr-3">
+              {showAddForm && writableCalendars.length > 0 && (
+                <AddEventForm
+                  calendars={writableCalendars}
+                  defaultCalendarId={
+                    writableCalendars.find((c) => selectedCalendars.includes(c.id))?.id
+                  }
+                  conn={conn}
+                  translate={translate}
+                  onCancel={() => setShowAddForm(false)}
+                  onSaved={(calendarId) => {
+                    setShowAddForm(false);
+                    setSelectedCalendars((prev) =>
+                      prev.includes(calendarId) ? prev : [...prev, calendarId]
+                    );
+                    setReloadKey((key) => key + 1);
+                  }}
+                />
+              )}
               {loading ? (
                 <div className="flex items-center justify-center py-20">
                   <p className="text-sm tracking-widest text-[var(--text-secondary)] uppercase">
@@ -230,6 +316,8 @@ export default function CalendarModal({ show, onClose, conn, entities, language,
                             const startTime = new Date(event.start);
                             const isAllDay = isAllDayEvent(event);
                             const isPast = isEventFinishedToday(event);
+                            const eventKey = `${event.calendarId}|${event.start}|${event.summary}`;
+                            const confirming = confirmDeleteKey === eventKey;
 
                             return (
                               <div
@@ -275,7 +363,32 @@ export default function CalendarModal({ show, onClose, conn, entities, language,
                                       )}
                                     </div>
                                   )}
+                                  {deleteError === eventKey && (
+                                    <p className="mt-1 pl-[4.5rem] text-xs font-medium text-[var(--status-error-fg)]">
+                                      {translate('calendar.deleteFailed')}
+                                    </p>
+                                  )}
                                 </div>
+                                {canDelete(event.calendarId) && (
+                                  <button
+                                    type="button"
+                                    disabled={deletingKey === eventKey}
+                                    onClick={() =>
+                                      confirming
+                                        ? deleteEvent(event, eventKey)
+                                        : setConfirmDeleteKey(eventKey)
+                                    }
+                                    onBlur={() => {
+                                      if (confirming && deletingKey !== eventKey)
+                                        setConfirmDeleteKey(null);
+                                    }}
+                                    aria-label={translate('calendar.deleteEvent')}
+                                    className={`flex flex-shrink-0 items-center gap-1.5 self-center rounded-full px-2.5 py-1.5 text-[10px] font-bold tracking-widest uppercase transition-colors disabled:opacity-40 ${confirming ? 'bg-[var(--status-error-bg)] text-[var(--status-error-fg)]' : 'text-[var(--text-muted)] hover:bg-[var(--glass-bg-hover)] hover:text-[var(--text-primary)]'}`}
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                    {confirming && translate('calendar.confirmDelete')}
+                                  </button>
+                                )}
                               </div>
                             );
                           })}
@@ -364,6 +477,154 @@ export default function CalendarModal({ show, onClose, conn, entities, language,
       )}
     </AccessibleModalShell>
   );
+}
+
+const inputClass =
+  'w-full rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-[var(--accent-color)]';
+const labelClass =
+  'mb-1 block text-[10px] font-bold tracking-widest text-[var(--text-secondary)] uppercase opacity-70';
+
+// Termin über calendar.create_event anlegen (ganztägig oder mit Uhrzeit)
+function AddEventForm({ calendars, defaultCalendarId, conn, translate, onCancel, onSaved }) {
+  const [calendarId, setCalendarId] = useState(defaultCalendarId || calendars[0]?.id);
+  const [summary, setSummary] = useState('');
+  const [date, setDate] = useState(() => toDateString(new Date()));
+  const [allDay, setAllDay] = useState(true);
+  const [startTime, setStartTime] = useState('09:00');
+  const [endTime, setEndTime] = useState('10:00');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  const save = async (e) => {
+    e.preventDefault();
+    if (!summary.trim() || !date || !calendarId) return;
+    if (!allDay && endTime <= startTime) {
+      setError(translate('calendar.timeOrder'));
+      return;
+    }
+    const nextDay = new Date(`${date}T00:00:00`);
+    nextDay.setDate(nextDay.getDate() + 1);
+    const times = allDay
+      ? { start_date: date, end_date: toDateString(nextDay) }
+      : { start_date_time: `${date} ${startTime}:00`, end_date_time: `${date} ${endTime}:00` };
+    setSaving(true);
+    setError('');
+    try {
+      await callService(conn, 'calendar', 'create_event', {
+        target: { entity_id: calendarId },
+        summary: summary.trim(),
+        ...times,
+      });
+      onSaved(calendarId);
+    } catch {
+      setError(translate('calendar.saveFailed'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <form
+      onSubmit={save}
+      onKeyDown={(e) => e.stopPropagation()}
+      className="popup-surface mb-6 space-y-3 rounded-3xl border border-[var(--glass-border)] p-4"
+    >
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <label className="block">
+          <span className={labelClass}>{translate('calendar.eventTitle')}</span>
+          <input
+            type="text"
+            value={summary}
+            onChange={(e) => setSummary(e.target.value)}
+            required
+            autoFocus
+            className={inputClass}
+          />
+        </label>
+        <label className="block">
+          <span className={labelClass}>{translate('calendar.select.title')}</span>
+          <select
+            value={calendarId}
+            onChange={(e) => setCalendarId(e.target.value)}
+            className={inputClass}
+          >
+            {calendars.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="block">
+          <span className={labelClass}>{translate('calendar.eventDate')}</span>
+          <input
+            type="date"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+            required
+            className={inputClass}
+          />
+        </label>
+        <label className="flex items-center gap-2 self-end pb-2 text-sm text-[var(--text-primary)]">
+          <input type="checkbox" checked={allDay} onChange={(e) => setAllDay(e.target.checked)} />
+          {translate('calendar.allDay')}
+        </label>
+        {!allDay && (
+          <>
+            <label className="block">
+              <span className={labelClass}>{translate('calendar.eventStart')}</span>
+              <input
+                type="time"
+                value={startTime}
+                onChange={(e) => setStartTime(e.target.value)}
+                required
+                className={inputClass}
+              />
+            </label>
+            <label className="block">
+              <span className={labelClass}>{translate('calendar.eventEnd')}</span>
+              <input
+                type="time"
+                value={endTime}
+                onChange={(e) => setEndTime(e.target.value)}
+                required
+                className={inputClass}
+              />
+            </label>
+          </>
+        )}
+      </div>
+      {error && <p className="text-xs font-medium text-[var(--status-error-fg)]">{error}</p>}
+      <div className="flex justify-end gap-2">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="rounded-full border border-[var(--glass-border)] px-4 py-2 text-[10px] font-bold tracking-widest text-[var(--text-secondary)] uppercase hover:bg-[var(--glass-bg-hover)]"
+        >
+          {translate('common.cancel')}
+        </button>
+        <button
+          type="submit"
+          disabled={saving || !summary.trim()}
+          className="rounded-full bg-[var(--accent-color)] px-4 py-2 text-[10px] font-bold tracking-widest text-white uppercase disabled:opacity-40"
+        >
+          {translate('calendar.saveEvent')}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+// Beginn aus calendar.get_events und aus calendar/event/subscribe vergleichen
+function isSameStart(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string') return false;
+  const dateOnly = /^\d{4}-\d{2}-\d{2}$/;
+  if (dateOnly.test(a) || dateOnly.test(b)) return a === b;
+  return new Date(a).getTime() === new Date(b).getTime();
+}
+
+function toDateString(date) {
+  return date.toLocaleDateString('sv-SE');
 }
 
 function isAllDayEvent(event) {
