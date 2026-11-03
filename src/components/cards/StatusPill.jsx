@@ -18,6 +18,7 @@ import {
   inferUnitKind,
 } from '../../utils';
 import { getPillAnimationConfig } from '../../utils/statusPillPresentation';
+import { getWasteDaysAhead, isWasteDue } from '../../utils/wastePills';
 
 /**
  * Generic configurable status pill
@@ -620,7 +621,7 @@ const StatusPill = memo(/** @param {any} props */ function StatusPill({
   if (pill.type === 'waste_bin') {
     const bin = pill._wasteBin;
     const state = entity?.state;
-    if (!bin || !state || !['Heute', 'Morgen', 'in 2 Tagen'].includes(state)) return null;
+    if (!bin || !isWasteDue(state, getWasteDaysAhead(pill))) return null;
 
     const heightClass = iconOnly ? 'h-8 w-8' : isMobile ? 'h-8' : 'h-9';
     const paddingClass = iconOnly ? 'p-1.5 justify-center' : isMobile ? 'shrink-0 px-1.5 gap-1.5' : 'px-2.5 gap-2';
