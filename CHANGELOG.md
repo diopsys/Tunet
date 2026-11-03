@@ -1,3 +1,10 @@
+## [1.31.4] — 2026-11-03
+
+### Fixed
+- Kein „Something went wrong“ mehr beim Öffnen eines Dialogs, nachdem Tunet im Hintergrund war (HA-App oder Browser-Tab): Ist die Ingress-Sitzung abgelaufen, wartet Tunet, bis HA sie erneuert hat, und lädt den Dialog erneut
+- Läuft nach einem Add-on-Update noch die alte Version, lädt Tunet bei der Rückkehr aus dem Hintergrund automatisch neu, statt alte und neue Dateien zu mischen
+- Automatisches Neuladen bei Ladefehlern greift wieder nach 30 Sekunden statt nur einmal pro Sitzung
+
 ## [1.31.3] — 2026-10-30
 
 ### Added

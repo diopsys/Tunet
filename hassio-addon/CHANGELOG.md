@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.31.4
+
+### Fixed
+- No more "Something went wrong" when opening a dialog after Tunet was in the background (HA app or browser tab): if the ingress session expired, Tunet waits until HA renews it and loads the dialog again
+- If the old version is still running after an add-on update, Tunet reloads automatically when it returns from the background instead of mixing old and new files
+- Automatic reload on loading errors works again after 30 seconds instead of only once per session
+
 ## 1.31.3
 
 ### Added
