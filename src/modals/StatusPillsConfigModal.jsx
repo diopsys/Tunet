@@ -44,6 +44,7 @@ import {
   resolveStatusGroupCandidates,
   resolveStatusGroupPill,
 } from '../utils/statusGroupPills';
+import { DEFAULT_WASTE_BINS, getWasteDaysAhead } from '../utils/wastePills';
 
 const normalizePattern = (pattern) => pattern.trim();
 
@@ -1889,6 +1890,56 @@ export default function StatusPillsConfigModal({
                                   className="w-full rounded-xl border-0 bg-[var(--glass-bg)] px-3 py-2 font-mono text-xs text-[var(--text-primary)] outline-none"
                                 />
                                 <p className="text-[10px] text-[var(--text-muted)]">Eine Entity ID pro Zeile. Aktiv-Zustand: <code className="rounded bg-[var(--glass-bg)] px-1">{pill.activeState || 'on'}</code></p>
+                              </div>
+                            );
+                          })()}
+
+                          {/* Waste — bins and lead time */}
+                          {pill.type === 'waste' && (() => {
+                            const ids = Array.isArray(pill.entityIds) ? pill.entityIds : [];
+                            const rawVal = typeof pill._entityIdsRaw === 'string'
+                              ? pill._entityIdsRaw
+                              : ids.join('\n');
+                            const daysAhead = getWasteDaysAhead(pill);
+                            return (
+                              <div className="space-y-2">
+                                <label className="text-[10px] font-bold text-[var(--text-muted)] uppercase">
+                                  Müll-Sensoren
+                                </label>
+                                <textarea
+                                  value={rawVal}
+                                  onChange={(e) => {
+                                    const raw = e.target.value;
+                                    updatePill(pill.id, {
+                                      _entityIdsRaw: raw,
+                                      entityIds: raw.split('\n').map((s) => s.trim()).filter(Boolean),
+                                    });
+                                  }}
+                                  onKeyDown={(e) => e.stopPropagation()}
+                                  rows={4}
+                                  spellCheck={false}
+                                  placeholder={DEFAULT_WASTE_BINS.map((b) => b.entityId).join('\n')}
+                                  className="w-full rounded-xl border-0 bg-[var(--glass-bg)] px-3 py-2 font-mono text-xs text-[var(--text-primary)] outline-none"
+                                />
+                                <p className="text-[10px] text-[var(--text-muted)]">
+                                  Eine Entity ID pro Zeile, Name aus Home Assistant. Leer: {DEFAULT_WASTE_BINS.map((b) => b.name).join(', ')}.
+                                </p>
+                                <div className="flex items-center justify-between gap-2">
+                                  <label className="text-[10px] font-bold text-[var(--text-muted)] uppercase">
+                                    Anzeigen ab
+                                  </label>
+                                  <select
+                                    value={daysAhead}
+                                    onChange={(e) => updatePill(pill.id, { wasteDaysAhead: Number(e.target.value) })}
+                                    className="rounded-xl border-0 bg-[var(--glass-bg)] px-3 py-1.5 text-xs text-[var(--text-primary)] outline-none"
+                                  >
+                                    <option value={0}>Heute</option>
+                                    <option value={1}>1 Tag vorher</option>
+                                    {[2, 3, 4, 5, 6, 7].map((d) => (
+                                      <option key={d} value={d}>{d} Tage vorher</option>
+                                    ))}
+                                  </select>
+                                </div>
                               </div>
                             );
                           })()}
