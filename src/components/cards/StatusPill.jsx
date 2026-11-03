@@ -18,6 +18,7 @@ import {
   inferUnitKind,
 } from '../../utils';
 import { getPillAnimationConfig } from '../../utils/statusPillPresentation';
+import { getWasteDaysAhead, isWasteDue } from '../../utils/wastePills';
 
 /**
  * Generic configurable status pill
@@ -620,29 +621,30 @@ const StatusPill = memo(/** @param {any} props */ function StatusPill({
   if (pill.type === 'waste_bin') {
     const bin = pill._wasteBin;
     const state = entity?.state;
-    if (!bin || !state || !['Heute', 'Morgen', 'in 2 Tagen'].includes(state)) return null;
+    if (!bin || !isWasteDue(state, getWasteDaysAhead(pill))) return null;
 
-    const heightClass = iconOnly ? 'h-8 w-8' : isMobile ? 'h-8' : 'h-9';
-    const paddingClass = iconOnly ? 'p-1.5 justify-center' : isMobile ? 'shrink-0 px-1.5 gap-1.5' : 'px-2.5 gap-2';
+    // Maße wie die Gruppen-Pills (Symbol 1.4em wie die mdi:-Symbole dort)
+    const paddingClass = iconOnly ? 'p-1.5 justify-center' : isMobile ? 'shrink-0 px-1.5 py-0.5 gap-1.5' : 'px-2.5 py-1 gap-2';
     const iconPadding = isMobile ? 'p-1' : 'p-1.5';
+    const textSize = isMobile ? 'text-[11px]' : 'text-xs';
 
     return (
       <div
-        className={`flex items-center ${heightClass} ${paddingClass} rounded-2xl`}
+        className={`flex items-center ${paddingClass} rounded-2xl`}
         style={{ backgroundColor: 'rgba(255,255,255,0.03)' }}
       >
         <div
           className={`${iconPadding} rounded-xl flex-shrink-0`}
           style={{ backgroundColor: bin.iconBg }}
         >
-          <MdiIcon path={bin.mdiPath} size={isMobile ? 0.65 : 0.75} color={bin.color} />
+          <MdiIcon path={bin.mdiPath} size="1.4em" color={bin.color} />
         </div>
         {!iconOnly && (
           <div className="flex min-w-0 flex-col items-start">
-            <span className={`text-xs text-left leading-tight font-bold text-[var(--text-primary)] ${textMaxWidthClass} block w-full truncate`}>
+            <span className={`${textSize} text-left leading-tight font-bold text-[var(--text-primary)] ${textMaxWidthClass} block w-full truncate`}>
               {bin.name}
             </span>
-            <span className={`text-xs text-left font-medium text-[var(--text-muted)] ${textMaxWidthClass} block w-full truncate`}>
+            <span className={`${textSize} text-left font-medium italic text-[var(--text-muted)] ${textMaxWidthClass} block w-full truncate`}>
               {state}
             </span>
           </div>
