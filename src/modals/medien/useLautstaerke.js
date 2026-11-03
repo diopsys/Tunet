@@ -7,20 +7,25 @@ import { useCallback, useEffect, useRef, useState } from 'react';
  * langsam das Gerät ist. Beim Ziehen zeigt der Regler sofort den eigenen Wert und hält ihn,
  * bis das Gerät ihn meldet (oder nach `haltenMs`), statt auf alte Werte zurückzuspringen.
  */
-export const LAUTSTAERKE_MIN_ABSTAND_MS = 150;
+const LAUTSTAERKE_MIN_ABSTAND_MS = 150;
 const HAENGT_MS = 4000;
 
 export default function useLautstaerke(entity, entityId, setzen, { abstandMs = LAUTSTAERKE_MIN_ABSTAND_MS, haltenMs = 4000 } = {}) {
   const gemeldet = Math.round((entity?.attributes?.volume_level ?? 0) * 100);
   const [eigen, setEigen] = useState(null);
+  // offen: { id, wert } – das Gerät wird mit dem Wert gemerkt, damit ein wartender Wert nicht an ein
+  // anderes Gerät geht, wenn die Entität inzwischen wechselt (z. B. Kachel schaltet von Raum auf TV)
   const r = useRef({ unterwegs: false, offen: null, bis: 0, setzen, entityId });
   r.current.setzen = setzen;
   r.current.entityId = entityId;
 
+  // neues Gerät: dessen gemeldeten Wert zeigen statt des gehaltenen vom vorigen
+  useEffect(() => { setEigen(null); }, [entityId]);
+
   const weiter = useCallback(() => {
     const s = r.current;
     if (s.unterwegs || s.offen === null) return;
-    const wert = s.offen;
+    const { id, wert } = s.offen;
     s.offen = null;
     s.unterwegs = true;
     let fertig = false;
@@ -32,7 +37,7 @@ export default function useLautstaerke(entity, entityId, setzen, { abstandMs = L
     };
     // hängt ein Aufruf, nach HAENGT_MS trotzdem weitermachen
     const notfall = setTimeout(frei, HAENGT_MS);
-    Promise.resolve(s.setzen?.(s.entityId, wert / 100))
+    Promise.resolve(s.setzen?.(id, wert / 100))
       .catch(() => {})
       .finally(() => { clearTimeout(notfall); frei(); });
   }, [abstandMs]);
@@ -41,7 +46,7 @@ export default function useLautstaerke(entity, entityId, setzen, { abstandMs = L
     const s = r.current;
     setEigen(wert);
     s.bis = Date.now() + haltenMs;
-    s.offen = wert;
+    s.offen = { id: s.entityId, wert };
     weiter();
   }, [haltenMs, weiter]);
 
@@ -57,8 +62,6 @@ export default function useLautstaerke(entity, entityId, setzen, { abstandMs = L
   const wert = eigen ?? gemeldet;
   return {
     wert,
-    // um d Prozentpunkte ändern (Pfeiltasten, Winamp: ↑/↓ im Hauptfenster)
-    schritt: (d) => aendern(Math.max(0, Math.min(100, wert + d))),
     props: {
       value: wert,
       onChange: (e) => aendern(Number(e.target.value)),
