@@ -1,11 +1,18 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import CalendarModal from '../modals/CalendarModal';
-import { callService, getCalendarEvents } from '../services';
+import {
+  callService,
+  deleteCalendarEvent,
+  getCalendarEvents,
+  getCalendarEventsWithIds,
+} from '../services';
 
 vi.mock('../services', () => ({
   callService: vi.fn(),
+  deleteCalendarEvent: vi.fn(),
   getCalendarEvents: vi.fn(),
+  getCalendarEventsWithIds: vi.fn(),
 }));
 
 const entities = {
@@ -148,5 +155,49 @@ describe('CalendarModal', () => {
     await waitFor(() =>
       expect(screen.queryByLabelText('calendar.eventTitle')).not.toBeInTheDocument()
     );
+  });
+
+  it('deletes an event after confirmation using its uid', async () => {
+    getCalendarEvents.mockResolvedValue({
+      'calendar.verein': {
+        events: [{ summary: 'Papierabholung', start: '2026-11-14', end: '2026-11-15' }],
+      },
+    });
+    getCalendarEventsWithIds.mockResolvedValue([
+      { summary: 'Anderes', start: '2026-11-14', end: '2026-11-15', uid: 'x' },
+      { summary: 'Papierabholung', start: '2026-11-14', end: '2026-11-15', uid: 'abc' },
+    ]);
+    deleteCalendarEvent.mockResolvedValue({});
+    const writable = {
+      'calendar.verein': {
+        entity_id: 'calendar.verein',
+        state: 'off',
+        attributes: { friendly_name: 'Verein', supported_features: 7 },
+      },
+    };
+    render(
+      <CalendarModal
+        show
+        onClose={vi.fn()}
+        conn={{ sendMessagePromise: vi.fn() }}
+        entities={writable}
+        language="en"
+        t={(key) => key}
+      />
+    );
+
+    const deleteButton = await screen.findByRole('button', { name: 'calendar.deleteEvent' });
+    fireEvent.click(deleteButton);
+    expect(deleteCalendarEvent).not.toHaveBeenCalled();
+    fireEvent.click(deleteButton);
+
+    await waitFor(() =>
+      expect(deleteCalendarEvent).toHaveBeenCalledWith(expect.anything(), {
+        entityId: 'calendar.verein',
+        uid: 'abc',
+        recurrenceId: undefined,
+      })
+    );
+    await waitFor(() => expect(getCalendarEvents).toHaveBeenCalledTimes(2));
   });
 });

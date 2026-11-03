@@ -1,6 +1,11 @@
 import { useState, useEffect } from 'react';
-import { X, Calendar, Check, ChevronDown, ChevronUp, Plus } from '../icons';
-import { callService, getCalendarEvents } from '../services';
+import { X, Calendar, Check, ChevronDown, ChevronUp, Plus, Trash2 } from '../icons';
+import {
+  callService,
+  deleteCalendarEvent,
+  getCalendarEvents,
+  getCalendarEventsWithIds,
+} from '../services';
 import { getLocaleForLanguage } from '../i18n';
 import AccessibleModalShell from '../components/ui/AccessibleModalShell';
 
@@ -32,6 +37,9 @@ export default function CalendarModal({ show, onClose, conn, entities, language,
   const writableCalendars = allCalendars.filter(
     (c) => (Number(entities[c.id]?.attributes?.supported_features) & 1) === 1
   );
+  // … und solche, in denen man löschen darf (DELETE_EVENT)
+  const canDelete = (calendarId) =>
+    (Number(entities[calendarId]?.attributes?.supported_features) & 2) === 2;
 
   const [selectedCalendars, setSelectedCalendars] = useState(() => {
     const stored = localStorage.getItem('tunet_calendar_modal_selection');
@@ -50,11 +58,16 @@ export default function CalendarModal({ show, onClose, conn, entities, language,
   const [showCalendarPicker, setShowCalendarPicker] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+  const [confirmDeleteKey, setConfirmDeleteKey] = useState(null);
+  const [deletingKey, setDeletingKey] = useState(null);
+  const [deleteError, setDeleteError] = useState('');
 
   useEffect(() => {
     if (show) {
       setShowCalendarPicker(false);
       setShowAddForm(false);
+      setConfirmDeleteKey(null);
+      setDeleteError('');
     }
   }, [show]);
 
@@ -102,6 +115,39 @@ export default function CalendarModal({ show, onClose, conn, entities, language,
     setSelectedCalendars((prev) =>
       prev.includes(calendarId) ? prev.filter((id) => id !== calendarId) : [...prev, calendarId]
     );
+  };
+
+  // Termin löschen: uid über calendar/event/subscribe nachschlagen, dann calendar/event/delete
+  const deleteEvent = async (event, key) => {
+    setDeletingKey(key);
+    setDeleteError('');
+    try {
+      const dayStart = new Date(isAllDayEvent(event) ? `${event.start}T00:00:00` : event.start);
+      dayStart.setHours(0, 0, 0, 0);
+      const dayEnd = new Date(dayStart);
+      dayEnd.setDate(dayEnd.getDate() + 1);
+      const candidates = await getCalendarEventsWithIds(conn, {
+        entityId: event.calendarId,
+        start: dayStart,
+        end: dayEnd,
+      });
+      const match = candidates.find(
+        (c) => c.uid && c.summary === event.summary && isSameStart(c.start, event.start)
+      );
+      if (!match) throw new Error('Event not found');
+      await deleteCalendarEvent(conn, {
+        entityId: event.calendarId,
+        uid: match.uid,
+        recurrenceId: match.recurrence_id,
+      });
+      setConfirmDeleteKey(null);
+      setReloadKey((k) => k + 1);
+    } catch (error) {
+      console.error('Failed to delete calendar event:', error);
+      setDeleteError(key);
+    } finally {
+      setDeletingKey(null);
+    }
   };
 
   // Group events by date
@@ -270,6 +316,8 @@ export default function CalendarModal({ show, onClose, conn, entities, language,
                             const startTime = new Date(event.start);
                             const isAllDay = isAllDayEvent(event);
                             const isPast = isEventFinishedToday(event);
+                            const eventKey = `${event.calendarId}|${event.start}|${event.summary}`;
+                            const confirming = confirmDeleteKey === eventKey;
 
                             return (
                               <div
@@ -315,7 +363,32 @@ export default function CalendarModal({ show, onClose, conn, entities, language,
                                       )}
                                     </div>
                                   )}
+                                  {deleteError === eventKey && (
+                                    <p className="mt-1 pl-[4.5rem] text-xs font-medium text-[var(--status-error-fg)]">
+                                      {translate('calendar.deleteFailed')}
+                                    </p>
+                                  )}
                                 </div>
+                                {canDelete(event.calendarId) && (
+                                  <button
+                                    type="button"
+                                    disabled={deletingKey === eventKey}
+                                    onClick={() =>
+                                      confirming
+                                        ? deleteEvent(event, eventKey)
+                                        : setConfirmDeleteKey(eventKey)
+                                    }
+                                    onBlur={() => {
+                                      if (confirming && deletingKey !== eventKey)
+                                        setConfirmDeleteKey(null);
+                                    }}
+                                    aria-label={translate('calendar.deleteEvent')}
+                                    className={`flex flex-shrink-0 items-center gap-1.5 self-center rounded-full px-2.5 py-1.5 text-[10px] font-bold tracking-widest uppercase transition-colors disabled:opacity-40 ${confirming ? 'bg-[var(--status-error-bg)] text-[var(--status-error-fg)]' : 'text-[var(--text-muted)] hover:bg-[var(--glass-bg-hover)] hover:text-[var(--text-primary)]'}`}
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                    {confirming && translate('calendar.confirmDelete')}
+                                  </button>
+                                )}
                               </div>
                             );
                           })}
@@ -540,6 +613,14 @@ function AddEventForm({ calendars, defaultCalendarId, conn, translate, onCancel,
       </div>
     </form>
   );
+}
+
+// Beginn aus calendar.get_events und aus calendar/event/subscribe vergleichen
+function isSameStart(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string') return false;
+  const dateOnly = /^\d{4}-\d{2}-\d{2}$/;
+  if (dateOnly.test(a) || dateOnly.test(b)) return a === b;
+  return new Date(a).getTime() === new Date(b).getTime();
 }
 
 function toDateString(date) {

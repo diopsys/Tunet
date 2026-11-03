@@ -213,6 +213,61 @@ export async function getCalendarEvents(conn, { start, end, entityIds }) {
   return normalized;
 }
 
+/**
+ * Termine eines Kalenders samt uid/recurrence_id (calendar.get_events liefert keine uid).
+ * Nutzt calendar/event/subscribe und beendet das Abo nach der ersten Antwort.
+ */
+export function getCalendarEventsWithIds(conn, { entityId, start, end, timeoutMs = 10000 }) {
+  if (!conn || typeof conn.subscribeMessage !== 'function') {
+    return Promise.reject(new Error('Invalid or disconnected HA connection'));
+  }
+  return new Promise((resolve, reject) => {
+    let done = false;
+    let unsubscribePromise;
+    const finish = (settle) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      Promise.resolve(unsubscribePromise)
+        .then((unsubscribe) => unsubscribe?.())
+        .catch(() => {});
+      settle();
+    };
+    const timer = setTimeout(
+      () => finish(() => reject(new Error('Calendar subscription timed out'))),
+      timeoutMs
+    );
+    unsubscribePromise = conn.subscribeMessage(
+      (message) => {
+        if (message?.events === null) {
+          finish(() => reject(new Error('Calendar events unavailable')));
+        } else {
+          finish(() => resolve(message?.events || []));
+        }
+      },
+      {
+        type: 'calendar/event/subscribe',
+        entity_id: entityId,
+        start: start.toISOString(),
+        end: end.toISOString(),
+      }
+    );
+    Promise.resolve(unsubscribePromise).catch((error) => finish(() => reject(error)));
+  });
+}
+
+export function deleteCalendarEvent(conn, { entityId, uid, recurrenceId }) {
+  if (!conn || typeof conn.sendMessagePromise !== 'function') {
+    return Promise.reject(new Error('Invalid or disconnected HA connection'));
+  }
+  return conn.sendMessagePromise({
+    type: 'calendar/event/delete',
+    entity_id: entityId,
+    uid,
+    ...(recurrenceId ? { recurrence_id: recurrenceId } : {}),
+  });
+}
+
 // ─── Todo helpers ─────────────────────────────────────────────
 
 export async function getTodoItems(conn, entityId) {
