@@ -1,10 +1,11 @@
-import { lazy, memo, Suspense, useCallback, useState } from 'react';
+import { memo, Suspense, useCallback, useState } from 'react';
+import { lazyWithRetry } from '../../utils/appUpdate';
 import { Music, Pause, Play, Power, SkipBack, SkipForward, Volume2 } from '../../icons';
 import { getIconComponent } from '../../icons';
 import { openHaPath, safeHaUrl } from './HeizungCard';
 import useLautstaerke from '../../modals/medien/useLautstaerke';
 
-const MedienModal = lazy(() => import('../../modals/MedienModal'));
+const MedienModal = lazyWithRetry(() => import('../../modals/MedienModal'));
 
 /*
  * Medien-Kachel für einen Raum, vollständig über die Kartenoptionen belegt (settings.medien):

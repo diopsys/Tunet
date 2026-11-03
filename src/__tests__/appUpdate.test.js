@@ -1,5 +1,14 @@
 import { describe, expect, it, vi } from 'vitest';
-import { entryScriptFromHtml, isNewBuildAvailable, reloadWithGuard, RELOAD_GUARD_MS } from '../utils/appUpdate';
+import { createElement, Suspense } from 'react';
+import { render, screen } from '@testing-library/react';
+import {
+  entryScriptFromHtml,
+  isNewBuildAvailable,
+  lazyWithRetry,
+  reloadWithGuard,
+  RELOAD_GUARD_MS,
+  waitForServer,
+} from '../utils/appUpdate';
 
 const html = (hash) => `<html><head><script type="module" crossorigin src="./assets/index-${hash}.js"></script></head></html>`;
 const doc = (hash) => ({
@@ -35,5 +44,29 @@ describe('appUpdate', () => {
     expect(reloadWithGuard(s, 1_000_000 + 1_000, reload)).toBe(false);
     expect(reloadWithGuard(s, 1_000_000 + RELOAD_GUARD_MS + 1, reload)).toBe(true);
     expect(reload).toHaveBeenCalledTimes(2);
+  });
+
+  it('waits until the server answers again', async () => {
+    const fetchFn = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: false })
+      .mockRejectedValueOnce(new Error('offline'))
+      .mockResolvedValueOnce({ ok: true });
+    await expect(waitForServer(fetchFn, { timeoutMs: 1000, intervalMs: 1 })).resolves.toBe(true);
+    expect(fetchFn).toHaveBeenCalledTimes(3);
+    await expect(waitForServer(vi.fn(async () => ({ ok: false })), { timeoutMs: 5, intervalMs: 1 })).resolves.toBe(false);
+  });
+
+  it('retries a failed modal import once the server is reachable', async () => {
+    const factory = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError('Failed to fetch dynamically imported module: ./assets/X.js'))
+      .mockResolvedValueOnce({ default: () => createElement('p', null, 'Modal da') });
+    const waitFn = vi.fn(async () => true);
+    const Modal = lazyWithRetry(factory, waitFn);
+    render(createElement(Suspense, { fallback: null }, createElement(Modal)));
+    expect(await screen.findByText('Modal da')).toBeTruthy();
+    expect(waitFn).toHaveBeenCalledTimes(1);
+    expect(factory).toHaveBeenCalledTimes(2);
   });
 });

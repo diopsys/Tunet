@@ -1,12 +1,12 @@
-import { lazy } from 'react';
+import { lazyWithRetry } from '../../utils/appUpdate';
 import { ModalSuspense } from '../../components';
 import { themes } from '../../config/themes';
 import { validateUrl } from '../../config/onboarding';
 
-const ConfigModal = lazy(() => import('../../modals/ConfigModal'));
-const ThemeSidebar = lazy(() => import('../../components/sidebars/ThemeSidebar'));
-const LayoutSidebar = lazy(() => import('../../components/sidebars/LayoutSidebar'));
-const HeaderSidebar = lazy(() => import('../../components/sidebars/HeaderSidebar'));
+const ConfigModal = lazyWithRetry(() => import('../../modals/ConfigModal'));
+const ThemeSidebar = lazyWithRetry(() => import('../../components/sidebars/ThemeSidebar'));
+const LayoutSidebar = lazyWithRetry(() => import('../../components/sidebars/LayoutSidebar'));
+const HeaderSidebar = lazyWithRetry(() => import('../../components/sidebars/HeaderSidebar'));
 
 export function ModalSettingsSlice({
   core,

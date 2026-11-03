@@ -8,21 +8,11 @@ import { ConfigProvider } from './contexts/ConfigContext';
 import { PageProvider } from './contexts/PageContext';
 import { ToastProvider } from './contexts/ToastContext';
 import ToastContainer from './components/ui/ToastContainer';
-import { isNewBuildAvailable, reloadWithGuard } from './utils/appUpdate';
-
-function isChunkLoadError(error) {
-  const message = String(error?.message || error || '').toLowerCase();
-  return (
-    message.includes('failed to fetch dynamically imported module') ||
-    message.includes('error loading dynamically imported module') ||
-    message.includes('importing a module script failed') ||
-    message.includes('loading chunk')
-  );
-}
+import { isChunkLoadError, isNewBuildAvailable, reloadWhenReachable, reloadWithGuard } from './utils/appUpdate';
 
 function reloadForChunkError() {
   if (globalThis.window === undefined) return;
-  reloadWithGuard();
+  reloadWhenReachable();
 }
 
 if (globalThis.window !== undefined) {
