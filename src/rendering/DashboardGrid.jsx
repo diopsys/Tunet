@@ -1,15 +1,16 @@
-import { lazy, Suspense } from 'react';
+import { Suspense } from 'react';
+import { lazyWithRetry } from '../utils/appUpdate';
 import { LayoutGrid, Plus, UserCircle2 } from '../icons';
 import CardErrorBoundary from '../components/ui/CardErrorBoundary';
 import { formatDuration } from '../utils';
 import { buildGridLayout } from '../utils/gridLayout';
 
-const MediaPage = lazy(() => import('../components/pages/MediaPage'));
-const LightsPage = lazy(() => import('../components/pages/LightsPage'));
-const BatteryPage = lazy(() => import('../components/pages/BatteryPage'));
-const RoomExplorerPage = lazy(() => import('../components/pages/RoomExplorerPage'));
-const StundenplanPage = lazy(() => import('../components/pages/StundenplanPage'));
-const HydraulikPage = lazy(() => import('../components/pages/HydraulikPage'));
+const MediaPage = lazyWithRetry(() => import('../components/pages/MediaPage'));
+const LightsPage = lazyWithRetry(() => import('../components/pages/LightsPage'));
+const BatteryPage = lazyWithRetry(() => import('../components/pages/BatteryPage'));
+const RoomExplorerPage = lazyWithRetry(() => import('../components/pages/RoomExplorerPage'));
+const StundenplanPage = lazyWithRetry(() => import('../components/pages/StundenplanPage'));
+const HydraulikPage = lazyWithRetry(() => import('../components/pages/HydraulikPage'));
 
 const pageFallback = <div className="page-transition min-h-[40vh]" aria-hidden="true" />;
 

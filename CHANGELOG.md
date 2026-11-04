@@ -1,3 +1,22 @@
+## [1.31.5] — 2026-11-03
+
+### Added
+- Kalender-Fenster: Termine eintragen (ganztägig oder mit Uhrzeit) und löschen, bei Kalendern, die das unterstützen, z. B. Lokaler Kalender oder CalDAV (#14, von diopsys)
+- Müllabholung-Pill: eigene Sensoren und Vorlauf (Heute bis 7 Tage vorher) in den Einstellungen wählbar; ohne eigene Auswahl bleibt alles wie bisher (#13, von diopsys)
+
+### Changed
+- Müllabholung-Pill hat jetzt dieselben Maße wie die Gruppen-Pills (#13)
+
+### Fixed
+- Medien-Kachel: ein noch wartender Lautstärkewert geht an das Gerät, an dem er eingestellt wurde, auch wenn die Kachel inzwischen umschaltet (#12, von diopsys)
+
+## [1.31.4] — 2026-11-03
+
+### Fixed
+- Kein „Something went wrong“ mehr beim Öffnen eines Dialogs, nachdem Tunet im Hintergrund war (HA-App oder Browser-Tab): Ist die Ingress-Sitzung abgelaufen, wartet Tunet, bis HA sie erneuert hat, und lädt den Dialog erneut
+- Läuft nach einem Add-on-Update noch die alte Version, lädt Tunet bei der Rückkehr aus dem Hintergrund automatisch neu, statt alte und neue Dateien zu mischen
+- Automatisches Neuladen bei Ladefehlern greift wieder nach 30 Sekunden statt nur einmal pro Sitzung
+
 ## [1.31.3] — 2026-10-30
 
 ### Added

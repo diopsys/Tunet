@@ -1,15 +1,15 @@
-import { lazy } from 'react';
+import { lazyWithRetry } from '../../utils/appUpdate';
 import { ModalSuspense, getServerInfo } from '../../components';
 import { formatDuration } from '../../utils';
 import { buildRoomCardsPayload } from './roomCardUtils';
 
-const AddPageModal = lazy(() => import('../../modals/AddPageModal'));
-const AddCardContent = lazy(() => import('../../modals/AddCardContent'));
-const EditCardModal = lazy(() => import('../../modals/EditCardModal'));
-const EditPageModal = lazy(() => import('../../modals/EditPageModal'));
-const MediaModal = lazy(() => import('../../modals/MediaModal'));
-const StatusGroupPillModal = lazy(() => import('../../modals/StatusGroupPillModal'));
-const StatusPillsConfigModal = lazy(() => import('../../modals/StatusPillsConfigModal'));
+const AddPageModal = lazyWithRetry(() => import('../../modals/AddPageModal'));
+const AddCardContent = lazyWithRetry(() => import('../../modals/AddCardContent'));
+const EditCardModal = lazyWithRetry(() => import('../../modals/EditCardModal'));
+const EditPageModal = lazyWithRetry(() => import('../../modals/EditPageModal'));
+const MediaModal = lazyWithRetry(() => import('../../modals/MediaModal'));
+const StatusGroupPillModal = lazyWithRetry(() => import('../../modals/StatusGroupPillModal'));
+const StatusPillsConfigModal = lazyWithRetry(() => import('../../modals/StatusPillsConfigModal'));
 
 export function ModalManagementSlice({
   core,
