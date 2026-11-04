@@ -4,6 +4,7 @@ import {
   MEDIA_TICK_INTERVAL,
   INITIAL_FETCH_DELAY,
 } from '../config/constants';
+import { isIdleHeld, onIdleRelease } from '../utils/idleHold';
 
 /** @typedef {import('../types/dashboard').UseDashboardEffectsDeps} UseDashboardEffectsDeps */
 /** @typedef {import('../types/dashboard').UseDashboardEffectsResult} UseDashboardEffectsResult */
@@ -185,14 +186,19 @@ export function useDashboardEffects({
       clearTimeout(timer);
       if (!inactivityTimeout || inactivityTimeout <= 0) return;
       timer = setTimeout(() => {
+        // Kamera-Livebild o. Ä. sichtbar: nicht zurückspringen; die Wartezeit beginnt
+        // erst wieder, wenn der Halt endet (onIdleRelease)
+        if (isIdleHeld()) return;
         if (resetToHomeRef.current) resetToHomeRef.current();
       }, inactivityTimeout * 1000);
     };
     const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart', 'click'];
     events.forEach((e) => document.addEventListener(e, reset));
+    const stopReleaseListener = onIdleRelease(reset);
     reset();
     return () => {
       clearTimeout(timer);
+      stopReleaseListener();
       events.forEach((e) => document.removeEventListener(e, reset));
     };
   }, [inactivityTimeout]);

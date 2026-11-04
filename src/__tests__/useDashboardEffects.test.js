@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useDashboardEffects } from '../hooks/useDashboardEffects';
+import { acquireIdleHold } from '../utils/idleHold';
 import {
   ENTITY_UPDATE_INTERVAL,
   INITIAL_FETCH_DELAY,
@@ -152,6 +153,38 @@ describe('useDashboardEffects › inactivity timer', () => {
 
     // but after full 10s from last interaction it fires
     act(() => vi.advanceTimersByTime(2000));
+    expect(resetToHome).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not reset while an idle hold (e.g. live camera) is active', () => {
+    const resetToHome = vi.fn();
+    renderHook(() => useDashboardEffects(makeProps({ inactivityTimeout: 5, resetToHome })));
+
+    const release = acquireIdleHold();
+    act(() => vi.advanceTimersByTime(60_000));
+    expect(resetToHome).not.toHaveBeenCalled();
+
+    // after the hold ends the full timeout starts again
+    act(() => release());
+    act(() => vi.advanceTimersByTime(4000));
+    expect(resetToHome).not.toHaveBeenCalled();
+    act(() => vi.advanceTimersByTime(1000));
+    expect(resetToHome).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps holding until the last of several holds ends', () => {
+    const resetToHome = vi.fn();
+    renderHook(() => useDashboardEffects(makeProps({ inactivityTimeout: 5, resetToHome })));
+
+    const releaseA = acquireIdleHold();
+    const releaseB = acquireIdleHold();
+    act(() => releaseA());
+    act(() => releaseA()); // double release must not count twice
+    act(() => vi.advanceTimersByTime(30_000));
+    expect(resetToHome).not.toHaveBeenCalled();
+
+    act(() => releaseB());
+    act(() => vi.advanceTimersByTime(5000));
     expect(resetToHome).toHaveBeenCalledTimes(1);
   });
 });
