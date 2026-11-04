@@ -10,6 +10,7 @@ import {
 } from './musik';
 import useLautstaerke from './useLautstaerke';
 import './winamp.css';
+import { useIdleHold } from '../../utils/idleHold';
 
 /*
  * Musik-Reiter des Medien-Fensters im Winamp-Stil:
@@ -508,6 +509,8 @@ function MediaLibrary({ config, conn, raum, apiRef, suchRef, mehrfach, setMehrfa
 export default function WinampMusik({ config, entities, callService, conn, raum }) {
   // nacheinander: Quelle erst nach dem Einschalten, Abspielen erst nach der Quellenwahl
   const ruf = useCallback((aktionen) => nacheinander(callService, aktionen), [callService]);
+  // Offenes Winamp-Fenster hält den Rücksprung zur Startseite an
+  useIdleHold(true);
   const sp = config.musik?.spotify;
   const spE = sp?.entity ? entities[sp.entity] : null;
   // Spotify spielt auf dem Gerät des Raums → Spotify steuern und seine Warteschlange zeigen

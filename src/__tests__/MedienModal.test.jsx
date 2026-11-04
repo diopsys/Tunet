@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest';
 import MedienCard from '../components/cards/MedienCard';
 import { satAktiv } from '../modals/MedienModal';
+import { isIdleHeld } from '../utils/idleHold';
 import {
   auswahlKlick, ausblendenKonfig, blockSchieben, laufenderIndex, maAbspielen, ohneAuswahl, spAbspielen, spSpringen, spTitel, zeit,
 } from '../modals/medien/musik';
@@ -154,6 +155,18 @@ describe('Medien-Fenster', () => {
     expect(reihenfolge.indexOf('vol:0.5')).toBeGreaterThan(reihenfolge.indexOf('media_stop'));
     expect(reihenfolge.indexOf('vol:0.5')).toBeLessThan(reihenfolge.lastIndexOf('play_media'));
     fetchMedienPlaylist.mockResolvedValue({ items: [], index: 0 });
+  });
+
+  it('holds the return to the start page while the Winamp window is open', async () => {
+    const ents = { ...basis, 'media_player.tv': { state: 'off', attributes: {} }, 'media_player.vu': { state: 'off', attributes: {} } };
+    const r = render(<MedienCard cardId="m" entities={ents} settings={{ medien }} callService={vi.fn()} conn={{ sendMessagePromise: vi.fn(async () => ({ response: { items: [] } })) }} getEntityImageUrl={(u) => u} />);
+    expect(isIdleHeld()).toBe(false);
+    fireEvent.click(r.container.firstChild);
+    await screen.findByRole('dialog');
+    await waitFor(() => expect(document.querySelector('.wa-playlist')).not.toBeNull());
+    expect(isIdleHeld()).toBe(true);
+    r.unmount();
+    expect(isIdleHeld()).toBe(false);
   });
 
   it('saves the playlist under a name', async () => {
