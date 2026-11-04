@@ -62,6 +62,8 @@ export default function useLautstaerke(entity, entityId, setzen, { abstandMs = L
   const wert = eigen ?? gemeldet;
   return {
     wert,
+    // um d Prozentpunkte ändern (Pfeiltasten ↑/↓ im Winamp-Hauptfenster)
+    schritt: (d) => aendern(Math.max(0, Math.min(100, wert + d))),
     props: {
       value: wert,
       onChange: (e) => aendern(Number(e.target.value)),
