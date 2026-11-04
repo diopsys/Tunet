@@ -1,4 +1,5 @@
-import { useState, useMemo, useCallback, useEffect, lazy, Suspense } from 'react';
+import { useState, useMemo, useCallback, useEffect, Suspense } from 'react';
+import { lazyWithRetry } from './utils/appUpdate';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { en, de, DEFAULT_LANGUAGE, normalizeLanguage } from './i18n';
 import { LayoutGrid } from './icons';
@@ -49,7 +50,7 @@ import {
 } from './services/oauthStorage';
 import { scheduleLikelyModalPrefetch, scheduleModalPrefetch } from './utils/prefetchModals';
 
-const KameraLinkModal = lazy(() => import('./modals/CameraModal'));
+const KameraLinkModal = lazyWithRetry(() => import('./modals/CameraModal'));
 
 /** @typedef {import('./types/dashboard').AppContentProps} AppContentProps */
 

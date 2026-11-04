@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.31.5
+
+### Added
+- Calendar dialog: add events (all-day or timed) and delete them in calendars that support it, e.g. Local Calendar or CalDAV (#14, by diopsys)
+- Waste collection pill: choose your own sensors and lead time (today up to 7 days ahead) in its settings; without a selection nothing changes (#13, by diopsys)
+
+### Changed
+- Waste collection pill now has the same size as the group pills (#13)
+
+### Fixed
+- Media card: a pending volume value goes to the device it was set on, even if the card switches in the meantime (#12, by diopsys)
+
+## 1.31.4
+
+### Fixed
+- No more "Something went wrong" when opening a dialog after Tunet was in the background (HA app or browser tab): if the ingress session expired, Tunet waits until HA renews it and loads the dialog again
+- If the old version is still running after an add-on update, Tunet reloads automatically when it returns from the background instead of mixing old and new files
+- Automatic reload on loading errors works again after 30 seconds instead of only once per session
+
 ## 1.31.3
 
 ### Added
