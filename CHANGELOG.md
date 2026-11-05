@@ -1,3 +1,9 @@
+## [1.31.6] — 2026-11-05
+
+### Fixed
+- Karten aktualisieren sich nach der Rückkehr aus dem Hintergrund wieder: Tunet prüft die Verbindung zu Home Assistant jetzt auf allen Geräten (bisher nur unter 480 px Breite), auch bei Fokus und alle 30 Sekunden, und baut eine still abgebrochene Verbindung neu auf
+- Kein endloser Ladekreis mehr beim Öffnen eines Dialogs nach dem Hintergrund: Hängt das Nachladen, lädt Tunet die Seite neu; Anfragen an den Server haben ein Zeitlimit
+
 ## [1.31.5] — 2026-11-03
 
 ### Added
