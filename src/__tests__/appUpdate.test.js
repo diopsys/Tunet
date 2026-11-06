@@ -63,10 +63,20 @@ describe('appUpdate', () => {
       .mockRejectedValueOnce(new TypeError('Failed to fetch dynamically imported module: ./assets/X.js'))
       .mockResolvedValueOnce({ default: () => createElement('p', null, 'Modal da') });
     const waitFn = vi.fn(async () => true);
-    const Modal = lazyWithRetry(factory, waitFn);
+    const Modal = lazyWithRetry(factory, { waitFn });
     render(createElement(Suspense, { fallback: null }, createElement(Modal)));
     expect(await screen.findByText('Modal da')).toBeTruthy();
     expect(waitFn).toHaveBeenCalledTimes(1);
     expect(factory).toHaveBeenCalledTimes(2);
+  });
+
+  it('reloads instead of spinning forever when a modal import hangs', async () => {
+    const factory = vi.fn(() => new Promise(() => {}));
+    const reloadFn = vi.fn(async () => true);
+    const Modal = lazyWithRetry(factory, { reloadFn, timeoutMs: 10 });
+    render(createElement(Suspense, { fallback: createElement('p', null, 'lädt') }, createElement(Modal)));
+    await vi.waitFor(() => expect(reloadFn).toHaveBeenCalledTimes(1));
+    expect(factory).toHaveBeenCalledTimes(1);
+    expect(screen.getByText('lädt')).toBeTruthy();
   });
 });

@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.31.6
+
+### Fixed
+- Cards update again after returning from the background: Tunet now checks the Home Assistant connection on all devices (previously only below 480 px width), also on focus and every 30 seconds, and rebuilds a silently dropped connection
+- No more endless spinner when opening a dialog after the background: if loading hangs, Tunet reloads the page; server requests now have a timeout
+
 ## 1.31.5
 
 ### Added

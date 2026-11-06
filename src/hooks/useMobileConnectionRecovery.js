@@ -1,13 +1,12 @@
 import { useEffect, useRef } from 'react';
-import { MOBILE_BREAKPOINT } from '../config/constants';
 
 export const CONNECTION_PROBE_TIMEOUT_MS = 3000;
-
-export function isMobileViewport() {
-  return (
-    typeof globalThis.window !== 'undefined' && globalThis.window.innerWidth < MOBILE_BREAKPOINT
-  );
-}
+// Regelmäßige Prüfung, solange die Seite sichtbar ist: Nach dem Hintergrund (HA-App, Browser-Tab,
+// Laptop im Ruhezustand) bleibt der WebSocket oft halb offen. Er meldet keinen Abbruch, liefert
+// aber auch nichts mehr; Karten frieren ein und Dialoge warten ewig auf Antworten. Nicht jede
+// WebView meldet die Rückkehr per visibilitychange, deshalb zusätzlich dieser Takt.
+export const CONNECTION_HEARTBEAT_MS = 30_000;
+const RESUME_EVENTS = ['pageshow', 'online', 'focus'];
 
 export async function probeAndRecoverConnection(
   conn,
@@ -56,11 +55,7 @@ export function useMobileConnectionRecovery({ conn, onHealthy, onRecovering }) {
     }
 
     const recoverIfNeeded = () => {
-      if (
-        !isMobileViewport() ||
-        globalThis.document.visibilityState !== 'visible' ||
-        recoveryPromiseRef.current
-      ) {
+      if (globalThis.document.visibilityState !== 'visible' || recoveryPromiseRef.current) {
         return;
       }
 
@@ -77,13 +72,16 @@ export function useMobileConnectionRecovery({ conn, onHealthy, onRecovering }) {
     };
 
     globalThis.document.addEventListener('visibilitychange', recoverIfNeeded);
-    globalThis.window.addEventListener('pageshow', recoverIfNeeded);
-    globalThis.window.addEventListener('online', recoverIfNeeded);
+    // „resume“: Chrome/Android, wenn eine eingefrorene Seite weiterläuft
+    globalThis.document.addEventListener('resume', recoverIfNeeded);
+    RESUME_EVENTS.forEach((name) => globalThis.window.addEventListener(name, recoverIfNeeded));
+    const heartbeat = globalThis.setInterval(recoverIfNeeded, CONNECTION_HEARTBEAT_MS);
 
     return () => {
       globalThis.document.removeEventListener('visibilitychange', recoverIfNeeded);
-      globalThis.window.removeEventListener('pageshow', recoverIfNeeded);
-      globalThis.window.removeEventListener('online', recoverIfNeeded);
+      globalThis.document.removeEventListener('resume', recoverIfNeeded);
+      RESUME_EVENTS.forEach((name) => globalThis.window.removeEventListener(name, recoverIfNeeded));
+      globalThis.clearInterval(heartbeat);
       recoveryPromiseRef.current = null;
     };
   }, [conn, onHealthy, onRecovering]);

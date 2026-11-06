@@ -11,6 +11,15 @@ const ENTRY_PATTERN = /<script[^>]+type="module"[^>]+src="([^"]*assets\/index-[^
 const RELOAD_KEY = 'tunet_chunk_reload_at';
 export const RELOAD_GUARD_MS = 30_000;
 
+const REQUEST_TIMEOUT_MS = 5_000;
+
+// Mit Zeitlimit: Nach dem Hintergrund kann eine Anfrage über eine tote Verbindung sonst minutenlang hängen
+const requestOptions = () => ({
+  cache: 'no-store',
+  credentials: 'same-origin',
+  ...(typeof globalThis.AbortSignal?.timeout === 'function' ? { signal: globalThis.AbortSignal.timeout(REQUEST_TIMEOUT_MS) } : {}),
+});
+
 export function isChunkLoadError(error) {
   const message = String(error?.message || error || '').toLowerCase();
   return (
@@ -36,7 +45,7 @@ export async function isNewBuildAvailable(fetchFn = globalThis.fetch, doc = glob
   const current = currentEntryScript(doc);
   if (!current || typeof fetchFn !== 'function') return false;
   try {
-    const res = await fetchFn('./', { cache: 'no-store', credentials: 'same-origin' });
+    const res = await fetchFn('./', requestOptions());
     if (!res?.ok) return false; // z. B. abgelaufene Ingress-Sitzung: nichts entscheiden
     const latest = entryScriptFromHtml(await res.text());
     return Boolean(latest) && latest !== current;
@@ -66,7 +75,7 @@ export async function waitForServer(fetchFn = globalThis.fetch, { timeoutMs = 20
   const deadline = Date.now() + timeoutMs;
   for (;;) {
     try {
-      const res = await fetchFn('./', { cache: 'no-store', credentials: 'same-origin' });
+      const res = await fetchFn('./', requestOptions());
       if (res?.ok) return true;
     } catch {
       // offline oder Proxy noch nicht bereit
@@ -82,19 +91,48 @@ export async function reloadWhenReachable() {
   return reloadWithGuard();
 }
 
+export const IMPORT_TIMEOUT_MS = 10_000;
+
+class ImportTimeoutError extends Error {}
+
+const withTimeout = (promise, ms) => {
+  let timer;
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new ImportTimeoutError('Loading chunk timed out')), ms);
+    }),
+  ]).finally(() => clearTimeout(timer));
+};
+
 /**
- * Wie React.lazy, aber ein fehlgeschlagenes Nachladen wird nach Erholung des Servers
- * einmal wiederholt. React.lazy merkt sich sonst den Fehler, und das Modal bleibt bis
- * zum Neuladen der Seite kaputt.
+ * Wie React.lazy, aber robust nach Rückkehr aus dem Hintergrund:
+ * - Schlägt das Nachladen fehl, wird nach Erholung des Servers einmal wiederholt. React.lazy merkt
+ *   sich sonst den Fehler, und das Modal bleibt bis zum Neuladen der Seite kaputt.
+ * - Hängt das Nachladen (tote Verbindung), hilft kein zweiter Versuch, weil der Browser denselben
+ *   hängenden Import zurückgibt. Dann wird die Seite neu geladen statt ewig den Ladekreis zu zeigen.
  */
-export function lazyWithRetry(factory, waitFn = waitForServer) {
+export function lazyWithRetry(
+  factory,
+  { waitFn = waitForServer, reloadFn = reloadWhenReachable, timeoutMs = IMPORT_TIMEOUT_MS } = {}
+) {
+  const reloadOrFail = async (error) => {
+    if (await reloadFn()) return new Promise(() => {}); // Seite lädt neu, Ladekreis bleibt bis dahin
+    throw error;
+  };
   return lazy(async () => {
     try {
-      return await factory();
+      return await withTimeout(factory(), timeoutMs);
     } catch (error) {
+      if (error instanceof ImportTimeoutError) return reloadOrFail(error);
       if (!isChunkLoadError(error)) throw error;
       await waitFn();
-      return factory();
+      try {
+        return await withTimeout(factory(), timeoutMs);
+      } catch (retryError) {
+        if (retryError instanceof ImportTimeoutError) return reloadOrFail(retryError);
+        throw retryError;
+      }
     }
   });
 }
