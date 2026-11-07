@@ -79,4 +79,22 @@ describe('appUpdate', () => {
     expect(factory).toHaveBeenCalledTimes(1);
     expect(screen.getByText('lädt')).toBeTruthy();
   });
+
+  it('renews an expired ingress session while waiting for the server', async () => {
+    const fetchFn = vi.fn().mockResolvedValueOnce({ ok: false, status: 401 }).mockResolvedValueOnce({ ok: true });
+    const renewFn = vi.fn(async () => true);
+    await expect(waitForServer(fetchFn, { timeoutMs: 1000, intervalMs: 500, renewFn })).resolves.toBe(true);
+    expect(renewFn).toHaveBeenCalledTimes(1);
+    expect(fetchFn).toHaveBeenCalledTimes(2);
+  });
+
+  it('reloads when the retried import fails again (Safari keeps the failure)', async () => {
+    const fehler = () => new TypeError('Importing a module script failed.');
+    const factory = vi.fn().mockRejectedValueOnce(fehler()).mockRejectedValueOnce(fehler());
+    const reloadFn = vi.fn(async () => true);
+    const Modal = lazyWithRetry(factory, { waitFn: vi.fn(async () => true), reloadFn });
+    render(createElement(Suspense, { fallback: null }, createElement(Modal)));
+    await vi.waitFor(() => expect(reloadFn).toHaveBeenCalledTimes(1));
+    expect(factory).toHaveBeenCalledTimes(2);
+  });
 });
