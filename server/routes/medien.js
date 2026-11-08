@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import db from '../db.js';
-import { maAktiv, titelDauer } from '../utils/musicAssistant.js';
+import { genreAlben, genres, maAktiv, titelDauer } from '../utils/musicAssistant.js';
 
 /*
  * Playlist der Medien-Kachel (Winamp-Fenster) je Raum: die Liste, die gerade über Music
@@ -103,6 +103,28 @@ router.post('/dauer', async (req, res) => {
   if (!maAktiv()) return res.json({ aktiv: false, dauer: {} });
   const dauer = await titelDauer(uris);
   return res.json({ aktiv: true, dauer });
+});
+
+// Genres aus Music Assistant (Winamp: Lokale Bibliothek → Genres); ohne ma_token aktiv: false
+router.get('/genres', async (req, res) => {
+  if (!maAktiv()) return res.json({ aktiv: false, items: [] });
+  try {
+    const items = await genres({ suche: req.query.suche, offset: req.query.offset, limit: req.query.limit });
+    return res.json({ aktiv: true, items });
+  } catch {
+    return res.status(502).json({ error: 'Music Assistant nicht erreichbar' });
+  }
+});
+
+router.get('/genres/:id/alben', async (req, res) => {
+  if (!maAktiv()) return res.json({ aktiv: false, items: [] });
+  if (!/^[\w-]{1,64}$/.test(req.params.id)) return res.status(400).json({ error: 'Ungültige Genre-ID' });
+  try {
+    const items = await genreAlben(req.params.id, { offset: req.query.offset, limit: req.query.limit });
+    return res.json({ aktiv: true, items });
+  } catch {
+    return res.status(502).json({ error: 'Music Assistant nicht erreichbar' });
+  }
 });
 
 export default router;

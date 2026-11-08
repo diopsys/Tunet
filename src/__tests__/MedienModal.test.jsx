@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import MedienCard from '../components/cards/MedienCard';
 import { satAktiv } from '../modals/MedienModal';
@@ -6,7 +6,9 @@ import { isIdleHeld } from '../utils/idleHold';
 import {
   auswahlKlick, ausblendenKonfig, blockSchieben, dauerErgaenzen, fehlendeDauer, laufenderIndex, maAbspielen, ohneAuswahl, spAbspielen, spSpringen, spTitel, zeit,
 } from '../modals/medien/musik';
-import { fetchMedienDauer, fetchMedienPlaylist, saveMedienPlaylist } from '../services/settingsApi';
+import {
+  fetchMedienDauer, fetchMedienGenreAlben, fetchMedienGenres, fetchMedienPlaylist, saveMedienPlaylist,
+} from '../services/settingsApi';
 
 vi.mock('../services/settingsApi', () => ({
   fetchMedienPlaylist: vi.fn(async () => ({ items: [], index: 0 })),
@@ -14,6 +16,8 @@ vi.mock('../services/settingsApi', () => ({
   fetchMedienListen: vi.fn(async () => []),
   deleteMedienPlaylist: vi.fn(async () => ({})),
   fetchMedienDauer: vi.fn(async () => ({ aktiv: false, dauer: {} })),
+  fetchMedienGenres: vi.fn(async () => ({ aktiv: false, items: [] })),
+  fetchMedienGenreAlben: vi.fn(async () => ({ aktiv: false, items: [] })),
 }));
 
 const medien = {
@@ -322,6 +326,62 @@ describe('Medien-Fenster', () => {
     expect(await screen.findByText('Suche: Wise in Künstler')).toBeTruthy();
     expect(screen.queryByText('Wise Guys - Danke')).toBeNull();
     fetchMedienDauer.mockImplementation(async () => ({ aktiv: false, dauer: {} }));
+  });
+
+  it('browses genres: genre opens its albums, an album its tracks', async () => {
+    fetchMedienGenres.mockImplementation(async ({ suche } = {}) => ({
+      aktiv: true,
+      items: [{ id: '3', name: 'Rock', alben: 2 }, { id: '8', name: 'Reggae', alben: 1 }].filter((g) => !suche || g.name.includes(suche)),
+    }));
+    fetchMedienGenreAlben.mockImplementation(async () => ({
+      aktiv: true, items: [{ uri: 'library://album/4', name: 'Aqualung', artists: [{ name: 'Jethro Tull' }], media_type: 'album' }],
+    }));
+    const callService = vi.fn();
+    const gConn = {
+      sendMessagePromise: vi.fn(async (msg) => {
+        if (msg.type === 'media_player/browse_media') {
+          return { children: [{ media_content_id: 'library://track/40', title: 'Jethro Tull - Aqualung', media_class: 'track', can_expand: false }] };
+        }
+        return { response: { items: [] } };
+      }),
+    };
+    const ents = { ...basis, 'media_player.tv': { state: 'off', attributes: {} }, 'media_player.vu': { state: 'off', attributes: {} } };
+    const r = render(<MedienCard cardId="m" entities={ents} settings={{ medien }} callService={callService} conn={gConn} getEntityImageUrl={(u) => u} />);
+    fireEvent.click(r.container.firstChild);
+    await screen.findByRole('dialog');
+    fireEvent.click(await screen.findByRole('button', { name: 'Genres' }));
+    expect(await screen.findByText('Reggae')).toBeTruthy();
+    expect(screen.getByText('Genre · 2')).toBeTruthy();
+
+    // Suche im Ordner filtert die Genres
+    fireEvent.change(screen.getByLabelText('Musik suchen'), { target: { value: 'Ro' } });
+    expect(await screen.findByText('Suche: Ro in Genres')).toBeTruthy();
+    expect(screen.queryByText('Reggae')).toBeNull();
+
+    // „Play“ auf einem Genre öffnet es (abspielen lässt sich nur ein Titel)
+    fireEvent.click(screen.getByText('Rock'));
+    fireEvent.click(within(screen.getByRole('region', { name: 'Media Library' })).getByRole('button', { name: 'Abspielen (Enter)' }));
+    const album = await screen.findByText('Jethro Tull - Aqualung');
+    expect(fetchMedienGenreAlben).toHaveBeenCalledWith('3');
+    expect(callService.mock.calls.some(([d, s]) => d === 'music_assistant' && s === 'play_media')).toBe(false);
+    fireEvent.click(album);
+    fireEvent.click(screen.getByRole('button', { name: 'Öffnen' }));
+    await waitFor(() => expect(gConn.sendMessagePromise).toHaveBeenCalledWith(expect.objectContaining({ media_content_id: 'library://album/4' })));
+    const lib = within(screen.getByRole('region', { name: 'Media Library' }));
+    fireEvent.click(await lib.findByRole('button', { name: 'Zurück' }));
+    expect(await screen.findByText('Jethro Tull - Aqualung')).toBeTruthy();
+    fetchMedienGenres.mockImplementation(async () => ({ aktiv: false, items: [] }));
+    fetchMedienGenreAlben.mockImplementation(async () => ({ aktiv: false, items: [] }));
+  });
+
+  it('hides the genres without Music Assistant access on the server', async () => {
+    fetchMedienGenres.mockClear();
+    fetchMedienGenres.mockImplementation(async () => ({ aktiv: false, items: [] }));
+    oeffnen(vi.fn(), { ...basis, 'media_player.tv': { state: 'off', attributes: {} }, 'media_player.vu': { state: 'off', attributes: {} } });
+    await screen.findByRole('dialog');
+    await waitFor(() => expect(fetchMedienGenres).toHaveBeenCalled());
+    expect(await screen.findByRole('button', { name: 'Alben' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Genres' })).toBeNull();
   });
 
   it('opens an album without playing the track under the second click', async () => {
