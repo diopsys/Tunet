@@ -28,8 +28,16 @@ async function befehl(command, args, fetchFn) {
     body: JSON.stringify({ command, args }),
     signal: AbortSignal.timeout(ZEITLIMIT_MS),
   });
-  if (!res.ok) throw new Error(`Music Assistant ${res.status}`);
-  return res.json();
+  if (!res.ok) {
+    // Fehlertext von Music Assistant mitgeben (für Log und Anzeige), gekürzt
+    const text = await res.text?.().catch(() => '') ?? '';
+    throw new Error(`Music Assistant ${res.status}${text ? `: ${String(text).slice(0, 300)}` : ''}`);
+  }
+  const daten = await res.json();
+  if (daten && typeof daten === 'object' && !Array.isArray(daten) && daten.error_code !== undefined) {
+    throw new Error(`Music Assistant ${daten.error_code}: ${String(daten.details ?? daten.error ?? '').slice(0, 300)}`);
+  }
+  return daten;
 }
 
 function merken(uri, sekunden) {
@@ -90,7 +98,15 @@ const liste = (r) => (Array.isArray(r) ? r : Array.isArray(r?.items) ? r.items :
 export async function genres({ suche, offset, limit } = {}, fetchFn = fetch) {
   const args = { media_type: 'album', limit: ganz(limit, 200, MAX_SEITE), offset: ganz(offset, 0, 1e6) };
   if (typeof suche === 'string' && suche.trim()) args.search = suche.trim().slice(0, 100);
-  const items = liste(await sortiert('music/genres/library_items', args, fetchFn))
+  let antwort;
+  try {
+    antwort = await sortiert('music/genres/library_items', args, fetchFn);
+  } catch {
+    // Rückfall: alle Genres statt nur der mit Alben
+    const { media_type: _ohne, ...rest } = args;
+    antwort = await sortiert('music/genres/library_items', rest, fetchFn);
+  }
+  const items = liste(antwort)
     .filter((g) => g?.item_id !== undefined && g?.name)
     .map((g) => ({ id: String(g.item_id), name: String(g.name) }));
   let zahlen = {};

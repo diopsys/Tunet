@@ -111,8 +111,9 @@ router.get('/genres', async (req, res) => {
   try {
     const items = await genres({ suche: req.query.suche, offset: req.query.offset, limit: req.query.limit });
     return res.json({ aktiv: true, items });
-  } catch {
-    return res.status(502).json({ error: 'Music Assistant nicht erreichbar' });
+  } catch (err) {
+    console.warn(`[medien] Genres aus Music Assistant: ${err.message}`);
+    return res.json({ aktiv: true, items: [], fehler: err.message });
   }
 });
 
@@ -122,8 +123,9 @@ router.get('/genres/:id/alben', async (req, res) => {
   try {
     const items = await genreAlben(req.params.id, { offset: req.query.offset, limit: req.query.limit });
     return res.json({ aktiv: true, items });
-  } catch {
-    return res.status(502).json({ error: 'Music Assistant nicht erreichbar' });
+  } catch (err) {
+    console.warn(`[medien] Alben eines Genres aus Music Assistant: ${err.message}`);
+    return res.json({ aktiv: true, items: [], fehler: err.message });
   }
 });
 

@@ -374,6 +374,15 @@ describe('Medien-Fenster', () => {
     fetchMedienGenreAlben.mockImplementation(async () => ({ aktiv: false, items: [] }));
   });
 
+  it('shows the error of Music Assistant in the genre folder', async () => {
+    fetchMedienGenres.mockImplementation(async () => ({ aktiv: true, items: [], fehler: 'Music Assistant 400: invalid media_type' }));
+    oeffnen(vi.fn(), { ...basis, 'media_player.tv': { state: 'off', attributes: {} }, 'media_player.vu': { state: 'off', attributes: {} } });
+    await screen.findByRole('dialog');
+    fireEvent.click(await screen.findByRole('button', { name: 'Genres' }));
+    expect(await screen.findByText('Fehler: Music Assistant 400: invalid media_type')).toBeTruthy();
+    fetchMedienGenres.mockImplementation(async () => ({ aktiv: false, items: [] }));
+  });
+
   it('hides the genres without Music Assistant access on the server', async () => {
     fetchMedienGenres.mockClear();
     fetchMedienGenres.mockImplementation(async () => ({ aktiv: false, items: [] }));

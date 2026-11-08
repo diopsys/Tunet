@@ -88,6 +88,21 @@ describe('Genres', () => {
     expect(JSON.parse(fetchFn.mock.calls[0][1].body).args.limit).toBe(500);
   });
 
+  it('falls back to all genres and reports the error text of Music Assistant', async () => {
+    vi.stubEnv('MA_TOKEN', 'geheim');
+    const fehler = { ok: false, status: 400, text: async () => 'invalid media_type' };
+    const nurOhneArt = vi.fn(async (url, opts) => {
+      const { command, args } = JSON.parse(opts.body);
+      if (command === 'music/genres/library_items') return args.media_type ? fehler : antwort([{ item_id: 2, name: 'Pop' }]);
+      return antwort({});
+    });
+    expect(await genres({}, nurOhneArt)).toEqual([{ id: '2', name: 'Pop', alben: null }]);
+    const immer = vi.fn(async () => antwort({ error_code: 999, details: 'kaputt' }));
+    await expect(genres({}, immer)).rejects.toThrow('Music Assistant 999: kaputt');
+    const http = vi.fn(async () => fehler);
+    await expect(genres({}, http)).rejects.toThrow('Music Assistant 400: invalid media_type');
+  });
+
   it('returns the albums of a genre in the shape of the HA services', async () => {
     vi.stubEnv('MA_TOKEN', 'geheim');
     const fetchFn = vi.fn(async (url, opts) => {

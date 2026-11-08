@@ -371,7 +371,7 @@ function MediaLibrary({ config, conn, raum, apiRef, suchRef, mehrfach, setMehrfa
         const r = await fetchMedienGenres({ offset, limit: SEITE });
         const items = (r?.items || []).map(genreZeile);
         setAnsicht((alt) => ({
-          titel: GENRES[1], quelle: 'ma', kontext: null, ordner: key,
+          titel: GENRES[1], quelle: 'ma', kontext: null, ordner: key, fehler: r?.fehler || null,
           items: offset && alt?.ordner === key ? [...alt.items, ...items] : items,
           mehr: items.length === SEITE ? offset + SEITE : null,
         }));
@@ -439,7 +439,7 @@ function MediaLibrary({ config, conn, raum, apiRef, suchRef, mehrfach, setMehrfa
         if (aktuell()) zeigen({ titel, quelle, ordner, kontext: null, items, mehr: null });
       } else if (ordner === GENRES[0]) {
         const r = await fetchMedienGenres({ suche: q, limit: SEITE });
-        if (aktuell()) zeigen({ titel, quelle, ordner, kontext: null, items: (r?.items || []).map(genreZeile), mehr: null });
+        if (aktuell()) zeigen({ titel, quelle, ordner, kontext: null, items: (r?.items || []).map(genreZeile), mehr: null, fehler: r?.fehler || null });
       } else if (quelle === 'spotify') {
         const arten = SP_ART[ordner] ? [SP_ART[ordner]] : ALLE_ARTEN;
         const r = await spDienst(conn, 'search_all', { entity_id: sp.entity, criteria: q, criteria_type: arten.join(','), limit_total: arten.length > 1 ? 20 : 50 });
@@ -489,10 +489,12 @@ function MediaLibrary({ config, conn, raum, apiRef, suchRef, mehrfach, setMehrfa
     try {
       let items = [];
       let kontext = null;
+      let fehler = null;
       if (item.media_type === 'gespeichert') {
         items = await gespeicherteLaden(item.uri);
       } else if (item.media_type === 'genre') {
         const r = await fetchMedienGenreAlben(item.genreId);
+        fehler = r?.fehler || null;
         items = (r?.items || []).map(maTitel).filter((t) => t && !(sp?.entity && istSpotifyUri(t.uri)));
       } else if (item.quelle === 'spotify') {
         const id = idAus(item.uri);
@@ -511,7 +513,7 @@ function MediaLibrary({ config, conn, raum, apiRef, suchRef, mehrfach, setMehrfa
         items = await aufklappen(conn, config.player, item);
       }
       setStapel((s) => [...s, ansicht]);
-      setAnsicht({ titel: [item.artist, item.name].filter(Boolean).join(' - '), quelle: item.quelle, kontext, items, mehr: null });
+      setAnsicht({ titel: [item.artist, item.name].filter(Boolean).join(' - '), quelle: item.quelle, kontext, items, mehr: null, fehler });
       geoeffnetUm.current = Date.now();
       setWahl({ auswahl: [], anker: -1 });
       setLoeschen(null);
@@ -594,7 +596,8 @@ function MediaLibrary({ config, conn, raum, apiRef, suchRef, mehrfach, setMehrfa
           </div>
           <div className="wa-lcd wa-liste" role="listbox" aria-label="Media Library" aria-multiselectable="true">
             {laedt && <div className="wa-hinweis">Lädt …</div>}
-            {!laedt && items.length === 0 && <div className="wa-hinweis">{ansicht?.ordner === MEINE[0] ? 'Noch keine – im Playlist Editor „Save“.' : 'Nichts gefunden.'}</div>}
+            {!laedt && items.length === 0 && ansicht?.fehler && <div className="wa-hinweis">Fehler: {ansicht.fehler}</div>}
+            {!laedt && items.length === 0 && !ansicht?.fehler && <div className="wa-hinweis">{ansicht?.ordner === MEINE[0] ? 'Noch keine – im Playlist Editor „Save“.' : 'Nichts gefunden.'}</div>}
             {items.map((t, i) => (
               <Zeile key={`${t.uri}-${i}`} item={t} gewaehlt={auswahl.includes(i)} onWaehlen={(e) => klick(e, i)} onSpielen={() => doppelklick(i)} />
             ))}
