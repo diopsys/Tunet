@@ -7,7 +7,7 @@ import {
   auswahlKlick, ausblendenKonfig, blockSchieben, dauerErgaenzen, fehlendeDauer, laufenderIndex, maAbspielen, ohneAuswahl, spAbspielen, spSpringen, spTitel, zeit,
 } from '../modals/medien/musik';
 import {
-  fetchMedienDauer, fetchMedienGenreAlben, fetchMedienGenres, fetchMedienPlaylist, saveMedienPlaylist,
+  fetchMedienDauer, fetchMedienGenreAlben, fetchMedienGenreTitel, fetchMedienGenres, fetchMedienPlaylist, saveMedienPlaylist,
 } from '../services/settingsApi';
 
 vi.mock('../services/settingsApi', () => ({
@@ -18,6 +18,7 @@ vi.mock('../services/settingsApi', () => ({
   fetchMedienDauer: vi.fn(async () => ({ aktiv: false, dauer: {} })),
   fetchMedienGenres: vi.fn(async () => ({ aktiv: false, items: [] })),
   fetchMedienGenreAlben: vi.fn(async () => ({ aktiv: false, items: [] })),
+  fetchMedienGenreTitel: vi.fn(async () => ({ aktiv: false, items: [] })),
 }));
 
 const medien = {
@@ -363,6 +364,7 @@ describe('Medien-Fenster', () => {
     fireEvent.click(within(screen.getByRole('region', { name: 'Media Library' })).getByRole('button', { name: 'Abspielen (Enter)' }));
     const album = await screen.findByText('Jethro Tull - Aqualung');
     expect(fetchMedienGenreAlben).toHaveBeenCalledWith('3');
+    expect(fetchMedienGenreTitel).toHaveBeenCalledWith('3');
     expect(callService.mock.calls.some(([d, s]) => d === 'music_assistant' && s === 'play_media')).toBe(false);
     fireEvent.click(album);
     fireEvent.click(screen.getByRole('button', { name: 'Öffnen' }));
@@ -372,6 +374,44 @@ describe('Medien-Fenster', () => {
     expect(await screen.findByText('Jethro Tull - Aqualung')).toBeTruthy();
     fetchMedienGenres.mockImplementation(async () => ({ aktiv: false, items: [] }));
     fetchMedienGenreAlben.mockImplementation(async () => ({ aktiv: false, items: [] }));
+  });
+
+  it('lists the tracks of a genre below its albums and loads more', async () => {
+    fetchMedienGenres.mockImplementation(async () => ({ aktiv: true, items: [{ id: '3', name: 'Rock', alben: 1 }] }));
+    fetchMedienGenreAlben.mockImplementation(async () => ({
+      aktiv: true, items: [{ uri: 'library://album/4', name: 'Aqualung', artists: [{ name: 'Jethro Tull' }], media_type: 'album' }],
+    }));
+    const seite = Array.from({ length: 500 }, (_, i) => ({
+      uri: `library://track/${i}`, name: `Titel ${i}`, artists: [{ name: 'Band' }], duration: 200, media_type: 'track',
+    }));
+    fetchMedienGenreTitel.mockImplementation(async (id, offset = 0) => ({
+      aktiv: true, items: offset ? [{ uri: 'library://track/999', name: 'Letzter', artists: [{ name: 'Band' }], duration: 61, media_type: 'track' }] : seite,
+    }));
+    const callService = vi.fn();
+    const ents = { ...basis, 'media_player.tv': { state: 'off', attributes: {} }, 'media_player.vu': { state: 'off', attributes: {} } };
+    const r = render(<MedienCard cardId="m" entities={ents} settings={{ medien }} callService={callService} conn={conn} getEntityImageUrl={(u) => u} />);
+    fireEvent.click(r.container.firstChild);
+    await screen.findByRole('dialog');
+    fireEvent.click(await screen.findByRole('button', { name: 'Genres' }));
+    fireEvent.click(await screen.findByText('Rock'));
+    fireEvent.click(screen.getByText('Rock'));
+    expect(await screen.findByText('Band - Titel 0')).toBeTruthy();
+    const lib = within(screen.getByRole('region', { name: 'Media Library' }));
+    const zeilen = lib.getAllByRole('button').map((b) => b.textContent);
+    expect(zeilen.findIndex((t) => t.includes('Aqualung'))).toBeLessThan(zeilen.findIndex((t) => t.includes('Titel 0')));
+    expect(lib.getAllByText('3:20').length).toBe(500);
+    fireEvent.click(lib.getByText('… weitere laden'));
+    expect(await lib.findByText('Band - Letzter')).toBeTruthy();
+    expect(fetchMedienGenreTitel).toHaveBeenLastCalledWith('3', 500);
+    expect(lib.queryByText('… weitere laden')).toBeNull();
+    const jetzt = Date.now();
+    const uhr = vi.spyOn(Date, 'now').mockReturnValue(jetzt + 1000);
+    fireEvent.doubleClick(lib.getByText('Band - Titel 1'));
+    uhr.mockRestore();
+    await waitFor(() => expect(callService).toHaveBeenCalledWith('music_assistant', 'play_media', expect.objectContaining({ media_id: expect.arrayContaining(['library://track/1']) })));
+    fetchMedienGenres.mockImplementation(async () => ({ aktiv: false, items: [] }));
+    fetchMedienGenreAlben.mockImplementation(async () => ({ aktiv: false, items: [] }));
+    fetchMedienGenreTitel.mockImplementation(async () => ({ aktiv: false, items: [] }));
   });
 
   it('shows the error of Music Assistant in the genre folder', async () => {

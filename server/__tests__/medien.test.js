@@ -2,7 +2,9 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { playlistBereinigen } from '../routes/medien.js';
-import { cacheLeeren, genreAlben, genres, gueltigeUri, titelDauer } from '../utils/musicAssistant.js';
+import {
+  cacheLeeren, genreAlben, genreTitel, genres, gueltigeUri, titelDauer,
+} from '../utils/musicAssistant.js';
 
 describe('playlistBereinigen', () => {
   it('keeps only titles with an uri and the known fields', () => {
@@ -101,6 +103,23 @@ describe('Genres', () => {
     await expect(genres({}, immer)).rejects.toThrow('Music Assistant 999: kaputt');
     const http = vi.fn(async () => fehler);
     await expect(genres({}, http)).rejects.toThrow('Music Assistant 400: invalid media_type');
+  });
+
+  it('returns the tracks of a genre with their length', async () => {
+    vi.stubEnv('MA_TOKEN', 'geheim');
+    const fetchFn = vi.fn(async (url, opts) => {
+      const { command, args } = JSON.parse(opts.body);
+      expect(command).toBe('music/genres/tracks');
+      expect(args).toMatchObject({ item_id: '3', offset: 500, limit: 500 });
+      return antwort([
+        { uri: 'library://track/9', name: 'Locomotive Breath', duration: 263, artists: [{ name: 'Jethro Tull' }] },
+        { uri: 'library://track/10', name: 'Ohne Länge', duration: 0, artists: [] },
+      ]);
+    });
+    expect(await genreTitel('3', { offset: '500' }, fetchFn)).toEqual([
+      { uri: 'library://track/9', name: 'Locomotive Breath', artists: [{ name: 'Jethro Tull' }], duration: 263, media_type: 'track' },
+      { uri: 'library://track/10', name: 'Ohne Länge', artists: [], duration: null, media_type: 'track' },
+    ]);
   });
 
   it('returns the albums of a genre in the shape of the HA services', async () => {
