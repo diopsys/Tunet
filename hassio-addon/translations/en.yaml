@@ -1,1 +1,11 @@
-configuration: {}
+configuration:
+  ma_url:
+    name: Music Assistant URL
+    description: >-
+      Optional. Address of the Music Assistant server for track lengths in the media tile.
+      Empty = http://172.30.32.1:8095 (Music Assistant app on the same Home Assistant host).
+  ma_token:
+    name: Music Assistant token
+    description: >-
+      Optional. Long-lived token from Music Assistant (Settings → Profile). Needed for the
+      track lengths in the media tile's Winamp window.

@@ -1,0 +1,11 @@
+configuration:
+  ma_url:
+    name: Music-Assistant-Adresse
+    description: >-
+      Optional. Adresse des Music-Assistant-Servers für die Titellängen der Medien-Kachel.
+      Leer = http://172.30.32.1:8095 (Music-Assistant-App auf demselben Home-Assistant-Host).
+  ma_token:
+    name: Music-Assistant-Token
+    description: >-
+      Optional. Langlebiger Token aus Music Assistant (Einstellungen → Profil). Nötig für die
+      Titellängen im Winamp-Fenster der Medien-Kachel.

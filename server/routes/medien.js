@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import db from '../db.js';
+import { maAktiv, titelDauer } from '../utils/musicAssistant.js';
 
 /*
  * Playlist der Medien-Kachel (Winamp-Fenster) je Raum: die Liste, die gerade über Music
@@ -15,6 +16,13 @@ const besitzer = (req) => (process.env.HA_TOKEN ? '__shared__' : req.authenticat
 // Schlüssel: Kachel-ID für die laufende Playlist, „<Kachel-ID>/listen/<Name>“ für gespeicherte
 const gueltigerRaum = (raum) => typeof raum === 'string' && raum.length > 0 && raum.length <= 240;
 const LISTEN = '/listen/';
+const MAX_DAUER_URIS = 200;
+
+// Länge in Sekunden; fehlt sie (früher als 0 gespeichert), null
+function dauerWert(d) {
+  const n = d === null || d === '' ? NaN : Number(d);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
 
 /** Eingehende Playlist auf das Nötige beschränken (Titel, Position). */
 export function playlistBereinigen(body) {
@@ -25,7 +33,7 @@ export function playlistBereinigen(body) {
       uri: t.uri,
       name: typeof t.name === 'string' ? t.name : '',
       artist: typeof t.artist === 'string' ? t.artist : '',
-      dauer: Number.isFinite(Number(t.dauer)) ? Number(t.dauer) : null,
+      dauer: dauerWert(t.dauer),
       media_type: typeof t.media_type === 'string' ? t.media_type : 'track',
     }));
   const index = Number.isInteger(body?.index) && body.index >= 0 && body.index < items.length ? body.index : 0;
@@ -87,6 +95,14 @@ router.get('/listen', (req, res) => {
     })
     .sort((a, b) => a.name.localeCompare(b.name, 'de'));
   return res.json(listen);
+});
+
+// Längen von Titeln aus Music Assistant (die HA-Dienste liefern keine); ohne ma_token leer
+router.post('/dauer', async (req, res) => {
+  const uris = Array.isArray(req.body?.uris) ? req.body.uris.slice(0, MAX_DAUER_URIS) : [];
+  if (!maAktiv()) return res.json({ aktiv: false, dauer: {} });
+  const dauer = await titelDauer(uris);
+  return res.json({ aktiv: true, dauer });
 });
 
 export default router;

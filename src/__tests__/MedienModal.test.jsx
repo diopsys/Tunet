@@ -4,15 +4,16 @@ import MedienCard from '../components/cards/MedienCard';
 import { satAktiv } from '../modals/MedienModal';
 import { isIdleHeld } from '../utils/idleHold';
 import {
-  auswahlKlick, ausblendenKonfig, blockSchieben, laufenderIndex, maAbspielen, ohneAuswahl, spAbspielen, spSpringen, spTitel, zeit,
+  auswahlKlick, ausblendenKonfig, blockSchieben, dauerErgaenzen, fehlendeDauer, laufenderIndex, maAbspielen, ohneAuswahl, spAbspielen, spSpringen, spTitel, zeit,
 } from '../modals/medien/musik';
-import { fetchMedienPlaylist, saveMedienPlaylist } from '../services/settingsApi';
+import { fetchMedienDauer, fetchMedienPlaylist, saveMedienPlaylist } from '../services/settingsApi';
 
 vi.mock('../services/settingsApi', () => ({
   fetchMedienPlaylist: vi.fn(async () => ({ items: [], index: 0 })),
   saveMedienPlaylist: vi.fn(async () => ({})),
   fetchMedienListen: vi.fn(async () => []),
   deleteMedienPlaylist: vi.fn(async () => ({})),
+  fetchMedienDauer: vi.fn(async () => ({ aktiv: false, dauer: {} })),
 }));
 
 const medien = {
@@ -107,6 +108,32 @@ describe('Medien-Fenster', () => {
     expect(spAbspielen(cfg, [{ uri: 'spotify:track:1' }, { uri: 'spotify:track:2' }], 0).at(-1)[2].uris).toBe('spotify:track:1,spotify:track:2');
     expect(spSpringen(cfg, 2)).toHaveLength(2);
     expect(laufenderIndex(items, { attributes: { media_title: 'drei' } }, 0)).toBe(2);
+  });
+
+  it('switches the room to the player input only when needed', async () => {
+    const items = [{ uri: 'library://track/1', name: 'Eins' }];
+    const zone = (state, source) => ({ 'media_player.zone2': { state, attributes: { source } } });
+    const dienste = (ents) => maAbspielen(medien, items, 0, ents).map(([, s]) => s);
+    expect(dienste(zone('off'))).toEqual(['turn_on', 'select_source', 'play_media']);
+    expect(dienste(zone('on', 'Phono'))).toEqual(['turn_on', 'select_source', 'play_media']);
+    expect(dienste(zone('on', 'HEOS Music'))).toEqual(['play_media']);
+    // HEOS heißt in der Hauptzone „NET“ – derselbe Eingang
+    expect(dienste(zone('on', 'NET'))).toEqual(['play_media']);
+  });
+
+  it('fills in missing track lengths from Music Assistant', async () => {
+    const items = [
+      { uri: 'library://track/1', dauer: null },
+      { uri: 'library://track/2', dauer: 0 },
+      { uri: 'library://track/3', dauer: 180 },
+      { uri: 'spotify:track:4', dauer: null },
+      { uri: 'library://album/5', media_type: 'album', dauer: null },
+      { uri: 'library://track/1', dauer: null },
+    ];
+    expect(fehlendeDauer(items)).toEqual(['library://track/1', 'library://track/2']);
+    const neu = dauerErgaenzen(items, { 'library://track/1': 200, 'library://track/2': 150 });
+    expect(neu.map((t) => t.dauer)).toEqual([200, 150, 180, null, null, 200]);
+    expect(dauerErgaenzen(items, { 'library://track/9': 99 })).toBe(items);
   });
 
   it('selects, removes and moves several titles like Winamp', async () => {
@@ -260,6 +287,30 @@ describe('Medien-Fenster', () => {
     await waitFor(() => expect(callService).toHaveBeenCalledWith('spotifyplus', 'player_media_play_context', {
       entity_id: 'media_player.spotifyplus', context_uri: 'spotify:playlist:5G', offset_position: 0, device_id: 'Marantz',
     }));
+  });
+
+  it('searches while typing and shows the track lengths from Music Assistant', async () => {
+    const suchConn = {
+      sendMessagePromise: vi.fn(async (msg) => {
+        if (msg.service === 'search') {
+          return { response: { tracks: [{ uri: 'library://track/7', name: 'Danke', media_type: 'track', artists: [{ name: 'Wise Guys' }] }], albums: [] } };
+        }
+        return { response: { items: [] } };
+      }),
+    };
+    fetchMedienDauer.mockImplementation(async (uris) => ({ aktiv: true, dauer: uris.includes('library://track/7') ? { 'library://track/7': 158 } : {} }));
+    const ents = { ...basis, 'media_player.tv': { state: 'off', attributes: {} }, 'media_player.vu': { state: 'off', attributes: {} } };
+    const r = render(<MedienCard cardId="m" entities={ents} settings={{ medien }} callService={vi.fn()} conn={suchConn} getEntityImageUrl={(u) => u} />);
+    fireEvent.click(r.container.firstChild);
+    await screen.findByRole('dialog');
+    fireEvent.change(screen.getByLabelText('Musik suchen'), { target: { value: 'W' } });
+    fireEvent.change(screen.getByLabelText('Musik suchen'), { target: { value: 'Wise' } });
+    // ohne Enter: Suche nach kurzer Pause, nur einmal und mit dem ganzen Text
+    expect(await screen.findByText('Wise Guys - Danke')).toBeTruthy();
+    const suchen = suchConn.sendMessagePromise.mock.calls.filter(([m]) => m.service === 'search');
+    expect(suchen.map(([m]) => m.service_data.name)).toEqual(['Wise']);
+    expect(await screen.findByText('2:38')).toBeTruthy();
+    fetchMedienDauer.mockImplementation(async () => ({ aktiv: false, dauer: {} }));
   });
 
   it('shows the Spotify queue as playlist and jumps there with skip', async () => {
