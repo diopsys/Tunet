@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pause, Play, Repeat, Shuffle, SkipBack, SkipForward } from '../../icons';
 import { beideZonenAktionen, nacheinander, playAktionen } from '../../components/cards/MedienCard';
 import {
-  deleteMedienPlaylist, fetchMedienDauer, fetchMedienGenreAlben, fetchMedienGenres, fetchMedienListen, fetchMedienPlaylist,
+  deleteMedienPlaylist, fetchMedienDauer, fetchMedienGenreAlben, fetchMedienGenreTitel, fetchMedienGenres, fetchMedienListen, fetchMedienPlaylist,
   saveMedienPlaylist,
 } from '../../services/settingsApi';
 import {
@@ -83,8 +83,9 @@ const SUCHE_AB = 2;
 // Ordner der Media Library: [Schlüssel, Name, …]
 const MA_ORDNER = [['ma_titel', 'Alle Titel'], ['ma_kuenstler', 'Künstler'], ['ma_alben', 'Alben'], ['ma_playlists', 'Playlists']];
 const MEINE = ['ma_meine', 'Meine Playlists'];
-// Genres (Music Assistant über den Tunet-Server): Genre → Alben → Titel
+// Genres (Music Assistant über den Tunet-Server): Genre → Alben, darunter die Titel
 const GENRES = ['ma_genres', 'Genres'];
+const GENRE_TITEL_SEITE = 500;
 const genreZeile = (g) => ({
   uri: `genre:${g.id}`, genreId: g.id, name: g.name, artist: '', dauer: null, media_type: 'genre', quelle: 'ma', anzahl: g.alben || undefined,
 });
@@ -490,12 +491,17 @@ function MediaLibrary({ config, conn, raum, apiRef, suchRef, mehrfach, setMehrfa
       let items = [];
       let kontext = null;
       let fehler = null;
+      let mehr = null;
+      let genreId = null;
       if (item.media_type === 'gespeichert') {
         items = await gespeicherteLaden(item.uri);
       } else if (item.media_type === 'genre') {
-        const r = await fetchMedienGenreAlben(item.genreId);
-        fehler = r?.fehler || null;
-        items = (r?.items || []).map(maTitel).filter((t) => t && !(sp?.entity && istSpotifyUri(t.uri)));
+        const [alben, titel] = await Promise.all([fetchMedienGenreAlben(item.genreId), fetchMedienGenreTitel(item.genreId)]);
+        fehler = alben?.fehler || titel?.fehler || null;
+        const t = titel?.items || [];
+        items = [...(alben?.items || []), ...t].map(maTitel).filter((x) => x && !(sp?.entity && istSpotifyUri(x.uri)));
+        genreId = item.genreId;
+        mehr = t.length === GENRE_TITEL_SEITE ? GENRE_TITEL_SEITE : null;
       } else if (item.quelle === 'spotify') {
         const id = idAus(item.uri);
         if (item.media_type === 'playlist') {
@@ -513,7 +519,7 @@ function MediaLibrary({ config, conn, raum, apiRef, suchRef, mehrfach, setMehrfa
         items = await aufklappen(conn, config.player, item);
       }
       setStapel((s) => [...s, ansicht]);
-      setAnsicht({ titel: [item.artist, item.name].filter(Boolean).join(' - '), quelle: item.quelle, kontext, items, mehr: null, fehler });
+      setAnsicht({ titel: [item.artist, item.name].filter(Boolean).join(' - '), quelle: item.quelle, kontext, items, mehr, fehler, genreId });
       geoeffnetUm.current = Date.now();
       setWahl({ auswahl: [], anker: -1 });
       setLoeschen(null);
@@ -522,6 +528,23 @@ function MediaLibrary({ config, conn, raum, apiRef, suchRef, mehrfach, setMehrfa
     } finally {
       setLaedt(false);
       oeffnet.current = null;
+    }
+  };
+  // weitere Titel eines geöffneten Genres anhängen
+  const genreTitelNachladen = async () => {
+    const { genreId, mehr } = ansicht || {};
+    if (!genreId || !mehr) return;
+    setLaedt(true);
+    try {
+      const r = await fetchMedienGenreTitel(genreId, mehr);
+      const neu = (r?.items || []).map(maTitel).filter((x) => x && !(sp?.entity && istSpotifyUri(x.uri)));
+      setAnsicht((a) => (a?.genreId === genreId ? {
+        ...a, items: [...a.items, ...neu], mehr: (r?.items || []).length === GENRE_TITEL_SEITE ? mehr + GENRE_TITEL_SEITE : null,
+      } : a));
+    } catch {
+      /* bleibt wie es ist */
+    } finally {
+      setLaedt(false);
     }
   };
   const zurueck = () => {
@@ -602,7 +625,7 @@ function MediaLibrary({ config, conn, raum, apiRef, suchRef, mehrfach, setMehrfa
               <Zeile key={`${t.uri}-${i}`} item={t} gewaehlt={auswahl.includes(i)} onWaehlen={(e) => klick(e, i)} onSpielen={() => doppelklick(i)} />
             ))}
             {!laedt && ansicht?.mehr && (
-              <button type="button" className="wa-zeile" onClick={() => ordnerLaden(ansicht.ordner, ansicht.mehr)}><span className="name">… weitere laden</span></button>
+              <button type="button" className="wa-zeile" onClick={() => (ansicht.genreId ? genreTitelNachladen() : ordnerLaden(ansicht.ordner, ansicht.mehr))}><span className="name">… weitere laden</span></button>
             )}
           </div>
           <div className="wa-fuss">

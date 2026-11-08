@@ -137,6 +137,20 @@ export async function genreAlben(id, { offset, limit } = {}, fetchFn = fetch) {
     }));
 }
 
+/** Titel eines Genres in der Form der HA-Dienste ({ uri, name, artists, duration, media_type }). */
+export async function genreTitel(id, { offset, limit } = {}, fetchFn = fetch) {
+  const args = { item_id: String(id), limit: ganz(limit, MAX_SEITE, MAX_SEITE), offset: ganz(offset, 0, 1e6) };
+  return liste(await sortiert('music/genres/tracks', args, fetchFn))
+    .filter((t) => t?.uri && t?.name)
+    .map((t) => ({
+      uri: t.uri,
+      name: t.name,
+      artists: (Array.isArray(t.artists) ? t.artists : []).filter((k) => k?.name).map((k) => ({ name: k.name })),
+      duration: Number.isFinite(t.duration) && t.duration > 0 ? t.duration : null,
+      media_type: 'track',
+    }));
+}
+
 /** Nur für Tests. */
 export function cacheLeeren() {
   cache.clear();

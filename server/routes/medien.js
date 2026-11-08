@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import db from '../db.js';
-import { genreAlben, genres, maAktiv, titelDauer } from '../utils/musicAssistant.js';
+import { genreAlben, genreTitel, genres, maAktiv, titelDauer } from '../utils/musicAssistant.js';
 
 /*
  * Playlist der Medien-Kachel (Winamp-Fenster) je Raum: die Liste, die gerade über Music
@@ -117,16 +117,19 @@ router.get('/genres', async (req, res) => {
   }
 });
 
-router.get('/genres/:id/alben', async (req, res) => {
+// Alben bzw. Titel eines Genres
+const genreInhalt = (laden, was) => async (req, res) => {
   if (!maAktiv()) return res.json({ aktiv: false, items: [] });
   if (!/^[\w-]{1,64}$/.test(req.params.id)) return res.status(400).json({ error: 'Ungültige Genre-ID' });
   try {
-    const items = await genreAlben(req.params.id, { offset: req.query.offset, limit: req.query.limit });
+    const items = await laden(req.params.id, { offset: req.query.offset, limit: req.query.limit });
     return res.json({ aktiv: true, items });
   } catch (err) {
-    console.warn(`[medien] Alben eines Genres aus Music Assistant: ${err.message}`);
+    console.warn(`[medien] ${was} eines Genres aus Music Assistant: ${err.message}`);
     return res.json({ aktiv: true, items: [], fehler: err.message });
   }
-});
+};
+router.get('/genres/:id/alben', genreInhalt(genreAlben, 'Alben'));
+router.get('/genres/:id/titel', genreInhalt(genreTitel, 'Titel'));
 
 export default router;
