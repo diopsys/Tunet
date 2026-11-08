@@ -158,6 +158,21 @@ export function deleteMedienPlaylist(schluessel) {
 }
 
 /** Längen von Music-Assistant-Titeln über den Tunet-Server: { dauer: { uri: Sekunden }, aktiv }. */
+/** Genres aus Music Assistant: { aktiv, items: [{ id, name, alben }] } */
+export function fetchMedienGenres({ suche, offset, limit } = {}) {
+  const q = new URLSearchParams();
+  if (suche) q.set('suche', suche);
+  if (offset) q.set('offset', String(offset));
+  if (limit) q.set('limit', String(limit));
+  const qs = q.toString();
+  return request(`/medien/genres${qs ? `?${qs}` : ''}`);
+}
+
+/** Alben eines Genres: { aktiv, items: [{ uri, name, artists, year, media_type }] } */
+export function fetchMedienGenreAlben(id) {
+  return request(`/medien/genres/${encodeURIComponent(id)}/alben`);
+}
+
 export function fetchMedienDauer(uris) {
   return request('/medien/dauer', {
     method: 'POST',

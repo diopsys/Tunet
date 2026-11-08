@@ -2,7 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pause, Play, Repeat, Shuffle, SkipBack, SkipForward } from '../../icons';
 import { beideZonenAktionen, nacheinander, playAktionen } from '../../components/cards/MedienCard';
 import {
-  deleteMedienPlaylist, fetchMedienDauer, fetchMedienListen, fetchMedienPlaylist, saveMedienPlaylist,
+  deleteMedienPlaylist, fetchMedienDauer, fetchMedienGenreAlben, fetchMedienGenres, fetchMedienListen, fetchMedienPlaylist,
+  saveMedienPlaylist,
 } from '../../services/settingsApi';
 import {
   auswahlKlick, ausblendenKonfig, blockSchieben, browseTitel, dauerErgaenzen, fehlendeDauer, istSpotifyUri, laufenderIndex, maAbspielen, maEinreihen,
@@ -18,7 +19,8 @@ import { useIdleHold } from '../../utils/idleHold';
  *   Zonen         – an Stelle des Equalizers: Quellen des Raums, „Beide Zonen“, Lautstärken
  *   Playlist      – Spotify: Warteschlange; sonst die Liste, die über Music Assistant läuft
  *                   (gemeinsam auf dem Tunet-Server, auch unter einem Namen speicherbar)
- *   Media Library – Lokale Bibliothek (Music Assistant), Meine Playlists, Spotify (SpotifyPlus)
+ *   Media Library – Lokale Bibliothek (Music Assistant; Genres über den Tunet-Server, nur mit
+ *                   ma_token), Meine Playlists, Spotify (SpotifyPlus)
  * Wie in Winamp: Antippen wählt (Shift/Strg bzw. „Sel“ für mehrere), Doppeltippen spielt –
  * aus der Library die ganze angezeigte Liste ab diesem Titel. Shift+V blendet aus und
  * stoppt, Enter (auch währenddessen) spielt danach den gewählten Titel; „Fade“ macht beides.
@@ -81,6 +83,11 @@ const SUCHE_AB = 2;
 // Ordner der Media Library: [Schlüssel, Name, …]
 const MA_ORDNER = [['ma_titel', 'Alle Titel'], ['ma_kuenstler', 'Künstler'], ['ma_alben', 'Alben'], ['ma_playlists', 'Playlists']];
 const MEINE = ['ma_meine', 'Meine Playlists'];
+// Genres (Music Assistant über den Tunet-Server): Genre → Alben → Titel
+const GENRES = ['ma_genres', 'Genres'];
+const genreZeile = (g) => ({
+  uri: `genre:${g.id}`, genreId: g.id, name: g.name, artist: '', dauer: null, media_type: 'genre', quelle: 'ma', anzahl: g.alben || undefined,
+});
 const SP_ORDNER = [
   ['sp_playlists', 'Playlists', 'get_playlist_favorites', 50],
   ['sp_songs', 'Lieblingssongs', 'get_track_favorites', 200],
@@ -97,7 +104,9 @@ const SP_ART = {
 const ALLE_ARTEN = ['track', 'album', 'playlist', 'artist'];
 const MEHRZAHL = { track: 'tracks', album: 'albums', playlist: 'playlists', artist: 'artists' };
 const SEITE = 200;
-const ART_NAME = { album: 'Album', playlist: 'Playlist', artist: 'Künstler', folder: 'Ordner', radio: 'Radio', gespeichert: 'Liste' };
+const ART_NAME = {
+  album: 'Album', playlist: 'Playlist', artist: 'Künstler', folder: 'Ordner', radio: 'Radio', gespeichert: 'Liste', genre: 'Genre',
+};
 const TASTEN_AUS = ['INPUT', 'TEXTAREA', 'SELECT'];
 
 const Knopf = ({ onClick, label, aktiv, led, gross, disabled, children, ...rest }) => (
@@ -332,6 +341,15 @@ function MediaLibrary({ config, conn, raum, apiRef, suchRef, mehrfach, setMehrfa
   const [wahl, setWahl] = useState({ auswahl: [], anker: -1 });
   const [text, setText] = useState('');
   const [loeschen, setLoeschen] = useState(null);
+  // Genres nur zeigen, wenn der Tunet-Server Music Assistant erreicht (ma_token gesetzt)
+  const [genresAktiv, setGenresAktiv] = useState(false);
+  useEffect(() => {
+    if (!maEintrag) return undefined;
+    let aus = false;
+    fetchMedienGenres({ limit: 1 }).then((r) => { if (!aus) setGenresAktiv(Boolean(r?.aktiv)); }).catch(() => {});
+    return () => { aus = true; };
+  }, [maEintrag]);
+  const maOrdner = genresAktiv ? [...MA_ORDNER.slice(0, 3), GENRES, ...MA_ORDNER.slice(3)] : MA_ORDNER;
 
   const zeigen = useCallback((a, neu = true) => {
     setAnsicht(a);
@@ -349,6 +367,15 @@ function MediaLibrary({ config, conn, raum, apiRef, suchRef, mehrfach, setMehrfa
           titel: MEINE[1], quelle: 'ma', ordner: key, mehr: null,
           items: (listen || []).map((l) => ({ uri: l.schluessel, name: l.name, artist: '', dauer: null, media_type: 'gespeichert', quelle: 'ma', anzahl: l.anzahl })),
         });
+      } else if (key === GENRES[0]) {
+        const r = await fetchMedienGenres({ offset, limit: SEITE });
+        const items = (r?.items || []).map(genreZeile);
+        setAnsicht((alt) => ({
+          titel: GENRES[1], quelle: 'ma', kontext: null, ordner: key,
+          items: offset && alt?.ordner === key ? [...alt.items, ...items] : items,
+          mehr: items.length === SEITE ? offset + SEITE : null,
+        }));
+        if (!offset) { setStapel([]); setWahl({ auswahl: [], anker: -1 }); }
       } else if (MA_ART[key]) {
         const r = await maDienst(conn, 'get_library', { config_entry_id: maEintrag, media_type: MA_ART[key], limit: SEITE, offset, order_by: 'sort_name' });
         // mit eigenem Spotify-Ordner zeigt die lokale Bibliothek nur die eigene Musik
@@ -392,7 +419,7 @@ function MediaLibrary({ config, conn, raum, apiRef, suchRef, mehrfach, setMehrfa
   }));
 
   const quelle = ordner?.startsWith('sp_') ? 'spotify' : 'ma';
-  const ordnerName = [...MA_ORDNER, MEINE, ...SP_ORDNER].find(([k]) => k === ordner)?.[1];
+  const ordnerName = [...MA_ORDNER, GENRES, MEINE, ...SP_ORDNER].find(([k]) => k === ordner)?.[1];
   // Suche beim Tippen und mit Enter, nur im gewählten Ordner; nur die Antwort auf die letzte zählt
   const sucheNr = useRef(0);
   const gesucht = useRef('');
@@ -410,6 +437,9 @@ function MediaLibrary({ config, conn, raum, apiRef, suchRef, mehrfach, setMehrfa
         const items = (listen || []).filter((l) => l.name.toLocaleLowerCase('de').includes(klein))
           .map((l) => ({ uri: l.schluessel, name: l.name, artist: '', dauer: null, media_type: 'gespeichert', quelle: 'ma', anzahl: l.anzahl }));
         if (aktuell()) zeigen({ titel, quelle, ordner, kontext: null, items, mehr: null });
+      } else if (ordner === GENRES[0]) {
+        const r = await fetchMedienGenres({ suche: q, limit: SEITE });
+        if (aktuell()) zeigen({ titel, quelle, ordner, kontext: null, items: (r?.items || []).map(genreZeile), mehr: null });
       } else if (quelle === 'spotify') {
         const arten = SP_ART[ordner] ? [SP_ART[ordner]] : ALLE_ARTEN;
         const r = await spDienst(conn, 'search_all', { entity_id: sp.entity, criteria: q, criteria_type: arten.join(','), limit_total: arten.length > 1 ? 20 : 50 });
@@ -461,6 +491,9 @@ function MediaLibrary({ config, conn, raum, apiRef, suchRef, mehrfach, setMehrfa
       let kontext = null;
       if (item.media_type === 'gespeichert') {
         items = await gespeicherteLaden(item.uri);
+      } else if (item.media_type === 'genre') {
+        const r = await fetchMedienGenreAlben(item.genreId);
+        items = (r?.items || []).map(maTitel).filter((t) => t && !(sp?.entity && istSpotifyUri(t.uri)));
       } else if (item.quelle === 'spotify') {
         const id = idAus(item.uri);
         if (item.media_type === 'playlist') {
@@ -506,7 +539,8 @@ function MediaLibrary({ config, conn, raum, apiRef, suchRef, mehrfach, setMehrfa
     if (einfach && auswahl.length === 1 && auswahl[0] === i && t && !istTitel(t) && t.aufklappbar !== false) oeffnen(t);
     else setWahl(klickAuswahl(e, i, wahl, mehrfach));
   };
-  const spielen = (i) => onAbspielen(ansicht, i);
+  // ein Genre lässt sich nicht abspielen, nur öffnen
+  const spielen = (i) => (items[i]?.media_type === 'genre' ? oeffnen(items[i]) : onAbspielen(ansicht, i));
   // Doppelklick: Titel spielen, Album/Playlist/Künstler nur öffnen (gespielt wird erst ein Titel daraus)
   const doppelklick = (i, maus = true) => {
     const t = items[i];
@@ -543,7 +577,7 @@ function MediaLibrary({ config, conn, raum, apiRef, suchRef, mehrfach, setMehrfa
       <div className="wa-lib-innen">
         <nav className="wa-lcd wa-baum" aria-label="Library">
           {maEintrag && <div className="gruppe">Lokale Bibliothek</div>}
-          {maEintrag && MA_ORDNER.map(ordnerKnopf)}
+          {maEintrag && maOrdner.map(ordnerKnopf)}
           {raum && ordnerKnopf(MEINE)}
           {sp?.entity && <div className="gruppe">Spotify</div>}
           {sp?.entity && SP_ORDNER.map(ordnerKnopf)}
