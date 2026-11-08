@@ -5,6 +5,7 @@ import {
   INITIAL_FETCH_DELAY,
 } from '../config/constants';
 import { isIdleHeld, onIdleRelease } from '../utils/idleHold';
+import { isAwayLongerThan, markActive } from '../utils/startPage';
 
 /** @typedef {import('../types/dashboard').UseDashboardEffectsDeps} UseDashboardEffectsDeps */
 /** @typedef {import('../types/dashboard').UseDashboardEffectsResult} UseDashboardEffectsResult */
@@ -16,7 +17,7 @@ import { isIdleHeld, onIdleRelease } from '../utils/idleHold';
  *   – optimistic-light-brightness clear
  *   – haptic-feedback listener
  *   – document-title / favicon / viewport meta
- *   – inactivity/idle auto-reset timer
+ *   – inactivity/idle auto-reset timer, also after waking up (app back from the background)
  */
 export function useDashboardEffects({
   resolvedHeaderTitle,
@@ -182,7 +183,16 @@ export function useDashboardEffects({
   // ── Inactivity / idle timer ────────────────────────────────────────────
   useEffect(() => {
     let timer;
+    let lastMark = 0;
+    // letzte Aktivität vermerken (höchstens alle 5 s), für Aufwecken und nächsten Start
+    const mark = (force = false) => {
+      const now = Date.now();
+      if (!force && now - lastMark < 5000) return;
+      lastMark = now;
+      markActive(now);
+    };
     const reset = () => {
+      mark();
       clearTimeout(timer);
       if (!inactivityTimeout || inactivityTimeout <= 0) return;
       timer = setTimeout(() => {
@@ -192,14 +202,36 @@ export function useDashboardEffects({
         if (resetToHomeRef.current) resetToHomeRef.current();
       }, inactivityTimeout * 1000);
     };
+    // Smartphone/Tablet: im Hintergrund laufen keine Timer. Beim Zurückkommen nach mehr
+    // als der Wartezeit auf die Startseite; offene Fenster hat währenddessen niemand angeschaut.
+    const wake = () => {
+      if (isAwayLongerThan(inactivityTimeout) && resetToHomeRef.current) resetToHomeRef.current();
+      mark(true);
+      reset();
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') {
+        clearTimeout(timer);
+        mark(true);
+      } else {
+        wake();
+      }
+    };
+    const onPageShow = (e) => {
+      if (e.persisted) wake();
+    };
     const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart', 'click'];
     events.forEach((e) => document.addEventListener(e, reset));
     const stopReleaseListener = onIdleRelease(reset);
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('pageshow', onPageShow);
     reset();
     return () => {
       clearTimeout(timer);
       stopReleaseListener();
       events.forEach((e) => document.removeEventListener(e, reset));
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('pageshow', onPageShow);
     };
   }, [inactivityTimeout]);
 

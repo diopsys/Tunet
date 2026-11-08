@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import { startPage } from '../utils/startPage';
 
 /**
  * Keeps dashboard page state in sync with route params and localStorage.
@@ -12,11 +13,8 @@ export function usePageRouting() {
 
   const [activePage, _setActivePage] = useState(() => {
     if (pageId) return pageId;
-    try {
-      return localStorage.getItem('tunet_active_page') || 'home';
-    } catch {
-      return 'home';
-    }
+    // nach längerer Pause die Startseite (utils/startPage)
+    return startPage();
   });
 
   const setActivePage = useCallback(
