@@ -1,11 +1,12 @@
 import { lazy } from 'react';
+import { renewIngressSession } from './ingressSession';
 
 // Erkennt einen neuen Tunet-Stand, während die Seite noch die alte Version ausführt
 // (z. B. HA-App aus dem Hintergrund nach einem Add-on-Update). Ohne Neuladen würden
 // nachgeladene Modals aus dem neuen Build mit dem alten Hauptbundle gemischt.
-// Zweiter Fall: Nach längerer Zeit im Hintergrund ist die Ingress-Sitzung abgelaufen;
-// HA erneuert sie erst einige Sekunden nach der Rückkehr, bis dahin antwortet der
-// Supervisor mit 401 und das Nachladen eines Modals schlägt fehl.
+// Zweiter Fall: Nach längerer Zeit im Hintergrund ist die Ingress-Sitzung abgelaufen und
+// der Supervisor antwortet mit 401. HA erneuert sie oft erst spät oder gar nicht, deshalb
+// erneuert Tunet sie bei einem 401 selbst (siehe ingressSession.js).
 
 const ENTRY_PATTERN = /<script[^>]+type="module"[^>]+src="([^"]*assets\/index-[^"]+\.js)"/;
 const RELOAD_KEY = 'tunet_chunk_reload_at';
@@ -41,12 +42,17 @@ export function currentEntryScript(doc = globalThis.document) {
 }
 
 /** true, wenn der Server einen anderen Build ausliefert als den, der gerade läuft. */
-export async function isNewBuildAvailable(fetchFn = globalThis.fetch, doc = globalThis.document) {
+export async function isNewBuildAvailable(
+  fetchFn = globalThis.fetch,
+  doc = globalThis.document,
+  renewFn = renewIngressSession
+) {
   const current = currentEntryScript(doc);
   if (!current || typeof fetchFn !== 'function') return false;
   try {
     const res = await fetchFn('./', requestOptions());
-    if (!res?.ok) return false; // z. B. abgelaufene Ingress-Sitzung: nichts entscheiden
+    if (res?.status === 401) renewFn(); // zurück aus dem Hintergrund: Sitzung erneuern, bevor ein Klick nachlädt
+    if (!res?.ok) return false;
     const latest = entryScriptFromHtml(await res.text());
     return Boolean(latest) && latest !== current;
   } catch {
@@ -69,14 +75,22 @@ export function reloadWithGuard(storage = globalThis.sessionStorage, now = Date.
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-/** Wartet, bis der Server wieder normal antwortet (z. B. erneuerte Ingress-Sitzung). */
-export async function waitForServer(fetchFn = globalThis.fetch, { timeoutMs = 20_000, intervalMs = 1_000 } = {}) {
+/** Wartet, bis der Server wieder normal antwortet; eine abgelaufene Ingress-Sitzung wird erneuert. */
+export async function waitForServer(
+  fetchFn = globalThis.fetch,
+  { timeoutMs = 20_000, intervalMs = 1_000, renewFn = renewIngressSession } = {}
+) {
   if (typeof fetchFn !== 'function') return false;
   const deadline = Date.now() + timeoutMs;
+  let renewed = false;
   for (;;) {
     try {
       const res = await fetchFn('./', requestOptions());
       if (res?.ok) return true;
+      if (res?.status === 401 && !renewed) {
+        renewed = await renewFn();
+        if (renewed) continue; // neue Sitzung gesetzt: gleich nochmal
+      }
     } catch {
       // offline oder Proxy noch nicht bereit
     }
@@ -108,7 +122,8 @@ const withTimeout = (promise, ms) => {
 /**
  * Wie React.lazy, aber robust nach Rückkehr aus dem Hintergrund:
  * - Schlägt das Nachladen fehl, wird nach Erholung des Servers einmal wiederholt. React.lazy merkt
- *   sich sonst den Fehler, und das Modal bleibt bis zum Neuladen der Seite kaputt.
+ *   sich sonst den Fehler, und das Modal bleibt bis zum Neuladen der Seite kaputt. Scheitert auch
+ *   der zweite Versuch, wird die Seite neu geladen.
  * - Hängt das Nachladen (tote Verbindung), hilft kein zweiter Versuch, weil der Browser denselben
  *   hängenden Import zurückgibt. Dann wird die Seite neu geladen statt ewig den Ladekreis zu zeigen.
  */
@@ -130,7 +145,10 @@ export function lazyWithRetry(
       try {
         return await withTimeout(factory(), timeoutMs);
       } catch (retryError) {
-        if (retryError instanceof ImportTimeoutError) return reloadOrFail(retryError);
+        // Safari merkt sich einen fehlgeschlagenen Import; dann hilft nur Neuladen
+        if (retryError instanceof ImportTimeoutError || isChunkLoadError(retryError)) {
+          return reloadOrFail(retryError);
+        }
         throw retryError;
       }
     }

@@ -1,13 +1,7 @@
 import React, { useState } from 'react';
 import { X } from 'lucide-react';
 import { SearchableSelect } from './CarMappingsSection';
-
-const DEFAULT_TABS_FALLBACK = [
-  { id: 'eg', title: 'EG', icon: 'mdi:home-floor-0', entities: [] },
-  { id: 'og', title: 'OG', icon: 'mdi:home-floor-1', entities: [] },
-  { id: 'aussen', title: 'Außen', icon: 'mdi:outdoor-lamp', entities: [] },
-  { id: 'automatik', title: 'Automatik', icon: 'mdi:auto-mode', entities: [] },
-];
+import { DEFAULT_LIGHT_PANEL_TABS } from '../../components/cards/lightPanelDefaults';
 
 export function LightPanelSettingsSection({
   editSettings,
@@ -18,7 +12,7 @@ export function LightPanelSettingsSection({
 }) {
   const [activeTabId, setActiveTabId] = useState(null);
 
-  const tabs = editSettings?.panelTabs || DEFAULT_TABS_FALLBACK;
+  const tabs = editSettings?.panelTabs || DEFAULT_LIGHT_PANEL_TABS;
   const resolvedActiveTabId = activeTabId || tabs[0]?.id;
   const activeTab = tabs.find((tab) => tab.id === resolvedActiveTabId) || tabs[0];
 

@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.31.7
+
+### Added
+- Light panel: lock for the guest WC (`switch.sperre_gaste_wc`)
+
+### Fixed
+- No more "Something went wrong" or endless spinner when the ingress session expired in the background: Tunet requests a new session through the HA page itself (for the logged-in user), already when returning to the foreground and on server requests; if a dialog still fails, the page reloads
+- Light panel: without a saved list, the edit dialog shows the default lights instead of empty tabs; changing something there no longer discards the lights
+
 ## 1.31.6
 
 ### Fixed

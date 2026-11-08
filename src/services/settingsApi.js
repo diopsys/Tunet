@@ -5,6 +5,7 @@ import {
   getValidatedHomeAssistantRequestHeadersAsync,
   notifyHomeAssistantApiUnauthorized,
 } from './apiAuth';
+import { isIngressPage, renewIngressSession } from '../utils/ingressSession';
 
 async function request(
   path,
@@ -38,6 +39,11 @@ async function request(
           authHeadersOverride: retryHeaders,
         }
       );
+    }
+
+    // Im Ingress kommt ein 401 vom Supervisor (Sitzung abgelaufen), nicht von HA: erneuern und nochmal
+    if (res.status === 401 && retryOnOAuthUnauthorized && isIngressPage() && (await renewIngressSession())) {
+      return request(path, { ...options }, { retryOnOAuthUnauthorized: false });
     }
 
     const body = await res.json().catch(() => ({}));

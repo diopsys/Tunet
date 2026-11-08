@@ -1,3 +1,12 @@
+## [1.31.7] — 2026-11-07
+
+### Added
+- Licht-Panel: Sperre für das Gäste-WC (`switch.sperre_gaste_wc`)
+
+### Fixed
+- Kein „Something went wrong“ und kein Ladekreis mehr, wenn die Ingress-Sitzung im Hintergrund abgelaufen ist: Tunet holt sich über die HA-Seite selbst eine neue Sitzung (für den angemeldeten Benutzer), schon beim Zurückholen in den Vordergrund und bei Anfragen an den Server; scheitert ein Dialog trotzdem, wird neu geladen
+- Licht-Panel: Der Bearbeiten-Dialog zeigt ohne gespeicherte Liste die Standardlichter statt leerer Reiter; eine Änderung dort verwirft die Lichter nicht mehr
+
 ## [1.31.6] — 2026-11-05
 
 ### Fixed
