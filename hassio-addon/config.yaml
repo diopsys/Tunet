@@ -1,6 +1,6 @@
 name: 'Casa (diopsys)'
 description: 'Tunet von gorbi87 plus eigene, noch nicht gemergte Änderungen (Zweig casa)'
-version: "1.31.7-casa.3"
+version: "1.31.7-casa.4"
 slug: 'casa'
 url: 'https://github.com/diopsys/Tunet/tree/casa'
 init: false
@@ -24,12 +24,16 @@ ports:
 ports_description:
   3002/tcp: 'Tunet Web Interface (not needed when using Ingress)'
 options:
+  ma_url: ''
+  ma_token: ''
   ha_url: ''
   ha_token: ''
   data_encryption_mode: 'off'
   data_encryption_key: ''
   data_encryption_salt: ''
 schema:
+  ma_url: 'str?'
+  ma_token: 'password?'
   ha_url: 'str?'
   ha_token: 'password?'
   data_encryption_mode: 'list(off|dual|enc_only)?'

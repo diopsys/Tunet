@@ -21,6 +21,14 @@ sed -i \
   -e "s/^slug: .*/slug: 'casa'/" \
   -e "s#^url: .*#url: 'https://github.com/diopsys/Tunet/tree/casa'#" \
   hassio-addon/config.yaml
+# Optionen für Music Assistant (Winamp: Titellängen, Genres) fehlen bei gorbi87 – der
+# Abgleich übernimmt config.yaml von dort, also hier jedes Mal ergänzen (einmalig)
+if ! grep -q '^  ma_token:' hassio-addon/config.yaml; then
+  sed -i \
+    -e "/^options:/a\\  ma_url: ''\\n  ma_token: ''" \
+    -e "/^schema:/a\\  ma_url: 'str?'\\n  ma_token: 'password?'" \
+    hassio-addon/config.yaml
+fi
 printf 'name: Casa (diopsys)\nurl: https://github.com/diopsys/Tunet\nmaintainer: diopsys\n' > repository.yaml
 
 echo "$basis-casa.$n"
