@@ -156,6 +156,50 @@ describe('useDashboardEffects › inactivity timer', () => {
   });
 });
 
+describe('useDashboardEffects › waking up', () => {
+  const setVisibility = (state) => {
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => state });
+    document.dispatchEvent(new Event('visibilitychange'));
+  };
+  afterEach(() => {
+    delete document.visibilityState;
+    localStorage.clear();
+  });
+
+  it('goes home when the app comes back after more than the idle timeout', () => {
+    const resetToHome = vi.fn();
+    renderHook(() => useDashboardEffects(makeProps({ inactivityTimeout: 60, resetToHome })));
+    act(() => setVisibility('hidden'));
+    // im Hintergrund laufen keine Timer: nur die Uhr springt weiter
+    vi.setSystemTime(Date.now() + 120_000);
+    act(() => setVisibility('visible'));
+    expect(resetToHome).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the page after a short break and restarts the idle timer', () => {
+    const resetToHome = vi.fn();
+    renderHook(() => useDashboardEffects(makeProps({ inactivityTimeout: 60, resetToHome })));
+    act(() => vi.advanceTimersByTime(50_000));
+    act(() => setVisibility('hidden'));
+    vi.setSystemTime(Date.now() + 20_000);
+    act(() => setVisibility('visible'));
+    expect(resetToHome).not.toHaveBeenCalled();
+    act(() => vi.advanceTimersByTime(59_000));
+    expect(resetToHome).not.toHaveBeenCalled();
+    act(() => vi.advanceTimersByTime(1_000));
+    expect(resetToHome).toHaveBeenCalledTimes(1);
+  });
+
+  it('does nothing on waking up without an idle timeout', () => {
+    const resetToHome = vi.fn();
+    renderHook(() => useDashboardEffects(makeProps({ inactivityTimeout: 0, resetToHome })));
+    act(() => setVisibility('hidden'));
+    vi.setSystemTime(Date.now() + 10_000_000);
+    act(() => setVisibility('visible'));
+    expect(resetToHome).not.toHaveBeenCalled();
+  });
+});
+
 // ═════════════════════════════════════════════════════════════════════════
 // Cleanup
 // ═════════════════════════════════════════════════════════════════════════
