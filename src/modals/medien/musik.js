@@ -90,9 +90,19 @@ export function laufenderIndex(items, player, gemerkt = 0) {
   return items.findIndex(gleich);
 }
 
-/** Raum einschalten und auf den Eingang des Players stellen (HEOS), damit nicht die Hauptzone angeht. */
-export function raumAktionen(config) {
+// HEOS heißt in der Hauptzone „NET“, in Zone 2 „HEOS Music“ – beides ist derselbe Eingang
+const HEOS = ['NET', 'HEOS Music'];
+const gleicheQuelle = (a, b) => a === b || (HEOS.includes(a) && HEOS.includes(b));
+
+/**
+ * Raum einschalten und auf den Eingang des Players stellen (HEOS), damit nicht die Hauptzone angeht.
+ * Läuft der Raum schon auf diesem Eingang, nichts tun: Einschalten und Quellenwahl dauern am
+ * Receiver mehrere Sekunden und verzögern sonst jeden Start.
+ */
+export function raumAktionen(config, entities) {
   if (!config?.zone || !config.musik?.zoneQuelle) return [];
+  const zone = entities?.[config.zone];
+  if (zone && zone.state === 'on' && gleicheQuelle(zone.attributes?.source, config.musik.zoneQuelle)) return [];
   return [
     ['media_player', 'turn_on', { entity_id: config.zone }],
     ['media_player', 'select_source', { entity_id: config.zone, source: config.musik.zoneQuelle }],
@@ -105,12 +115,12 @@ const nurTitel = (items) => items.filter((t) => !t.media_type || t.media_type ==
  * Music Assistant: Liste ab Titel `ab` abspielen (Winamp: Doppelklick in der Library).
  * Ist der Eintrag kein Titel (Album, Playlist …), spielt MA ihn als Ganzes.
  */
-export function maAbspielen(config, items, ab = 0) {
+export function maAbspielen(config, items, ab = 0, entities = null) {
   const t = items[ab];
   if (!t || !config?.player) return [];
   const media_id = t.media_type && t.media_type !== 'track' ? t.uri : nurTitel(items.slice(ab)).map((x) => x.uri);
   return [
-    ...raumAktionen(config),
+    ...raumAktionen(config, entities),
     ['music_assistant', 'play_media', { entity_id: config.player, media_id, media_type: t.media_type || 'track', enqueue: 'replace' }],
   ];
 }
@@ -133,7 +143,7 @@ export function maRestErsetzen(config, items, index) {
  * Spotify: Liste ab Titel `ab` abspielen. Mit Kontext (Playlist, Album) startet Spotify den
  * Kontext an dieser Stelle, sonst die Titel selbst (höchstens 50).
  */
-export function spAbspielen(config, items, ab = 0, kontext = null) {
+export function spAbspielen(config, items, ab = 0, kontext = null, entities = null) {
   const sp = config?.musik?.spotify;
   const t = items[ab];
   if (!sp?.entity || !t) return [];
@@ -147,7 +157,7 @@ export function spAbspielen(config, items, ab = 0, kontext = null) {
     const uris = nurTitel(items.slice(ab)).slice(0, 50).map((x) => x.uri).join(',');
     aufruf = ['spotifyplus', 'player_media_play_tracks', { entity_id: sp.entity, uris, ...geraet }];
   }
-  return [...raumAktionen(config), aufruf];
+  return [...raumAktionen(config, entities), aufruf];
 }
 
 /** Spotify-Warteschlange: zum k-ten Titel springen (Spotify erlaubt nur „weiter“). */
@@ -206,4 +216,26 @@ export function blockSchieben(items, auswahl, index, d) {
     else if (lauf === z) lauf = i;
   });
   return { items: neu, index: lauf, auswahl: sortiert.map((i) => i + d) };
+}
+
+/** Titel aus Music Assistant ohne Länge (die HA-Dienste liefern keine): ihre URIs, ohne Doppelte. */
+export function fehlendeDauer(items) {
+  const uris = (items || [])
+    .filter((t) => t?.uri && (!t.media_type || t.media_type === 'track') && t.quelle !== 'spotify'
+      && !istSpotifyUri(t.uri) && !(t.dauer > 0))
+    .map((t) => t.uri);
+  return [...new Set(uris)];
+}
+
+/** Längen ({ uri: Sekunden }) eintragen; ohne Änderung dieselbe Liste (kein neues Rendern). */
+export function dauerErgaenzen(items, dauer) {
+  if (!Array.isArray(items) || !dauer) return items;
+  let geaendert = false;
+  const neu = items.map((t) => {
+    const d = t && !(t.dauer > 0) ? dauer[t.uri] : null;
+    if (!(d > 0)) return t;
+    geaendert = true;
+    return { ...t, dauer: d };
+  });
+  return geaendert ? neu : items;
 }

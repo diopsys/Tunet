@@ -156,3 +156,11 @@ export function fetchMedienListen(raum) {
 export function deleteMedienPlaylist(schluessel) {
   return request(`/medien/playlist?raum=${encodeURIComponent(schluessel)}`, { method: 'DELETE' });
 }
+
+/** Längen von Music-Assistant-Titeln über den Tunet-Server: { dauer: { uri: Sekunden }, aktiv }. */
+export function fetchMedienDauer(uris) {
+  return request('/medien/dauer', {
+    method: 'POST',
+    body: JSON.stringify({ uris }),
+  });
+}

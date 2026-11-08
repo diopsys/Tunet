@@ -26,12 +26,16 @@ ports_description:
 options:
   ha_url: ''
   ha_token: ''
+  ma_url: ''
+  ma_token: ''
   data_encryption_mode: 'off'
   data_encryption_key: ''
   data_encryption_salt: ''
 schema:
   ha_url: 'str?'
   ha_token: 'password?'
+  ma_url: 'str?'
+  ma_token: 'password?'
   data_encryption_mode: 'list(off|dual|enc_only)?'
   data_encryption_key: 'password?'
   data_encryption_salt: 'password?'

@@ -2,10 +2,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pause, Play, Repeat, Shuffle, SkipBack, SkipForward } from '../../icons';
 import { beideZonenAktionen, nacheinander, playAktionen } from '../../components/cards/MedienCard';
 import {
-  deleteMedienPlaylist, fetchMedienListen, fetchMedienPlaylist, saveMedienPlaylist,
+  deleteMedienPlaylist, fetchMedienDauer, fetchMedienListen, fetchMedienPlaylist, saveMedienPlaylist,
 } from '../../services/settingsApi';
 import {
-  auswahlKlick, ausblendenKonfig, blockSchieben, browseTitel, istSpotifyUri, laufenderIndex, maAbspielen, maEinreihen,
+  auswahlKlick, ausblendenKonfig, blockSchieben, browseTitel, dauerErgaenzen, fehlendeDauer, istSpotifyUri, laufenderIndex, maAbspielen, maEinreihen,
   maRestErsetzen, maTitel, ohneAuswahl, position, spAbspielen, spListe, spSpringen, spTitel, spWarteschlange, zeit,
 } from './musik';
 import useLautstaerke from './useLautstaerke';
@@ -51,6 +51,28 @@ async function gespeicherteLaden(schluessel) {
   const r = await fetchMedienPlaylist(schluessel);
   return (r?.items || []).map((t) => ({ ...t, quelle: 'ma' }));
 }
+
+/**
+ * Fehlende Titellängen beim Tunet-Server (Music Assistant) nachfragen, jede URI nur einmal.
+ * onErgaenzt bekommt { uri: Sekunden } und trägt sie selbst (funktional) ein.
+ */
+function useDauerNachtragen(items, onErgaenzt) {
+  const versucht = useRef(new Set());
+  const ergaenzt = useRef(onErgaenzt);
+  ergaenzt.current = onErgaenzt;
+  useEffect(() => {
+    const fehlend = fehlendeDauer(items).filter((u) => !versucht.current.has(u)).slice(0, 200);
+    if (!fehlend.length) return;
+    fehlend.forEach((u) => versucht.current.add(u));
+    fetchMedienDauer(fehlend)
+      .then((r) => { if (r?.dauer && Object.keys(r.dauer).length) ergaenzt.current(r.dauer); })
+      .catch(() => {});
+  }, [items]);
+}
+
+// Suche beim Tippen: so lange nach dem letzten Tastendruck, ab so vielen Zeichen
+const SUCHE_PAUSE_MS = 400;
+const SUCHE_AB = 2;
 
 // Ordner der Media Library: [Schlüssel, Name, …]
 const MA_ORDNER = [['ma_titel', 'Alle Titel'], ['ma_kuenstler', 'Künstler'], ['ma_alben', 'Alben'], ['ma_playlists', 'Playlists']];
@@ -344,28 +366,51 @@ function MediaLibrary({ config, conn, raum, apiRef, suchRef, mehrfach, setMehrfa
   // neu gespeicherte Playlist sofort in „Meine Playlists“ zeigen
   useEffect(() => { if (listenStand && ordner === MEINE[0] && !stapel.length) ordnerLaden(MEINE[0]); }, [listenStand]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Längen der Titel nachtragen (Music Assistant über den Tunet-Server)
+  useDauerNachtragen(ansicht?.items, (dauer) => setAnsicht((a) => {
+    const items = a ? dauerErgaenzen(a.items, dauer) : null;
+    return items && items !== a.items ? { ...a, items } : a;
+  }));
+
   const quelle = ordner?.startsWith('sp_') ? 'spotify' : 'ma';
-  const suchen = async (e) => {
-    e.preventDefault();
-    const q = text.trim();
-    if (!q) return;
+  // Suche beim Tippen und mit Enter; nur die Antwort auf die letzte Suche zählt
+  const sucheNr = useRef(0);
+  const gesucht = useRef('');
+  const suche = async (q) => {
+    gesucht.current = q;
+    sucheNr.current += 1;
+    const nr = sucheNr.current;
+    const aktuell = () => nr === sucheNr.current;
     setLaedt(true);
     try {
       if (quelle === 'spotify') {
         const r = await spDienst(conn, 'search_all', { entity_id: sp.entity, criteria: q, criteria_type: 'track,album,artist,playlist', limit_total: 20 });
-        zeigen({ titel: `Suche: ${q}`, quelle, kontext: null, items: ['tracks', 'albums', 'playlists', 'artists'].flatMap((k) => spListe(r?.[k])), mehr: null });
+        if (aktuell()) zeigen({ titel: `Suche: ${q}`, quelle, kontext: null, items: ['tracks', 'albums', 'playlists', 'artists'].flatMap((k) => spListe(r?.[k])), mehr: null });
       } else {
         const r = await maDienst(conn, 'search', { config_entry_id: maEintrag, name: q, limit: 25 });
         const items = ['tracks', 'albums', 'playlists', 'artists']
           .flatMap((k) => (r?.[k] || []).map(maTitel))
           .filter((t) => t && !(sp?.entity && istSpotifyUri(t.uri)));
-        zeigen({ titel: `Suche: ${q}`, quelle, kontext: null, items, mehr: null });
+        if (aktuell()) zeigen({ titel: `Suche: ${q}`, quelle, kontext: null, items, mehr: null });
       }
     } catch {
-      zeigen({ titel: `Suche: ${q}`, quelle, items: [], mehr: null });
+      if (aktuell()) zeigen({ titel: `Suche: ${q}`, quelle, items: [], mehr: null });
     } finally {
-      setLaedt(false);
+      if (aktuell()) setLaedt(false);
     }
+  };
+  const sucheRef = useRef(suche);
+  sucheRef.current = suche;
+  useEffect(() => {
+    const q = text.trim();
+    if (q.length < SUCHE_AB || q === gesucht.current) return undefined;
+    const t = setTimeout(() => sucheRef.current(q), SUCHE_PAUSE_MS);
+    return () => clearTimeout(t);
+  }, [text]);
+  const suchen = (e) => {
+    e.preventDefault();
+    const q = text.trim();
+    if (q) suche(q);
   };
 
   // Album, Playlist, Künstler oder gespeicherte Liste öffnen
@@ -544,6 +589,14 @@ export default function WinampMusik({ config, entities, callService, conn, raum 
     return () => { aus = true; clearInterval(t); };
   }, [raum]);
 
+  // Längen der Playlist-Titel nachtragen und mitspeichern (ältere Einträge haben keine)
+  const plRef = useRef(pl);
+  plRef.current = pl;
+  useDauerNachtragen(pl.items, (dauer) => {
+    const items = dauerErgaenzen(plRef.current.items, dauer);
+    if (items !== plRef.current.items) speichern({ ...plRef.current, items });
+  });
+
   // Spotify-Warteschlange (neu laden bei Titelwechsel)
   const [schlange, setSchlange] = useState([]);
   const titel = player?.attributes?.media_title;
@@ -571,7 +624,7 @@ export default function WinampMusik({ config, entities, callService, conn, raum 
     if (spotify) {
       ruf(spSpringen(config, i));
     } else {
-      ruf(maAbspielen(config, pl.items, i));
+      ruf(maAbspielen(config, pl.items, i, entitiesRef.current));
       speichern({ ...pl, index: i });
     }
   };
@@ -609,15 +662,15 @@ export default function WinampMusik({ config, entities, callService, conn, raum 
     if (t.media_type === 'gespeichert') {
       const items = await gespeicherteLaden(t.uri).catch(() => []);
       if (!items.length) return;
-      ruf(maAbspielen(config, items, 0));
+      ruf(maAbspielen(config, items, 0, entitiesRef.current));
       speichern({ items, index: 0 });
       return;
     }
     if (t.quelle === 'spotify') {
-      ruf(spAbspielen(config, a.items, i, a.kontext));
+      ruf(spAbspielen(config, a.items, i, a.kontext, entitiesRef.current));
       return;
     }
-    ruf(maAbspielen(config, a.items, i));
+    ruf(maAbspielen(config, a.items, i, entitiesRef.current));
     if (istTitel(t)) {
       const titelListe = a.items.filter(istTitel);
       speichern({ items: titelListe, index: titelListe.indexOf(t) });
