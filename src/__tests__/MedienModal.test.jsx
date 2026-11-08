@@ -283,7 +283,10 @@ describe('Medien-Fenster', () => {
     fireEvent.doubleClick(pl);
     const titel = await screen.findByText('Lieblingslied');
     expect(callService.mock.calls.some(([d]) => d === 'spotifyplus')).toBe(false);
+    // Doppelklick auf den Titel erst nach der Sperre nach dem Öffnen
+    const uhr = vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 1000);
     fireEvent.doubleClick(titel);
+    uhr.mockRestore();
     await waitFor(() => expect(callService).toHaveBeenCalledWith('spotifyplus', 'player_media_play_context', {
       entity_id: 'media_player.spotifyplus', context_uri: 'spotify:playlist:5G', offset_position: 0, device_id: 'Marantz',
     }));
@@ -319,6 +322,43 @@ describe('Medien-Fenster', () => {
     expect(await screen.findByText('Suche: Wise in Künstler')).toBeTruthy();
     expect(screen.queryByText('Wise Guys - Danke')).toBeNull();
     fetchMedienDauer.mockImplementation(async () => ({ aktiv: false, dauer: {} }));
+  });
+
+  it('opens an album without playing the track under the second click', async () => {
+    const callService = vi.fn();
+    const albumConn = {
+      sendMessagePromise: vi.fn(async (msg) => {
+        if (msg.service === 'search') return { response: { albums: [{ uri: 'library://album/1', name: 'Gern geschehen', media_type: 'album' }] } };
+        if (msg.type === 'media_player/browse_media') {
+          return { children: [
+            { media_content_id: 'library://track/1', title: 'Blumentopf - Eins', media_class: 'track', can_expand: false },
+            { media_content_id: 'library://track/2', title: 'Blumentopf - Zwei', media_class: 'track', can_expand: false },
+          ] };
+        }
+        return { response: { items: [] } };
+      }),
+    };
+    const ents = { ...basis, 'media_player.tv': { state: 'off', attributes: {} }, 'media_player.vu': { state: 'off', attributes: {} } };
+    const r = render(<MedienCard cardId="m" entities={ents} settings={{ medien }} callService={callService} conn={albumConn} getEntityImageUrl={(u) => u} />);
+    fireEvent.click(r.container.firstChild);
+    await screen.findByRole('dialog');
+    fireEvent.click(screen.getAllByRole('button', { name: 'Alben' })[0]);
+    fireEvent.change(screen.getByLabelText('Musik suchen'), { target: { value: 'Gern' } });
+    const album = await screen.findByText('Gern geschehen');
+    // Album ist schon markiert: der erste Klick des Doppelklicks öffnet es
+    fireEvent.click(album);
+    fireEvent.click(album);
+    const titel = await screen.findByText('Blumentopf - Zwei');
+    fireEvent.click(titel);
+    fireEvent.doubleClick(titel);
+    await new Promise((ok) => { setTimeout(ok, 50); });
+    expect(callService.mock.calls.some(([d, s]) => d === 'music_assistant' && s === 'play_media')).toBe(false);
+    // ein späterer Doppelklick spielt den Titel
+    const jetzt = Date.now();
+    const uhr = vi.spyOn(Date, 'now').mockReturnValue(jetzt + 1000);
+    fireEvent.doubleClick(screen.getByText('Blumentopf - Zwei'));
+    uhr.mockRestore();
+    await waitFor(() => expect(callService).toHaveBeenCalledWith('music_assistant', 'play_media', expect.objectContaining({ media_id: ['library://track/2'] })));
   });
 
   it('shows the Spotify queue as playlist and jumps there with skip', async () => {

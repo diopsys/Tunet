@@ -70,6 +70,10 @@ function useDauerNachtragen(items, onErgaenzt) {
   }, [items]);
 }
 
+// Nach dem Öffnen eines Albums/Künstlers so lange keinen Doppelklick in der neuen Liste annehmen:
+// sonst landet der zweite Klick eines Doppelklicks, dessen erster schon geöffnet hat, auf einem Titel
+const DOPPEL_SPERRE_MS = 500;
+
 // Suche beim Tippen: so lange nach dem letzten Tastendruck, ab so vielen Zeichen
 const SUCHE_PAUSE_MS = 400;
 const SUCHE_AB = 2;
@@ -446,6 +450,7 @@ function MediaLibrary({ config, conn, raum, apiRef, suchRef, mehrfach, setMehrfa
 
   // Album, Playlist, Künstler oder gespeicherte Liste öffnen
   const oeffnet = useRef(null);
+  const geoeffnetUm = useRef(0);
   const oeffnen = async (item) => {
     // Klick + Doppelklick lösen beides aus – dasselbe nur einmal öffnen
     if (oeffnet.current === item.uri) return;
@@ -474,6 +479,7 @@ function MediaLibrary({ config, conn, raum, apiRef, suchRef, mehrfach, setMehrfa
       }
       setStapel((s) => [...s, ansicht]);
       setAnsicht({ titel: [item.artist, item.name].filter(Boolean).join(' - '), quelle: item.quelle, kontext, items, mehr: null });
+      geoeffnetUm.current = Date.now();
       setWahl({ auswahl: [], anker: -1 });
       setLoeschen(null);
     } catch {
@@ -502,9 +508,10 @@ function MediaLibrary({ config, conn, raum, apiRef, suchRef, mehrfach, setMehrfa
   };
   const spielen = (i) => onAbspielen(ansicht, i);
   // Doppelklick: Titel spielen, Album/Playlist/Künstler nur öffnen (gespielt wird erst ein Titel daraus)
-  const doppelklick = (i) => {
+  const doppelklick = (i, maus = true) => {
     const t = items[i];
     if (!t) return;
+    if (maus && Date.now() - geoeffnetUm.current < DOPPEL_SPERRE_MS) return;
     if (istTitel(t)) spielen(i);
     else if (t.aufklappbar !== false) oeffnen(t);
   };
@@ -519,7 +526,7 @@ function MediaLibrary({ config, conn, raum, apiRef, suchRef, mehrfach, setMehrfa
   // für Tasten (Enter, Pfeile) und „Fade“ aus dem übergeordneten Fenster
   apiRef.current = {
     // Enter wie Doppelklick: Titel spielen, Album & Co. öffnen
-    spielen: () => (erster >= 0 ? () => doppelklick(erster) : null),
+    spielen: () => (erster >= 0 ? () => doppelklick(erster, false) : null),
     bewegen: (d) => {
       if (!items.length) return;
       const z = Math.max(0, Math.min(items.length - 1, (erster < 0 ? -1 : auswahl[auswahl.length - 1]) + d));
