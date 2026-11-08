@@ -310,6 +310,14 @@ describe('Medien-Fenster', () => {
     const suchen = suchConn.sendMessagePromise.mock.calls.filter(([m]) => m.service === 'search');
     expect(suchen.map(([m]) => m.service_data.name)).toEqual(['Wise']);
     expect(await screen.findByText('2:38')).toBeTruthy();
+
+    // im Ordner „Künstler“ nur Künstler suchen
+    fireEvent.click(screen.getAllByRole('button', { name: 'Künstler' })[0]);
+    await waitFor(() => expect(suchConn.sendMessagePromise.mock.calls.filter(([m]) => m.service === 'search')).toHaveLength(2));
+    const kuenstler = suchConn.sendMessagePromise.mock.calls.filter(([m]) => m.service === 'search').at(-1)[0].service_data;
+    expect(kuenstler).toMatchObject({ name: 'Wise', media_type: ['artist'] });
+    expect(await screen.findByText('Suche: Wise in Künstler')).toBeTruthy();
+    expect(screen.queryByText('Wise Guys - Danke')).toBeNull();
     fetchMedienDauer.mockImplementation(async () => ({ aktiv: false, dauer: {} }));
   });
 
