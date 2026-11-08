@@ -86,6 +86,12 @@ const SP_ORDNER = [
   ['sp_kuenstler', 'Künstler', 'get_artists_followed', 50],
 ];
 const MA_ART = { ma_titel: 'track', ma_kuenstler: 'artist', ma_alben: 'album', ma_playlists: 'playlist' };
+// Suche im gewählten Ordner: Spotify-Suchart je Ordner (ohne Ordner: alles)
+const SP_ART = {
+  sp_playlists: 'playlist', sp_songs: 'track', sp_zuletzt: 'track', sp_top: 'track', sp_alben: 'album', sp_kuenstler: 'artist',
+};
+const ALLE_ARTEN = ['track', 'album', 'playlist', 'artist'];
+const MEHRZAHL = { track: 'tracks', album: 'albums', playlist: 'playlists', artist: 'artists' };
 const SEITE = 200;
 const ART_NAME = { album: 'Album', playlist: 'Playlist', artist: 'Künstler', folder: 'Ordner', radio: 'Radio', gespeichert: 'Liste' };
 const TASTEN_AUS = ['INPUT', 'TEXTAREA', 'SELECT'];
@@ -362,7 +368,16 @@ function MediaLibrary({ config, conn, raum, apiRef, suchRef, mehrfach, setMehrfa
     }
   }, [conn, maEintrag, raum, sp?.entity, zeigen]);
 
-  useEffect(() => { if (ordner) ordnerLaden(ordner); }, [ordner, ordnerLaden]);
+  // Ordner wählen: steht etwas im Suchfeld, nur in diesem Ordner suchen, sonst den Ordner zeigen
+  const textRef = useRef(text);
+  textRef.current = text;
+  const sucheRef = useRef(null);
+  const ordnerZeigen = useCallback((key) => {
+    const q = textRef.current.trim();
+    if (q.length >= SUCHE_AB) sucheRef.current?.(q);
+    else ordnerLaden(key);
+  }, [ordnerLaden]);
+  useEffect(() => { if (ordner) ordnerZeigen(ordner); }, [ordner, ordnerZeigen]);
   // neu gespeicherte Playlist sofort in „Meine Playlists“ zeigen
   useEffect(() => { if (listenStand && ordner === MEINE[0] && !stapel.length) ordnerLaden(MEINE[0]); }, [listenStand]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -373,40 +388,56 @@ function MediaLibrary({ config, conn, raum, apiRef, suchRef, mehrfach, setMehrfa
   }));
 
   const quelle = ordner?.startsWith('sp_') ? 'spotify' : 'ma';
-  // Suche beim Tippen und mit Enter; nur die Antwort auf die letzte Suche zählt
+  const ordnerName = [...MA_ORDNER, MEINE, ...SP_ORDNER].find(([k]) => k === ordner)?.[1];
+  // Suche beim Tippen und mit Enter, nur im gewählten Ordner; nur die Antwort auf die letzte zählt
   const sucheNr = useRef(0);
   const gesucht = useRef('');
   const suche = async (q) => {
-    gesucht.current = q;
+    gesucht.current = `${ordner}|${q}`;
     sucheNr.current += 1;
     const nr = sucheNr.current;
     const aktuell = () => nr === sucheNr.current;
+    const titel = `Suche: ${q}${ordnerName ? ` in ${ordnerName}` : ''}`;
     setLaedt(true);
     try {
-      if (quelle === 'spotify') {
-        const r = await spDienst(conn, 'search_all', { entity_id: sp.entity, criteria: q, criteria_type: 'track,album,artist,playlist', limit_total: 20 });
-        if (aktuell()) zeigen({ titel: `Suche: ${q}`, quelle, kontext: null, items: ['tracks', 'albums', 'playlists', 'artists'].flatMap((k) => spListe(r?.[k])), mehr: null });
+      if (ordner === MEINE[0]) {
+        const listen = raum ? await fetchMedienListen(raum) : [];
+        const klein = q.toLocaleLowerCase('de');
+        const items = (listen || []).filter((l) => l.name.toLocaleLowerCase('de').includes(klein))
+          .map((l) => ({ uri: l.schluessel, name: l.name, artist: '', dauer: null, media_type: 'gespeichert', quelle: 'ma', anzahl: l.anzahl }));
+        if (aktuell()) zeigen({ titel, quelle, ordner, kontext: null, items, mehr: null });
+      } else if (quelle === 'spotify') {
+        const arten = SP_ART[ordner] ? [SP_ART[ordner]] : ALLE_ARTEN;
+        const r = await spDienst(conn, 'search_all', { entity_id: sp.entity, criteria: q, criteria_type: arten.join(','), limit_total: arten.length > 1 ? 20 : 50 });
+        if (aktuell()) zeigen({ titel, quelle, ordner, kontext: null, items: arten.flatMap((a) => spListe(r?.[MEHRZAHL[a]])), mehr: null });
       } else {
-        const r = await maDienst(conn, 'search', { config_entry_id: maEintrag, name: q, limit: 25 });
-        const items = ['tracks', 'albums', 'playlists', 'artists']
-          .flatMap((k) => (r?.[k] || []).map(maTitel))
+        const arten = MA_ART[ordner] ? [MA_ART[ordner]] : ALLE_ARTEN;
+        const r = await maDienst(conn, 'search', {
+          config_entry_id: maEintrag, name: q, limit: arten.length > 1 ? 25 : 50, ...(MA_ART[ordner] ? { media_type: arten } : {}),
+        });
+        const items = arten
+          .flatMap((a) => (r?.[MEHRZAHL[a]] || []).map(maTitel))
           .filter((t) => t && !(sp?.entity && istSpotifyUri(t.uri)));
-        if (aktuell()) zeigen({ titel: `Suche: ${q}`, quelle, kontext: null, items, mehr: null });
+        if (aktuell()) zeigen({ titel, quelle, ordner, kontext: null, items, mehr: null });
       }
     } catch {
-      if (aktuell()) zeigen({ titel: `Suche: ${q}`, quelle, items: [], mehr: null });
+      if (aktuell()) zeigen({ titel, quelle, ordner, items: [], mehr: null });
     } finally {
       if (aktuell()) setLaedt(false);
     }
   };
-  const sucheRef = useRef(suche);
   sucheRef.current = suche;
   useEffect(() => {
     const q = text.trim();
-    if (q.length < SUCHE_AB || q === gesucht.current) return undefined;
+    // Feld geleert: wieder den ganzen Ordner zeigen
+    if (!q) {
+      if (gesucht.current && ordner) { gesucht.current = ''; ordnerLaden(ordner); }
+      return undefined;
+    }
+    if (q.length < SUCHE_AB || `${ordner}|${q}` === gesucht.current) return undefined;
     const t = setTimeout(() => sucheRef.current(q), SUCHE_PAUSE_MS);
     return () => clearTimeout(t);
-  }, [text]);
+  }, [text]); // eslint-disable-line react-hooks/exhaustive-deps
   const suchen = (e) => {
     e.preventDefault();
     const q = text.trim();
@@ -497,7 +528,7 @@ function MediaLibrary({ config, conn, raum, apiRef, suchRef, mehrfach, setMehrfa
   };
 
   const ordnerKnopf = ([k, name]) => (
-    <button key={k} type="button" aria-pressed={ordner === k} onClick={() => (ordner === k ? ordnerLaden(k) : setOrdner(k))}>{name}</button>
+    <button key={k} type="button" aria-pressed={ordner === k} onClick={() => (ordner === k ? ordnerZeigen(k) : setOrdner(k))}>{name}</button>
   );
 
   return (
