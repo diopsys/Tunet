@@ -139,3 +139,15 @@ export function publishCurrentSettings({
     body: JSON.stringify({ ha_user_id, source_device_id, target_device_id, history_keep_limit }),
   });
 }
+
+// Kalender: Termine in CalDAV-Kalendern löschen (kann die HA-Integration nicht)
+export function fetchKalenderStatus() {
+  return request('/kalender/status');
+}
+
+export function kalenderTerminLoeschen({ entityId, uid, start, serie = false }) {
+  return request('/kalender/loeschen', {
+    method: 'POST',
+    body: JSON.stringify({ entityId, uid, start, serie }),
+  });
+}

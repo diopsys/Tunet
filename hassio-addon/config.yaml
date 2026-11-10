@@ -24,12 +24,18 @@ ports:
 ports_description:
   3002/tcp: 'Tunet Web Interface (not needed when using Ingress)'
 options:
+  caldav_url: ''
+  caldav_user: ''
+  caldav_password: ''
   ha_url: ''
   ha_token: ''
   data_encryption_mode: 'off'
   data_encryption_key: ''
   data_encryption_salt: ''
 schema:
+  caldav_url: 'url?'
+  caldav_user: 'str?'
+  caldav_password: 'password?'
   ha_url: 'str?'
   ha_token: 'password?'
   data_encryption_mode: 'list(off|dual|enc_only)?'
