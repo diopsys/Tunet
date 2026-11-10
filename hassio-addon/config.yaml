@@ -33,7 +33,7 @@ options:
   data_encryption_key: ''
   data_encryption_salt: ''
 schema:
-  caldav_url: 'url?'
+  caldav_url: 'str?'
   caldav_user: 'str?'
   caldav_password: 'password?'
   ha_url: 'str?'

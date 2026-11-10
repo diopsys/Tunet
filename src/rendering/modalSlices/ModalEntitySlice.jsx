@@ -391,6 +391,11 @@ export function ModalEntitySlice({ core, modals, cardConfig, entityHelpers, reso
                 ? cardSettings[showCalendarModal]?.personCalendars || []
                 : []
             }
+            calendarColors={
+              typeof showCalendarModal === 'string'
+                ? cardSettings[showCalendarModal]?.calendarColors || {}
+                : {}
+            }
           />
         </ModalSuspense>
       )}

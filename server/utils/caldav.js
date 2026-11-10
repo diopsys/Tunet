@@ -90,7 +90,11 @@ async function dav(method, url, { body, depth, fetchFn = fetch } = {}) {
   if (body) headers['Content-Type'] = 'application/xml; charset=utf-8';
   if (depth !== undefined) headers.Depth = String(depth);
   const res = await fetchFn(url, { method, headers, body, signal: AbortSignal.timeout(ZEITLIMIT_MS) });
-  if (!res.ok) throw new Error(`CalDAV ${method} ${res.status}`);
+  if (!res.ok) {
+    const err = /** @type {any} */ (new Error(`CalDAV ${method} ${res.status}`));
+    err.davStatus = res.status;
+    throw err;
+  }
   return res.status === 204 ? '' : res.text();
 }
 

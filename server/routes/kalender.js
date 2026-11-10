@@ -23,7 +23,9 @@ router.post('/loeschen', async (req, res) => {
   } catch (err) {
     const status = err.status || 502;
     if (status >= 500) console.warn(`[kalender] Löschen in ${entityId}: ${err.message}`);
-    return res.status(status).json({ error: err.message });
+    // Anmeldung abgelehnt: caldav_user/caldav_password in den App-Optionen prüfen
+    const code = err.davStatus === 401 || err.davStatus === 403 ? 'anmeldung' : undefined;
+    return res.status(status).json({ error: err.message, ...(code ? { code } : {}) });
   }
 });
 
