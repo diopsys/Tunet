@@ -29,6 +29,13 @@ if ! grep -q '^  ma_token:' hassio-addon/config.yaml; then
     -e "/^schema:/a\\  ma_url: 'str?'\\n  ma_token: 'password?'" \
     hassio-addon/config.yaml
 fi
+# Optionen für CalDAV (Kalender: Termine löschen) – ebenso, solange gorbi87 sie nicht hat
+if ! grep -q '^  caldav_password:' hassio-addon/config.yaml; then
+  sed -i \
+    -e "/^options:/a\\  caldav_url: ''\\n  caldav_user: ''\\n  caldav_password: ''" \
+    -e "/^schema:/a\\  caldav_url: 'url?'\\n  caldav_user: 'str?'\\n  caldav_password: 'password?'" \
+    hassio-addon/config.yaml
+fi
 printf 'name: Casa (diopsys)\nurl: https://github.com/diopsys/Tunet\nmaintainer: diopsys\n' > repository.yaml
 
 echo "$basis-casa.$n"

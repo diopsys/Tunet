@@ -9,3 +9,14 @@ configuration:
     description: >-
       Optional. Langlebiger Token aus Music Assistant (Einstellungen → Profil). Nötig für die
       Titellängen im Winamp-Fenster der Medien-Kachel.
+  caldav_url:
+    name: CalDAV-Adresse
+    description: >-
+      Optional. CalDAV-Server zum Löschen von Terminen (die CalDAV-Integration von Home Assistant
+      kann nur anlegen), z. B. https://mail.example.org/SOGo/dav/
+  caldav_user:
+    name: CalDAV-Benutzer
+    description: Dasselbe Konto wie in der CalDAV-Integration.
+  caldav_password:
+    name: CalDAV-Passwort
+    description: Am besten ein App-Passwort nur für DAV.

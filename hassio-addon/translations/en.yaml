@@ -9,3 +9,12 @@ configuration:
     description: >-
       Optional. Long-lived token from Music Assistant (Settings → Profile). Needed for the
       track lengths in the media tile's Winamp window.
+  caldav_url:
+    name: CalDAV URL
+    description: CalDAV server for deleting events (the Home Assistant CalDAV integration can only create them), e.g. https://mail.example.org/SOGo/dav/
+  caldav_user:
+    name: CalDAV user
+    description: Same account as in the CalDAV integration.
+  caldav_password:
+    name: CalDAV password
+    description: Preferably an app password limited to DAV.

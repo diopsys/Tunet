@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { X, Calendar, Check, ChevronDown, ChevronUp, Plus, Trash2 } from '../icons';
+import { useState, useEffect, useRef } from 'react';
+import { X, Calendar, Check, ChevronDown, ChevronUp, Plus } from '../icons';
 import {
   callService,
   deleteCalendarEvent,
@@ -8,6 +8,11 @@ import {
 } from '../services';
 import { getLocaleForLanguage } from '../i18n';
 import AccessibleModalShell from '../components/ui/AccessibleModalShell';
+import { fetchKalenderStatus, kalenderTerminLoeschen } from '../services/settingsApi';
+import PersonenAnsicht from './calendar/PersonenAnsicht';
+import DeleteEventButton from './calendar/DeleteEventButton';
+
+const VIEW_STORAGE_KEY = 'tunet_calendar_modal_view';
 
 /**
  * CalendarModal - Modal for displaying calendar with selectable calendars
@@ -19,8 +24,17 @@ import AccessibleModalShell from '../components/ui/AccessibleModalShell';
  * @param {Object} props.entities - All HA entities
  * @param {string} [props.language] - Language code
  * @param {Function} props.t - Translation function
+ * @param {string[]} [props.personCalendars] - Kalender für die Personen-Ansicht (je eine Spalte, in dieser Reihenfolge)
  */
-export default function CalendarModal({ show, onClose, conn, entities, language, t }) {
+export default function CalendarModal({
+  show,
+  onClose,
+  conn,
+  entities,
+  language,
+  t,
+  personCalendars = [],
+}) {
   const translate = t || ((key) => key);
   const locale = getLocaleForLanguage(language);
   const modalTitleId = 'calendar-modal-title';
@@ -37,9 +51,41 @@ export default function CalendarModal({ show, onClose, conn, entities, language,
   const writableCalendars = allCalendars.filter(
     (c) => (Number(entities[c.id]?.attributes?.supported_features) & 1) === 1
   );
-  // … und solche, in denen man löschen darf (DELETE_EVENT)
-  const canDelete = (calendarId) =>
+  // … und solche, in denen man löschen darf: über HA (DELETE_EVENT) oder, bei CalDAV-Kalendern,
+  // über den Tunet-Server (die HA-Integration kann nur anlegen)
+  const [serverDelete, setServerDelete] = useState(false);
+  const canDeleteInHa = (calendarId) =>
     (Number(entities[calendarId]?.attributes?.supported_features) & 2) === 2;
+  const canDelete = (calendarId) =>
+    canDeleteInHa(calendarId) ||
+    (serverDelete && writableCalendars.some((c) => c.id === calendarId));
+
+  // Personen-Ansicht: eine Spalte je Kalender (nur vorhandene Kalender)
+  const persons = (Array.isArray(personCalendars) ? personCalendars : [])
+    .filter((id) => typeof id === 'string' && entities?.[id])
+    .map((id) => ({
+      id,
+      name: entities[id]?.attributes?.friendly_name || id,
+      color: getCalendarColor(id),
+      writable: writableCalendars.some((c) => c.id === id),
+    }));
+  const [view, setView] = useState(() => {
+    try {
+      return localStorage.getItem(VIEW_STORAGE_KEY) === 'list' ? 'list' : 'people';
+    } catch {
+      return 'people';
+    }
+  });
+  const peopleView = view === 'people' && persons.length > 0;
+  const changeView = (next) => {
+    setView(next);
+    try {
+      localStorage.setItem(VIEW_STORAGE_KEY, next);
+    } catch {
+      // egal
+    }
+  };
+  const [addTarget, setAddTarget] = useState(null);
 
   const [selectedCalendars, setSelectedCalendars] = useState(() => {
     const stored = localStorage.getItem('tunet_calendar_modal_selection');
@@ -59,6 +105,7 @@ export default function CalendarModal({ show, onClose, conn, entities, language,
   const [showAddForm, setShowAddForm] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const [confirmDeleteKey, setConfirmDeleteKey] = useState(null);
+  const [seriesDeleteKey, setSeriesDeleteKey] = useState(null);
   const [deletingKey, setDeletingKey] = useState(null);
   const [deleteError, setDeleteError] = useState('');
 
@@ -66,14 +113,31 @@ export default function CalendarModal({ show, onClose, conn, entities, language,
     if (show) {
       setShowCalendarPicker(false);
       setShowAddForm(false);
+      setAddTarget(null);
       setConfirmDeleteKey(null);
+      setSeriesDeleteKey(null);
       setDeleteError('');
     }
   }, [show]);
 
+  // Kann der Tunet-Server löschen (CalDAV eingerichtet)?
+  useEffect(() => {
+    if (!show) return undefined;
+    let aktiv = true;
+    fetchKalenderStatus()
+      .then((status) => aktiv && setServerDelete(Boolean(status?.aktiv)))
+      .catch(() => aktiv && setServerDelete(false));
+    return () => {
+      aktiv = false;
+    };
+  }, [show]);
+
+  const shownCalendars = peopleView ? persons.map((p) => p.id) : selectedCalendars;
+  const shownCalendarsKey = shownCalendars.join('|');
+
   // Fetch events for selected calendars
   useEffect(() => {
-    if (!show || !conn || selectedCalendars.length === 0) return;
+    if (!show || !conn || shownCalendars.length === 0) return;
 
     const fetchEvents = async () => {
       setLoading(true);
@@ -87,7 +151,7 @@ export default function CalendarModal({ show, onClose, conn, entities, language,
         const result = await getCalendarEvents(conn, {
           start,
           end,
-          entityIds: selectedCalendars,
+          entityIds: shownCalendars,
         });
 
         setEvents(result || {});
@@ -99,7 +163,8 @@ export default function CalendarModal({ show, onClose, conn, entities, language,
     };
 
     fetchEvents();
-  }, [show, conn, selectedCalendars, reloadKey]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- shownCalendarsKey steht für shownCalendars
+  }, [show, conn, shownCalendarsKey, reloadKey]);
 
   // Save selection to localStorage
   useEffect(() => {
@@ -118,7 +183,7 @@ export default function CalendarModal({ show, onClose, conn, entities, language,
   };
 
   // Termin löschen: uid über calendar/event/subscribe nachschlagen, dann calendar/event/delete
-  const deleteEvent = async (event, key) => {
+  const deleteEvent = async (event, key, { series = false } = {}) => {
     setDeletingKey(key);
     setDeleteError('');
     try {
@@ -135,12 +200,31 @@ export default function CalendarModal({ show, onClose, conn, entities, language,
         (c) => c.uid && c.summary === event.summary && isSameStart(c.start, event.start)
       );
       if (!match) throw new Error('Event not found');
-      await deleteCalendarEvent(conn, {
-        entityId: event.calendarId,
-        uid: match.uid,
-        recurrenceId: match.recurrence_id,
-      });
+      if (canDeleteInHa(event.calendarId)) {
+        await deleteCalendarEvent(conn, {
+          entityId: event.calendarId,
+          uid: match.uid,
+          recurrenceId: match.recurrence_id,
+        });
+      } else {
+        try {
+          await kalenderTerminLoeschen({
+            entityId: event.calendarId,
+            uid: match.uid,
+            start: event.start,
+            serie: series,
+          });
+        } catch (error) {
+          // Serientermin: erst nach zweiter Bestätigung die ganze Serie löschen
+          if (error?.status === 409 && error?.body?.serie) {
+            setSeriesDeleteKey(key);
+            return;
+          }
+          throw error;
+        }
+      }
       setConfirmDeleteKey(null);
+      setSeriesDeleteKey(null);
       setReloadKey((k) => k + 1);
     } catch (error) {
       console.error('Failed to delete calendar event:', error);
@@ -233,10 +317,34 @@ export default function CalendarModal({ show, onClose, conn, entities, language,
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
+              {persons.length > 0 && (
+                <div
+                  role="group"
+                  className="inline-flex rounded-full border border-[var(--glass-border)] bg-[var(--glass-bg)] p-0.5"
+                >
+                  {[
+                    ['people', translate('calendar.viewPeople')],
+                    ['list', translate('calendar.viewList')],
+                  ].map(([value, label]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => changeView(value)}
+                      aria-pressed={(value === 'people') === peopleView}
+                      className={`rounded-full px-3.5 py-1.5 text-[10px] font-bold tracking-widest uppercase transition-colors ${(value === 'people') === peopleView ? 'bg-[var(--glass-bg-hover)] text-[var(--text-primary)]' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              )}
               {writableCalendars.length > 0 && (
                 <button
                   type="button"
-                  onClick={() => setShowAddForm((current) => !current)}
+                  onClick={() => {
+                    setAddTarget(null);
+                    setShowAddForm((current) => !current);
+                  }}
                   aria-expanded={showAddForm}
                   className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-[10px] font-bold tracking-widest uppercase transition-colors ${showAddForm ? 'border-[var(--glass-border)] bg-[var(--glass-bg-hover)] text-[var(--text-primary)]' : 'border-[var(--glass-border)] bg-[var(--glass-bg)] text-[var(--text-secondary)] hover:bg-[var(--glass-bg-hover)] hover:text-[var(--text-primary)]'}`}
                 >
@@ -244,7 +352,7 @@ export default function CalendarModal({ show, onClose, conn, entities, language,
                   {translate('calendar.addEvent')}
                 </button>
               )}
-              {allCalendars.length > 0 && (
+              {allCalendars.length > 0 && !peopleView && (
                 <button
                   type="button"
                   onClick={() => setShowCalendarPicker((current) => !current)}
@@ -267,21 +375,30 @@ export default function CalendarModal({ show, onClose, conn, entities, language,
 
           {/* Main Content */}
           <div
-            className={`grid min-h-0 flex-1 grid-cols-1 gap-5 overflow-hidden transition-[grid-template-columns] duration-300 ${showCalendarPicker ? 'grid-rows-[auto_minmax(0,1fr)] lg:grid-cols-[minmax(0,1fr)_17rem] lg:grid-rows-1' : 'grid-rows-1 lg:grid-cols-1'}`}
+            className={`grid min-h-0 flex-1 grid-cols-1 gap-5 overflow-hidden transition-[grid-template-columns] duration-300 ${showCalendarPicker && !peopleView ? 'grid-rows-[auto_minmax(0,1fr)] lg:grid-cols-[minmax(0,1fr)_17rem] lg:grid-rows-1' : 'grid-rows-1 lg:grid-cols-1'}`}
           >
             {/* Calendar Events */}
             <div className="scrollbar-hide min-h-0 overflow-y-auto pr-1 sm:pr-3">
               {showAddForm && writableCalendars.length > 0 && (
                 <AddEventForm
+                  key={`${addTarget?.calendarId || ''}|${addTarget?.date || ''}`}
                   calendars={writableCalendars}
                   defaultCalendarId={
-                    writableCalendars.find((c) => selectedCalendars.includes(c.id))?.id
+                    addTarget?.calendarId ||
+                    (peopleView
+                      ? persons.find((p) => p.writable)?.id
+                      : writableCalendars.find((c) => selectedCalendars.includes(c.id))?.id)
                   }
+                  defaultDate={addTarget?.date}
                   conn={conn}
                   translate={translate}
-                  onCancel={() => setShowAddForm(false)}
+                  onCancel={() => {
+                    setShowAddForm(false);
+                    setAddTarget(null);
+                  }}
                   onSaved={(calendarId) => {
                     setShowAddForm(false);
+                    setAddTarget(null);
                     setSelectedCalendars((prev) =>
                       prev.includes(calendarId) ? prev : [...prev, calendarId]
                     );
@@ -289,7 +406,34 @@ export default function CalendarModal({ show, onClose, conn, entities, language,
                   }}
                 />
               )}
-              {loading ? (
+              {peopleView ? (
+                <PersonenAnsicht
+                  persons={persons}
+                  events={events}
+                  loading={loading}
+                  locale={locale}
+                  translate={translate}
+                  canDelete={canDelete}
+                  isAllDay={isAllDayEvent}
+                  isPast={isEventFinishedToday}
+                  onAdd={(calendarId, date) => {
+                    setAddTarget({ calendarId, date });
+                    setShowAddForm(true);
+                  }}
+                  deleteState={{ confirmDeleteKey, seriesDeleteKey, deletingKey, deleteError }}
+                  onRequestDelete={(key) => {
+                    setSeriesDeleteKey(null);
+                    setConfirmDeleteKey(key);
+                  }}
+                  onConfirmDelete={(event, key) =>
+                    deleteEvent(event, key, { series: seriesDeleteKey === key })
+                  }
+                  onCancelDelete={() => {
+                    setConfirmDeleteKey(null);
+                    setSeriesDeleteKey(null);
+                  }}
+                />
+              ) : loading ? (
                 <div className="flex items-center justify-center py-20">
                   <p className="text-sm tracking-widest text-[var(--text-secondary)] uppercase">
                     {translate('common.loading')}
@@ -370,24 +514,22 @@ export default function CalendarModal({ show, onClose, conn, entities, language,
                                   )}
                                 </div>
                                 {canDelete(event.calendarId) && (
-                                  <button
-                                    type="button"
-                                    disabled={deletingKey === eventKey}
-                                    onClick={() =>
-                                      confirming
-                                        ? deleteEvent(event, eventKey)
-                                        : setConfirmDeleteKey(eventKey)
+                                  <DeleteEventButton
+                                    confirming={confirming}
+                                    series={seriesDeleteKey === eventKey}
+                                    deleting={deletingKey === eventKey}
+                                    onRequest={() => setConfirmDeleteKey(eventKey)}
+                                    onConfirm={() =>
+                                      deleteEvent(event, eventKey, {
+                                        series: seriesDeleteKey === eventKey,
+                                      })
                                     }
-                                    onBlur={() => {
-                                      if (confirming && deletingKey !== eventKey)
-                                        setConfirmDeleteKey(null);
+                                    onCancel={() => {
+                                      setConfirmDeleteKey(null);
+                                      setSeriesDeleteKey(null);
                                     }}
-                                    aria-label={translate('calendar.deleteEvent')}
-                                    className={`flex flex-shrink-0 items-center gap-1.5 self-center rounded-full px-2.5 py-1.5 text-[10px] font-bold tracking-widest uppercase transition-colors disabled:opacity-40 ${confirming ? 'bg-[var(--status-error-bg)] text-[var(--status-error-fg)]' : 'text-[var(--text-muted)] hover:bg-[var(--glass-bg-hover)] hover:text-[var(--text-primary)]'}`}
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                    {confirming && translate('calendar.confirmDelete')}
-                                  </button>
+                                    translate={translate}
+                                  />
                                 )}
                               </div>
                             );
@@ -485,15 +627,29 @@ const labelClass =
   'mb-1 block text-[10px] font-bold tracking-widest text-[var(--text-secondary)] uppercase opacity-70';
 
 // Termin über calendar.create_event anlegen (ganztägig oder mit Uhrzeit)
-function AddEventForm({ calendars, defaultCalendarId, conn, translate, onCancel, onSaved }) {
+function AddEventForm({
+  calendars,
+  defaultCalendarId,
+  defaultDate,
+  conn,
+  translate,
+  onCancel,
+  onSaved,
+}) {
   const [calendarId, setCalendarId] = useState(defaultCalendarId || calendars[0]?.id);
   const [summary, setSummary] = useState('');
-  const [date, setDate] = useState(() => toDateString(new Date()));
+  const [date, setDate] = useState(() => defaultDate || toDateString(new Date()));
   const [allDay, setAllDay] = useState(true);
   const [startTime, setStartTime] = useState('09:00');
   const [endTime, setEndTime] = useState('10:00');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const formRef = useRef(null);
+
+  // Aus einer Spalte weiter unten geöffnet: Formular oben ins Bild holen
+  useEffect(() => {
+    formRef.current?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
+  }, []);
 
   const save = async (e) => {
     e.preventDefault();
@@ -525,6 +681,7 @@ function AddEventForm({ calendars, defaultCalendarId, conn, translate, onCancel,
 
   return (
     <form
+      ref={formRef}
       onSubmit={save}
       onKeyDown={(e) => e.stopPropagation()}
       className="popup-surface mb-6 space-y-3 rounded-3xl border border-[var(--glass-border)] p-4"

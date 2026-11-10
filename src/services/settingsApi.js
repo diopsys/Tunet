@@ -190,3 +190,15 @@ export function fetchMedienDauer(uris) {
     body: JSON.stringify({ uris }),
   });
 }
+
+// Kalender: Termine in CalDAV-Kalendern löschen (kann die HA-Integration nicht)
+export function fetchKalenderStatus() {
+  return request('/kalender/status');
+}
+
+export function kalenderTerminLoeschen({ entityId, uid, start, serie = false }) {
+  return request('/kalender/loeschen', {
+    method: 'POST',
+    body: JSON.stringify({ entityId, uid, start, serie }),
+  });
+}
