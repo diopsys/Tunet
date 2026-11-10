@@ -1,6 +1,6 @@
 name: 'Casa (diopsys)'
 description: 'Tunet von gorbi87 plus eigene, noch nicht gemergte Änderungen (Zweig casa)'
-version: "1.31.7-casa.7"
+version: "1.31.7-casa.8"
 slug: 'casa'
 url: 'https://github.com/diopsys/Tunet/tree/casa'
 init: false
@@ -37,7 +37,7 @@ options:
 schema:
   ma_url: 'str?'
   ma_token: 'password?'
-  caldav_url: 'url?'
+  caldav_url: 'str?'
   caldav_user: 'str?'
   caldav_password: 'password?'
   ha_url: 'str?'

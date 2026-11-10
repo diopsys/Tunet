@@ -1,4 +1,5 @@
 import React from 'react';
+import { getCalendarColor } from '../utils/calendarColors';
 import { X, Check, Plus, ChevronDown, ChevronUp, Star } from 'lucide-react';
 import IconPicker from '../components/ui/IconPicker';
 import ConditionBuilder from '../components/ui/ConditionBuilder';
@@ -1570,26 +1571,42 @@ export default function EditCardModal({
                       const selected =
                         Array.isArray(editSettings.calendars) &&
                         editSettings.calendars.includes(id);
+                      const colors = editSettings.calendarColors || {};
                       return (
-                        <button
-                          key={id}
-                          type="button"
-                          onClick={() => {
-                            const current = Array.isArray(editSettings.calendars)
-                              ? editSettings.calendars
-                              : [];
-                            const next = selected
-                              ? current.filter((x) => x !== id)
-                              : [...current, id];
-                            saveCardSetting(editSettingsKey, 'calendars', next);
-                          }}
-                          className={`w-full rounded-xl border px-3 py-2 text-left transition-colors ${selected ? 'border-[var(--glass-border)] bg-[var(--glass-bg-hover)] text-[var(--text-primary)]' : 'border-transparent text-[var(--text-secondary)] hover:bg-[var(--glass-bg-hover)]'}`}
-                        >
-                          <div className="truncate text-sm font-bold">
-                            {entities[id]?.attributes?.friendly_name || id}
-                          </div>
-                          <div className="truncate text-[10px] text-[var(--text-muted)]">{id}</div>
-                        </button>
+                        <div key={id} className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const current = Array.isArray(editSettings.calendars)
+                                ? editSettings.calendars
+                                : [];
+                              const next = selected
+                                ? current.filter((x) => x !== id)
+                                : [...current, id];
+                              saveCardSetting(editSettingsKey, 'calendars', next);
+                            }}
+                            className={`min-w-0 flex-1 rounded-xl border px-3 py-2 text-left transition-colors ${selected ? 'border-[var(--glass-border)] bg-[var(--glass-bg-hover)] text-[var(--text-primary)]' : 'border-transparent text-[var(--text-secondary)] hover:bg-[var(--glass-bg-hover)]'}`}
+                          >
+                            <div className="truncate text-sm font-bold">
+                              {entities[id]?.attributes?.friendly_name || id}
+                            </div>
+                            <div className="truncate text-[10px] text-[var(--text-muted)]">{id}</div>
+                          </button>
+                          {/* Farbe des Kalenders (Karte und Kalender-Fenster) */}
+                          <input
+                            type="color"
+                            value={getCalendarColor(id, colors)}
+                            onChange={(e) =>
+                              saveCardSetting(editSettingsKey, 'calendarColors', {
+                                ...colors,
+                                [id]: e.target.value,
+                              })
+                            }
+                            aria-label={`${t('calendar.color') || 'Color'}: ${entities[id]?.attributes?.friendly_name || id}`}
+                            title={t('calendar.color') || 'Color'}
+                            className="h-8 w-8 flex-shrink-0 cursor-pointer rounded-lg border border-[var(--glass-border)] bg-transparent p-0.5"
+                          />
+                        </div>
                       );
                     })}
                   </div>

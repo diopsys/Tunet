@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, memo } from 'react';
+import { customCalendarColor } from '../../utils/calendarColors';
 import { Calendar as CalendarIcon, Clock, MapPin, AlertCircle } from 'lucide-react';
 import { getIconComponent } from '../../icons';
 import { getCalendarEvents } from '../../services/haClient';
@@ -137,9 +138,12 @@ const CalendarCard = memo(/** @param {any} props */ function CalendarCard({
 
         // Merge all events from all calendars
         let allEvents = [];
-        Object.values(result).forEach((calendarEvents) => {
+        Object.entries(result).forEach(([calendarId, calendarEvents]) => {
           if (calendarEvents && Array.isArray(calendarEvents.events)) {
-            allEvents = [...allEvents, ...calendarEvents.events];
+            allEvents = [
+              ...allEvents,
+              ...calendarEvents.events.map((evt) => (evt ? { ...evt, calendarId } : evt)),
+            ];
           }
         });
 
@@ -234,6 +238,8 @@ const CalendarCard = memo(/** @param {any} props */ function CalendarCard({
   const displayName = customName || settings?.name || t('calendar.title');
   const isSmall = size === 'small';
   const isLarge = !!settings?.largeCalendar;
+  // Eingestellte Kalenderfarbe eines Termins (sonst Akzentfarbe wie bisher)
+  const eventColor = (evt) => customCalendarColor(evt?.calendarId, settings?.calendarColors);
 
   const HOUR_HEIGHT = 48;
   const START_HOUR = 0;
@@ -471,8 +477,12 @@ const CalendarCard = memo(/** @param {any} props */ function CalendarCard({
                       <div
                         key={`ad-${idx}`}
                         className="truncate rounded border-l-2 border-[var(--accent-color)] bg-[var(--accent-bg)] px-1 py-0.5"
+                        style={eventColor(evt) ? { borderLeftColor: eventColor(evt) } : undefined}
                       >
-                        <p className="truncate text-xs leading-tight font-medium text-[var(--accent-color)]">
+                        <p
+                          className="truncate text-xs leading-tight font-medium text-[var(--accent-color)]"
+                          style={eventColor(evt) ? { color: eventColor(evt) } : undefined}
+                        >
                           {evt.summary}
                         </p>
                       </div>
@@ -538,7 +548,11 @@ const CalendarCard = memo(/** @param {any} props */ function CalendarCard({
                         <div
                           key={`${evt.uid || evt.id || evt.summary || 'evt'}-${idx}`}
                           className="absolute right-0.5 left-0.5 z-10 overflow-hidden rounded-md border-l-2 border-[var(--accent-color)] bg-[var(--accent-bg)] transition-colors hover:bg-[var(--accent-bg)]"
-                          style={{ top: block.top, height: Math.max(block.height, 18) }}
+                          style={{
+                            top: block.top,
+                            height: Math.max(block.height, 18),
+                            ...(eventColor(evt) ? { borderLeftColor: eventColor(evt) } : {}),
+                          }}
                         >
                           <div className="h-full px-1 py-0.5">
                             {block.height >= 28 && timeStr && (
@@ -646,6 +660,7 @@ const CalendarCard = memo(/** @param {any} props */ function CalendarCard({
                       <div className="flex flex-col items-center pt-1.5">
                         <div
                           className={`h-2 w-2 rounded-full ${isAllDay ? 'bg-[var(--accent-color)]' : 'bg-[var(--glass-border)] transition-colors group-hover:bg-[var(--accent-color)]'}`}
+                          style={eventColor(evt) ? { backgroundColor: eventColor(evt) } : undefined}
                         />
                         <div className="my-1 -mb-4 h-full w-0.5 bg-[var(--glass-border)]/50 group-last:hidden" />
                       </div>
@@ -658,6 +673,11 @@ const CalendarCard = memo(/** @param {any} props */ function CalendarCard({
                         <div className="relative rounded-xl border border-transparent bg-transparent py-2.5 pr-3 pl-4 transition-colors hover:border-[var(--glass-border)] hover:bg-[var(--glass-bg)]">
                           <span
                             className={`absolute top-2 bottom-2 left-0 w-1 rounded-full ${isAllDay ? 'bg-[var(--accent-bg)]' : 'bg-[var(--glass-border)] transition-colors group-hover:bg-[var(--accent-bg)]'}`}
+                            style={
+                              eventColor(evt)
+                                ? { backgroundColor: eventColor(evt), opacity: 0.8 }
+                                : undefined
+                            }
                           />
                           <p className="text-sm leading-snug font-medium break-words whitespace-normal text-[var(--text-primary)]">
                             {evt.summary}

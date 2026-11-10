@@ -11,6 +11,7 @@ import AccessibleModalShell from '../components/ui/AccessibleModalShell';
 import { fetchKalenderStatus, kalenderTerminLoeschen } from '../services/settingsApi';
 import PersonenAnsicht from './calendar/PersonenAnsicht';
 import DeleteEventButton from './calendar/DeleteEventButton';
+import { getCalendarColor as calendarColorFor } from '../utils/calendarColors';
 
 const VIEW_STORAGE_KEY = 'tunet_calendar_modal_view';
 
@@ -25,6 +26,7 @@ const VIEW_STORAGE_KEY = 'tunet_calendar_modal_view';
  * @param {string} [props.language] - Language code
  * @param {Function} props.t - Translation function
  * @param {string[]} [props.personCalendars] - Kalender für die Personen-Ansicht (je eine Spalte, in dieser Reihenfolge)
+ * @param {Record<string, string>} [props.calendarColors] - eingestellte Farben je Kalender
  */
 export default function CalendarModal({
   show,
@@ -34,7 +36,9 @@ export default function CalendarModal({
   language,
   t,
   personCalendars = [],
+  calendarColors = {},
 }) {
+  const getCalendarColor = (calendarId) => calendarColorFor(calendarId, calendarColors);
   const translate = t || ((key) => key);
   const locale = getLocaleForLanguage(language);
   const modalTitleId = 'calendar-modal-title';
@@ -108,6 +112,7 @@ export default function CalendarModal({
   const [seriesDeleteKey, setSeriesDeleteKey] = useState(null);
   const [deletingKey, setDeletingKey] = useState(null);
   const [deleteError, setDeleteError] = useState('');
+  const [deleteErrorText, setDeleteErrorText] = useState('');
 
   useEffect(() => {
     if (show) {
@@ -228,6 +233,9 @@ export default function CalendarModal({
       setReloadKey((k) => k + 1);
     } catch (error) {
       console.error('Failed to delete calendar event:', error);
+      setDeleteErrorText(
+        error?.body?.code === 'anmeldung' ? translate('calendar.deleteAuthFailed') : ''
+      );
       setDeleteError(key);
     } finally {
       setDeletingKey(null);
@@ -420,7 +428,13 @@ export default function CalendarModal({
                     setAddTarget({ calendarId, date });
                     setShowAddForm(true);
                   }}
-                  deleteState={{ confirmDeleteKey, seriesDeleteKey, deletingKey, deleteError }}
+                  deleteState={{
+                    confirmDeleteKey,
+                    seriesDeleteKey,
+                    deletingKey,
+                    deleteError,
+                    deleteErrorText,
+                  }}
                   onRequestDelete={(key) => {
                     setSeriesDeleteKey(null);
                     setConfirmDeleteKey(key);
@@ -509,7 +523,7 @@ export default function CalendarModal({
                                   )}
                                   {deleteError === eventKey && (
                                     <p className="mt-1 pl-[4.5rem] text-xs font-medium text-[var(--status-error-fg)]">
-                                      {translate('calendar.deleteFailed')}
+                                      {deleteErrorText || translate('calendar.deleteFailed')}
                                     </p>
                                   )}
                                 </div>
@@ -801,27 +815,4 @@ function isEventFinishedToday(event, now = new Date()) {
     start.getDate() === now.getDate();
 
   return startsToday && end.getTime() <= now.getTime();
-}
-
-// Generate consistent colors for calendars
-function getCalendarColor(calendarId) {
-  const colors = [
-    '#3b82f6', // blue
-    '#10b981', // green
-    '#f59e0b', // amber
-    '#ef4444', // red
-    '#8b5cf6', // purple
-    '#ec4899', // pink
-    '#06b6d4', // cyan
-    '#f97316', // orange
-    '#6366f1', // indigo
-    '#14b8a6', // teal
-  ];
-
-  let hash = 0;
-  for (let i = 0; i < calendarId.length; i++) {
-    hash = calendarId.charCodeAt(i) + ((hash << 5) - hash);
-  }
-
-  return colors[Math.abs(hash) % colors.length];
 }

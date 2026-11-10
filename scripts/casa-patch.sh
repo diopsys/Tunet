@@ -33,7 +33,7 @@ fi
 if ! grep -q '^  caldav_password:' hassio-addon/config.yaml; then
   sed -i \
     -e "/^options:/a\\  caldav_url: ''\\n  caldav_user: ''\\n  caldav_password: ''" \
-    -e "/^schema:/a\\  caldav_url: 'url?'\\n  caldav_user: 'str?'\\n  caldav_password: 'password?'" \
+    -e "/^schema:/a\\  caldav_url: 'str?'\\n  caldav_user: 'str?'\\n  caldav_password: 'password?'" \
     hassio-addon/config.yaml
 fi
 printf 'name: Casa (diopsys)\nurl: https://github.com/diopsys/Tunet\nmaintainer: diopsys\n' > repository.yaml

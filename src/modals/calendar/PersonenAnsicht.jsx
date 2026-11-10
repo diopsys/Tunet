@@ -179,7 +179,8 @@ export default function PersonenAnsicht({
                               )}
                               {deleteState.deleteError === eventKey && (
                                 <p className="text-[11px] font-medium text-[var(--status-error-fg)]">
-                                  {translate('calendar.deleteFailed')}
+                                  {deleteState.deleteErrorText ||
+                                    translate('calendar.deleteFailed')}
                                 </p>
                               )}
                             </div>

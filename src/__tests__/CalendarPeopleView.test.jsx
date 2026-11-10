@@ -145,3 +145,39 @@ describe('termintage', () => {
     ).toEqual(['2026-11-10']);
   });
 });
+
+describe('Kalenderfarben', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    vi.clearAllMocks();
+    fetchKalenderStatus.mockResolvedValue({ aktiv: false });
+    getCalendarEvents.mockResolvedValue({});
+  });
+
+  it('nimmt die eingestellte Farbe für die Spalte', async () => {
+    renderModal({ calendarColors: { 'calendar.titus': '#123456', 'calendar.david': 'kaputt' } });
+    const ansicht = await screen.findByTestId('calendar-people-view');
+    const punkt = (name) => within(ansicht).getByText(name).previousElementSibling;
+    expect(punkt('Titus')).toHaveStyle({ backgroundColor: '#123456' });
+    // ungültige Angabe: Standardfarbe
+    expect(punkt('David').style.backgroundColor).not.toBe('');
+  });
+
+  it('meldet abgelehnte Anmeldung beim Löschen verständlich', async () => {
+    fetchKalenderStatus.mockResolvedValue({ aktiv: true });
+    getCalendarEvents.mockResolvedValue({
+      'calendar.titus': { events: [{ summary: 'Test', start: tag(1), end: tag(2) }] },
+    });
+    getCalendarEventsWithIds.mockResolvedValue([{ uid: 'u', summary: 'Test', start: tag(1) }]);
+    kalenderTerminLoeschen.mockRejectedValue(
+      Object.assign(new Error('CalDAV PROPFIND 401'), { status: 502, body: { code: 'anmeldung' } })
+    );
+    renderModal();
+    await screen.findByText('Test');
+    await waitFor(() => expect(fetchKalenderStatus).toHaveBeenCalled());
+    const knopf = await screen.findByRole('button', { name: 'calendar.deleteEvent' });
+    fireEvent.click(knopf);
+    fireEvent.click(knopf);
+    expect(await screen.findByText('calendar.deleteAuthFailed')).toBeInTheDocument();
+  });
+});
