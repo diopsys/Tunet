@@ -201,7 +201,8 @@
 
 .wa-playlist .wa-liste { height: 260px; }
 @media (min-width: 900px) {
-  .wa-playlist .wa-liste { height: auto; flex: 1; min-height: 200px; }
+  /* Liste zählt nicht zur Gitterhöhe: Höhe kommt von Hauptfenster + Zonen, nur die Liste scrollt */
+  .wa-playlist .wa-liste { height: 0; flex: 1 1 0; min-height: 200px; }
 }
 
 /* Media Library */
