@@ -1751,5 +1751,8 @@
   "schedule.cardFullWidth": "Full width",
   "schedule.cardWidthHint": "Grid columns – “Full width” matches the light panel",
   "schedule.panelToggle": "Timer in this tab",
-  "schedule.panelToggleHint": "Shows the schedules under “Scheduling”"
+  "schedule.panelToggleHint": "Shows the schedules under “Scheduling”",
+  "schedule.lightsPill": "Scheduled lights",
+  "schedule.lightsPillOne": "light",
+  "schedule.lightsPillMany": "lights"
 }

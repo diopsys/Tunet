@@ -4,6 +4,8 @@ import { useHomeAssistant, useModalActions, usePages } from '../contexts';
 import { isSonosMediaEntity, resolveStatusGroupPill, STATUS_GROUP_PILL_TYPE } from '../utils';
 import { getWasteBins, getWasteDaysAhead, isWasteDue } from '../utils/wastePills';
 import SchedulePill from '../components/schedule/SchedulePill';
+import ScheduledLightsPill from '../components/schedule/ScheduledLightsPill';
+import { useScheduledLights } from '../hooks/useScheduledLights';
 
 const BEREGNUNG_ZONES = [
   { key: 'z1', name: 'Terrasse R', sensorId: 'binary_sensor.irrigation_unlimited_c1_z1' },
@@ -47,6 +49,11 @@ export default function StatusBar({
     setShowEntityCountModal,
     setShowBeregnungModal,
   } = useModalActions();
+
+  // Pill „Zeitsteuerung“ konfiguriert: deren Lichter zählen bei „Lichter an“ nicht mit
+  const scheduledLights = useScheduledLights();
+  const hasScheduledLightsPill = statusPillsConfig.some((p) => p?.type === 'schedule_lights' && p.visible !== false);
+  const scheduledLightIds = hasScheduledLightsPill ? scheduledLights.map((it) => it.id) : [];
 
   const getSonosEntities = () =>
     Object.keys(entities)
@@ -353,6 +360,10 @@ export default function StatusBar({
               return <SchedulePill key={pill.id} isMobile={isMobile} t={t} />;
             }
 
+            if (pill.type === 'schedule_lights') {
+              return <ScheduledLightsPill key={pill.id} items={scheduledLights} isMobile={isMobile} t={t} />;
+            }
+
             if (pill.type === 'waste') {
               const daysAhead = getWasteDaysAhead(pill);
               const dueBins = getWasteBins(pill, entities).filter((b) =>
@@ -391,6 +402,9 @@ export default function StatusBar({
             }
 
             if (pill.type === STATUS_GROUP_PILL_TYPE) {
+              if (pill.groupPreset === 'lights_on' && scheduledLightIds.length) {
+                pill = { ...pill, excludeEntityIds: scheduledLightIds };
+              }
               const groupData = resolveStatusGroupPill(pill, entities, t);
               if (!groupData.shouldRender) return null;
               // Nichts trifft zu (z. B. keine Heizung an): grau statt in der Farbe der Gruppe

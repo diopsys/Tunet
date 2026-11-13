@@ -316,3 +316,27 @@ export function fromHacsSchedule(entityId, entity) {
     source: entityId,
   };
 }
+
+/* ── Gerade per Zeitschaltuhr eingeschaltet ─────────────────────────────── */
+
+const SCHEDULED_LIGHT_DOMAINS = ['light.', 'switch.'];
+
+/**
+ * Lichter (und Schalter), die gerade an sind und zu einem laufenden Zeitfenster gehören.
+ * Liefert `[{ id, schedule, end }]`, je Entität einmal (das am längsten laufende Fenster gewinnt).
+ * Bereiche werden im Browser nicht aufgelöst, nur direkt gewählte Entitäten zählen.
+ */
+export function scheduledLightsOn(schedules, entities, now, ctx, opts = {}) {
+  const byId = new Map();
+  for (const schedule of schedules || []) {
+    if (!schedule?.enabled) continue;
+    const inst = activeInstance(schedule, now, ctx, opts);
+    if (!inst || isSkipped(schedule, inst)) continue;
+    for (const id of schedule.targets?.entities || []) {
+      if (!SCHEDULED_LIGHT_DOMAINS.some((d) => id.startsWith(d)) || entities?.[id]?.state !== 'on') continue;
+      const prev = byId.get(id);
+      if (!prev || (inst.end ?? 0) > (prev.end ?? 0)) byId.set(id, { id, schedule, end: inst.end });
+    }
+  }
+  return [...byId.values()];
+}

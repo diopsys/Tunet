@@ -18,6 +18,7 @@ import {
   Shield,
   Hash,
   Clock,
+  Lightbulb,
   getAllIconKeys,
   getIconComponent,
   preloadMdiIcons,
@@ -446,6 +447,7 @@ export default function StatusPillsConfigModal({
       }
       if (pillType === 'waste') return 'Müllabholung';
       if (pillType === 'schedule') return t('schedule.nextSwitch');
+      if (pillType === 'schedule_lights') return t('schedule.lightsPill');
       if (pillType === 'entity_count') return 'Zähler';
       return t('statusPills.typeSonos');
     },
@@ -691,6 +693,12 @@ export default function StatusPillsConfigModal({
       type: 'schedule',
       label: t('schedule.nextSwitch'),
       Icon: Clock,
+      iconClass: 'bg-[var(--accent-bg)] text-[var(--accent-color)]',
+    },
+    {
+      type: 'schedule_lights',
+      label: t('schedule.lightsPill'),
+      Icon: Lightbulb,
       iconClass: 'bg-[var(--accent-bg)] text-[var(--accent-color)]',
     },
   ];

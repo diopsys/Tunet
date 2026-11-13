@@ -51,6 +51,8 @@ const getGroupEntityIdSet = (pill) =>
   );
 
 const isAllowedBySelection = (pill, id) => {
+  // Laufzeit-Ausschluss (z. B. Lichter der Zeitschaltuhr, die eine eigene Pill haben)
+  if (Array.isArray(pill?.excludeEntityIds) && pill.excludeEntityIds.includes(id)) return false;
   const mode = normalizeGroupSelectionMode(pill?.groupSelectionMode);
   if (mode === STATUS_GROUP_SELECTION_ALL) return true;
 
