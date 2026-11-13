@@ -3,10 +3,11 @@
 // Geschaltet wird an den Fensterrändern (Beginn/Ende), nicht dauerhaft auf einen Zustand gedrückt:
 // Wer zwischendurch von Hand schaltet, wird bis zum nächsten Schaltpunkt nicht überstimmt.
 // War der Server aus (Update, Neustart), werden verpasste Schaltpunkte der letzten Stunden nachgeholt,
-// je Fenster nur der letzte, damit am Ende der Soll-Zustand stimmt.
+// je Fenster nur der letzte, damit am Ende der Soll-Zustand stimmt. Ein offenes Fenster, dessen Beginn nie
+// verarbeitet wurde (Zeitplan erst mitten im Fenster angelegt oder eingeschaltet), wird ebenfalls nachgeholt.
 
 import { buildServiceCalls, phaseForEvent, rampLevel } from './actions.js';
-import { eventsBetween, instancesAround } from './scheduleTime.js';
+import { activeInstance, eventsBetween, instancesAround } from './scheduleTime.js';
 
 const DAY_MS = 86_400_000;
 const CONTEXT_TTL_MS = 3_600_000;
@@ -189,6 +190,11 @@ export function createSchedulerEngine({
           events = [...latest.values()];
         }
         for (const event of events) await handleEvent(schedule, event, env);
+        // Mitten im Fenster angelegt, eingeschaltet oder geändert: Beginn nachholen, damit der Soll-Zustand stimmt
+        const open = activeInstance(schedule, at, ctx, { vacation });
+        if (open && open.start <= from && !store.getInstanceState(open.instanceKey)) {
+          await handleEvent(schedule, { ...open, kind: 'start', at: open.start }, { ...env, catchUp: true });
+        }
         await runRamps(schedule, at, env);
       }
 

@@ -121,12 +121,31 @@ describe('engine', () => {
   it('switches at the window edges and logs it', async () => {
     const t = setup({ start: berlin('2026-11-12T21:59:50Z') });
     t.store.setState('lastTick', berlin('2026-11-12T21:59:40Z'));
+    t.store.setInstanceState(`${t.saved[0].id}|s1|2026-11-12`, 'started', berlin('2026-11-12T15:00:00Z'));
     await t.engine.tick();
     expect(t.ha.callService).not.toHaveBeenCalled();
     t.advance(15_000);
     await t.engine.tick();
     expect(t.ha.callService).toHaveBeenCalledWith('light', 'turn_off', { entity_id: ['light.flur'] });
     expect(t.store.listRuns()[0]).toMatchObject({ kind: 'Ende', status: 'ok' });
+  });
+
+  it('switches on once when a schedule is created in the middle of its window', async () => {
+    const t = setup({ start: berlin('2026-11-12T18:00:00Z') });
+    t.store.setState('lastTick', berlin('2026-11-12T17:59:45Z'));
+    await t.engine.tick();
+    expect(t.ha.callService).toHaveBeenCalledTimes(1);
+    expect(t.ha.callService).toHaveBeenCalledWith('light', 'turn_on', { entity_id: ['light.flur'] });
+    expect(t.store.listRuns()[0]).toMatchObject({ kind: 'Beginn', status: 'ok' });
+    expect(t.store.listRuns()[0].message).toMatch(/nachgeholt/);
+    // von Hand ausgeschaltet: nicht erneut einschalten, Ende läuft normal
+    t.advance(15_000);
+    await t.engine.tick();
+    expect(t.ha.callService).toHaveBeenCalledTimes(1);
+    t.set(berlin('2026-11-12T22:00:05Z'));
+    t.store.setState('lastTick', berlin('2026-11-12T21:59:50Z'));
+    await t.engine.tick();
+    expect(t.ha.callService).toHaveBeenLastCalledWith('light', 'turn_off', { entity_id: ['light.flur'] });
   });
 
   it('catches up only the latest missed edge per window after downtime', async () => {
