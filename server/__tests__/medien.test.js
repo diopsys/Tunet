@@ -62,12 +62,12 @@ describe('Genres', () => {
   afterEach(() => { vi.unstubAllEnvs(); });
   const antwort = (daten) => ({ ok: true, json: async () => daten });
 
-  it('lists genres with albums and their album count', async () => {
+  it('lists genres with tracks and their track and album count', async () => {
     vi.stubEnv('MA_TOKEN', 'geheim');
     const fetchFn = vi.fn(async (url, opts) => {
       const { command, args } = JSON.parse(opts.body);
       if (command === 'music/genres/library_items') {
-        expect(args).toMatchObject({ media_type: 'album', search: 'ro', limit: 200, offset: 0, order_by: 'sort_name' });
+        expect(args).toMatchObject({ media_type: 'track', search: 'ro', limit: 200, offset: 0, order_by: 'sort_name' });
         return antwort([{ item_id: 3, name: 'Rock' }, { item_id: '7', name: 'Prog Rock' }, { name: 'ohne ID' }]);
       }
       expect(command).toBe('music/genres/media_counts');
@@ -75,7 +75,7 @@ describe('Genres', () => {
       return antwort({ 3: { album: 42, track: 500 } });
     });
     expect(await genres({ suche: ' ro ' }, fetchFn)).toEqual([
-      { id: '3', name: 'Rock', alben: 42 }, { id: '7', name: 'Prog Rock', alben: null },
+      { id: '3', name: 'Rock', titel: 500, alben: 42 }, { id: '7', name: 'Prog Rock', titel: null, alben: null },
     ]);
   });
 
@@ -86,7 +86,7 @@ describe('Genres', () => {
       if (command === 'music/genres/library_items') return args.order_by ? { ok: false, status: 500 } : antwort([{ item_id: 1, name: 'Jazz' }]);
       return { ok: false, status: 500 };
     });
-    expect(await genres({ limit: '9999' }, fetchFn)).toEqual([{ id: '1', name: 'Jazz', alben: null }]);
+    expect(await genres({ limit: '9999' }, fetchFn)).toEqual([{ id: '1', name: 'Jazz', titel: null, alben: null }]);
     expect(JSON.parse(fetchFn.mock.calls[0][1].body).args.limit).toBe(500);
   });
 
@@ -98,7 +98,7 @@ describe('Genres', () => {
       if (command === 'music/genres/library_items') return args.media_type ? fehler : antwort([{ item_id: 2, name: 'Pop' }]);
       return antwort({});
     });
-    expect(await genres({}, nurOhneArt)).toEqual([{ id: '2', name: 'Pop', alben: null }]);
+    expect(await genres({}, nurOhneArt)).toEqual([{ id: '2', name: 'Pop', titel: null, alben: null }]);
     const immer = vi.fn(async () => antwort({ error_code: 999, details: 'kaputt' }));
     await expect(genres({}, immer)).rejects.toThrow('Music Assistant 999: kaputt');
     const http = vi.fn(async () => fehler);
@@ -136,5 +136,26 @@ describe('Genres', () => {
     expect(await genreAlben(3, {}, fetchFn)).toEqual([
       { uri: 'library://album/1', name: 'Thick as a Brick', artists: [{ name: 'Jethro Tull' }], year: 1972, media_type: 'album' },
     ]);
+  });
+
+  it('builds the albums of a genre from its tracks when Music Assistant maps none', async () => {
+    vi.stubEnv('MA_TOKEN', 'geheim');
+    const seite = (n, start) => Array.from({ length: n }, (_, i) => ({
+      uri: `library://track/${start + i}`, name: `T${start + i}`, artists: [{ name: 'Interpret' }],
+      album: (start + i) % 2 ? { uri: `library://album/${(start + i) % 3}`, name: ['Zebra', 'Apfel', 'Mitte'][(start + i) % 3] } : null,
+    }));
+    const fetchFn = vi.fn(async (url, opts) => {
+      const { command, args } = JSON.parse(opts.body);
+      if (command === 'music/genres/albums') return antwort([]);
+      expect(command).toBe('music/genres/tracks');
+      return antwort(args.offset === 0 ? seite(500, 0) : seite(3, 500));
+    });
+    expect(await genreAlben('235', {}, fetchFn)).toEqual([
+      { uri: 'library://album/1', name: 'Apfel', artists: [{ name: 'Interpret' }], year: null, media_type: 'album' },
+      { uri: 'library://album/2', name: 'Mitte', artists: [{ name: 'Interpret' }], year: null, media_type: 'album' },
+      { uri: 'library://album/0', name: 'Zebra', artists: [{ name: 'Interpret' }], year: null, media_type: 'album' },
+    ]);
+    // zwei Seiten Titel (500 + 3), dann Schluss
+    expect(fetchFn.mock.calls.filter(([, o]) => JSON.parse(o.body).command === 'music/genres/tracks')).toHaveLength(2);
   });
 });

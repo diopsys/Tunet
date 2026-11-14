@@ -87,7 +87,7 @@ const MEINE = ['ma_meine', 'Meine Playlists'];
 const GENRES = ['ma_genres', 'Genres'];
 const GENRE_TITEL_SEITE = 500;
 const genreZeile = (g) => ({
-  uri: `genre:${g.id}`, genreId: g.id, name: g.name, artist: '', dauer: null, media_type: 'genre', quelle: 'ma', anzahl: g.alben || undefined,
+  uri: `genre:${g.id}`, genreId: g.id, name: g.name, artist: '', dauer: null, media_type: 'genre', quelle: 'ma', anzahl: g.titel || g.alben || undefined,
 });
 const SP_ORDNER = [
   ['sp_playlists', 'Playlists', 'get_playlist_favorites', 50],

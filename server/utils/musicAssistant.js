@@ -92,19 +92,24 @@ async function sortiert(command, args, fetchFn) {
 const liste = (r) => (Array.isArray(r) ? r : Array.isArray(r?.items) ? r.items : []);
 
 /**
- * Genres mit mindestens einem Album: [{ id, name, alben }], seitenweise, optional nach Namen
- * gefiltert. alben ist die Zahl der Alben (null, wenn Music Assistant sie nicht liefert).
+ * Genres mit mindestens einem Titel: [{ id, name, titel, alben }], seitenweise, optional nach Namen
+ * gefiltert. Music Assistant ordnet Genres aus den Dateien meist nur Titeln zu, nicht Alben – nach
+ * Alben gefragt fehlten die meisten Genres (z. B. „Elektronik“: 931 Titel, 0 Alben) und alle
+ * Einzeltitel. titel/alben sind die Zahlen aus Music Assistant (null, wenn sie fehlen).
  */
 export async function genres({ suche, offset, limit } = {}, fetchFn = fetch) {
-  const args = { media_type: 'album', limit: ganz(limit, 200, MAX_SEITE), offset: ganz(offset, 0, 1e6) };
-  if (typeof suche === 'string' && suche.trim()) args.search = suche.trim().slice(0, 100);
+  const basis = { limit: ganz(limit, 200, MAX_SEITE), offset: ganz(offset, 0, 1e6) };
+  if (typeof suche === 'string' && suche.trim()) basis.search = suche.trim().slice(0, 100);
   let antwort;
   try {
-    antwort = await sortiert('music/genres/library_items', args, fetchFn);
+    antwort = await sortiert('music/genres/library_items', { ...basis, media_type: 'track' }, fetchFn);
   } catch {
-    // Rückfall: alle Genres statt nur der mit Alben
-    const { media_type: _ohne, ...rest } = args;
-    antwort = await sortiert('music/genres/library_items', rest, fetchFn);
+    try {
+      antwort = await sortiert('music/genres/library_items', { ...basis, media_type: 'album' }, fetchFn);
+    } catch {
+      // Rückfall: alle Genres
+      antwort = await sortiert('music/genres/library_items', basis, fetchFn);
+    }
   }
   const items = liste(antwort)
     .filter((g) => g?.item_id !== undefined && g?.name)
@@ -117,24 +122,48 @@ export async function genres({ suche, offset, limit } = {}, fetchFn = fetch) {
       /* ohne Anzahl */
     }
   }
-  return items.map((g) => {
-    const n = Number(zahlen[g.id]?.album ?? zahlen[g.id]?.albums);
-    return { ...g, alben: Number.isFinite(n) ? n : null };
-  });
+  const zahl = (v) => (Number.isFinite(Number(v)) && v !== null && v !== undefined ? Number(v) : null);
+  return items.map((g) => ({
+    ...g,
+    titel: zahl(zahlen[g.id]?.track ?? zahlen[g.id]?.tracks),
+    alben: zahl(zahlen[g.id]?.album ?? zahlen[g.id]?.albums),
+  }));
 }
 
-/** Alben eines Genres in der Form der HA-Dienste ({ uri, name, artists, media_type }). */
+const albumForm = (a) => ({
+  uri: a.uri,
+  name: a.name,
+  artists: (Array.isArray(a.artists) ? a.artists : []).filter((k) => k?.name).map((k) => ({ name: k.name })),
+  year: Number.isInteger(a.year) ? a.year : null,
+  media_type: 'album',
+});
+
+const ALBEN_AUS_TITELN_SEITEN = 4;
+
+/**
+ * Alben eines Genres in der Form der HA-Dienste ({ uri, name, artists, year, media_type }).
+ * Hat Music Assistant dem Genre keine Alben zugeordnet (der Normalfall bei Genres aus den Dateien),
+ * werden sie aus den Titeln des Genres gebildet (bis 4 × 500 Titel), je Album einmal, nach Namen.
+ */
 export async function genreAlben(id, { offset, limit } = {}, fetchFn = fetch) {
   const args = { item_id: String(id), limit: ganz(limit, MAX_SEITE, MAX_SEITE), offset: ganz(offset, 0, 1e6) };
-  return liste(await sortiert('music/genres/albums', args, fetchFn))
-    .filter((a) => a?.uri && a?.name)
-    .map((a) => ({
-      uri: a.uri,
-      name: a.name,
-      artists: (Array.isArray(a.artists) ? a.artists : []).filter((k) => k?.name).map((k) => ({ name: k.name })),
-      year: Number.isInteger(a.year) ? a.year : null,
-      media_type: 'album',
-    }));
+  const direkt = liste(await sortiert('music/genres/albums', args, fetchFn)).filter((a) => a?.uri && a?.name);
+  if (direkt.length || args.offset) return direkt.map(albumForm);
+  const alben = new Map();
+  for (let seite = 0; seite < ALBEN_AUS_TITELN_SEITEN; seite += 1) {
+    const titel = liste(await befehl('music/genres/tracks', { item_id: String(id), limit: MAX_SEITE, offset: seite * MAX_SEITE }, fetchFn));
+    for (const t of titel) {
+      const a = t?.album;
+      if (a?.uri && a?.name && !alben.has(a.uri)) {
+        alben.set(a.uri, { ...a, artists: Array.isArray(a.artists) && a.artists.length ? a.artists : t.artists });
+      }
+    }
+    if (titel.length < MAX_SEITE) break;
+  }
+  return [...alben.values()]
+    .sort((x, y) => String(x.name).localeCompare(String(y.name), 'de', { sensitivity: 'base' }))
+    .slice(0, args.limit)
+    .map(albumForm);
 }
 
 /** Titel eines Genres in der Form der HA-Dienste ({ uri, name, artists, duration, media_type }). */
