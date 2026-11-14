@@ -21,12 +21,12 @@ export function gueltigeUri(uri) {
   return typeof uri === 'string' && uri.length <= 500 && /^[a-z][a-z0-9_-]*:\/\/[a-z]+\//i.test(uri);
 }
 
-async function befehl(command, args, fetchFn) {
+async function befehl(command, args, fetchFn, zeitlimit = ZEITLIMIT_MS) {
   const res = await fetchFn(`${maUrl()}/api`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.MA_TOKEN}` },
     body: JSON.stringify({ command, args }),
-    signal: AbortSignal.timeout(ZEITLIMIT_MS),
+    signal: AbortSignal.timeout(zeitlimit),
   });
   if (!res.ok) {
     // Fehlertext von Music Assistant mitgeben (für Log und Anzeige), gekürzt
@@ -81,11 +81,11 @@ const ganz = (v, std, max) => {
 };
 
 /** Befehl mit Sortierung; kennt Music Assistant die Sortierung nicht, ohne sie wiederholen. */
-async function sortiert(command, args, fetchFn) {
+async function sortiert(command, args, fetchFn, zeitlimit = ZEITLIMIT_MS) {
   try {
-    return await befehl(command, { ...args, order_by: 'sort_name' }, fetchFn);
+    return await befehl(command, { ...args, order_by: 'sort_name' }, fetchFn, zeitlimit);
   } catch {
-    return befehl(command, args, fetchFn);
+    return befehl(command, args, fetchFn, zeitlimit);
   }
 }
 
@@ -166,21 +166,47 @@ export async function genreAlben(id, { offset, limit } = {}, fetchFn = fetch) {
     .map(albumForm);
 }
 
-/** Titel eines Genres in der Form der HA-Dienste ({ uri, name, artists, duration, media_type }). */
-export async function genreTitel(id, { offset, limit } = {}, fetchFn = fetch) {
-  const args = { item_id: String(id), limit: ganz(limit, MAX_SEITE, MAX_SEITE), offset: ganz(offset, 0, 1e6) };
-  return liste(await sortiert('music/genres/tracks', args, fetchFn))
+const titelForm = (t) => ({
+  uri: t.uri,
+  name: t.name,
+  artists: (Array.isArray(t.artists) ? t.artists : []).filter((k) => k?.name).map((k) => ({ name: k.name })),
+  duration: Number.isFinite(t.duration) && t.duration > 0 ? t.duration : null,
+  media_type: 'track',
+});
+
+// Music Assistant sortiert Genre-Titel nur nach Name (oder zufällig) – nach Interpret sortiert der Server selbst.
+// Dafür alle Titel des Genres auf einmal holen und die sortierte Liste kurz merken („weitere laden“).
+const GENRE_TITEL_MERKEN_MS = 60_000;
+// Rock: rund 10.000 Titel, 26 MB, gut 3 s – mehr Zeit als für einzelne Abfragen
+const GENRE_TITEL_ZEITLIMIT_MS = 30_000;
+const genreTitelCache = new Map();
+const vergleich = new Intl.Collator('de', { sensitivity: 'base', numeric: true });
+const interpretName = (t) => (t.artists[0]?.name || '').replace(/^the\s+/i, '');
+
+async function alleGenreTitel(id, fetchFn) {
+  const schluessel = String(id);
+  const gemerkt = genreTitelCache.get(schluessel);
+  if (gemerkt && Date.now() - gemerkt.zeit < GENRE_TITEL_MERKEN_MS) return gemerkt.titel;
+  const titel = liste(await sortiert('music/genres/tracks', { item_id: schluessel, limit: 0, offset: 0 }, fetchFn, GENRE_TITEL_ZEITLIMIT_MS))
     .filter((t) => t?.uri && t?.name)
-    .map((t) => ({
-      uri: t.uri,
-      name: t.name,
-      artists: (Array.isArray(t.artists) ? t.artists : []).filter((k) => k?.name).map((k) => ({ name: k.name })),
-      duration: Number.isFinite(t.duration) && t.duration > 0 ? t.duration : null,
-      media_type: 'track',
-    }));
+    .map(titelForm)
+    .sort((x, y) => vergleich.compare(interpretName(x), interpretName(y)) || vergleich.compare(x.name, y.name));
+  if (genreTitelCache.size >= 50) genreTitelCache.delete(genreTitelCache.keys().next().value);
+  genreTitelCache.set(schluessel, { zeit: Date.now(), titel });
+  return titel;
+}
+
+/**
+ * Titel eines Genres in der Form der HA-Dienste ({ uri, name, artists, duration, media_type }),
+ * sortiert nach Interpret (ohne führendes „The“), dann Titel; seitenweise.
+ */
+export async function genreTitel(id, { offset, limit } = {}, fetchFn = fetch) {
+  const von = ganz(offset, 0, 1e6);
+  return (await alleGenreTitel(id, fetchFn)).slice(von, von + ganz(limit, MAX_SEITE, MAX_SEITE));
 }
 
 /** Nur für Tests. */
 export function cacheLeeren() {
   cache.clear();
+  genreTitelCache.clear();
 }

@@ -59,7 +59,7 @@ describe('titelDauer', () => {
 });
 
 describe('Genres', () => {
-  afterEach(() => { vi.unstubAllEnvs(); });
+  afterEach(() => { cacheLeeren(); vi.unstubAllEnvs(); });
   const antwort = (daten) => ({ ok: true, json: async () => daten });
 
   it('lists genres with tracks and their track and album count', async () => {
@@ -105,21 +105,29 @@ describe('Genres', () => {
     await expect(genres({}, http)).rejects.toThrow('Music Assistant 400: invalid media_type');
   });
 
-  it('returns the tracks of a genre with their length', async () => {
+  it('returns the tracks of a genre sorted by artist, then title, page by page', async () => {
     vi.stubEnv('MA_TOKEN', 'geheim');
     const fetchFn = vi.fn(async (url, opts) => {
       const { command, args } = JSON.parse(opts.body);
       expect(command).toBe('music/genres/tracks');
-      expect(args).toMatchObject({ item_id: '3', offset: 500, limit: 500 });
+      expect(args).toMatchObject({ item_id: '3', offset: 0, limit: 0 });
       return antwort([
-        { uri: 'library://track/9', name: 'Locomotive Breath', duration: 263, artists: [{ name: 'Jethro Tull' }] },
-        { uri: 'library://track/10', name: 'Ohne Länge', duration: 0, artists: [] },
+        { uri: 'library://track/1', name: 'Zug', duration: 100, artists: [{ name: 'Too Strong' }] },
+        { uri: 'library://track/2', name: 'Locomotive Breath', duration: 263, artists: [{ name: 'Jethro Tull' }] },
+        { uri: 'library://track/3', name: 'Ohne Länge', duration: 0, artists: [] },
+        { uri: 'library://track/4', name: 'Abend', duration: 90, artists: [{ name: 'Too Strong' }] },
+        { uri: 'library://track/5', name: 'Paint It Black', duration: 200, artists: [{ name: 'The Rolling Stones' }] },
       ]);
     });
-    expect(await genreTitel('3', { offset: '500' }, fetchFn)).toEqual([
-      { uri: 'library://track/9', name: 'Locomotive Breath', artists: [{ name: 'Jethro Tull' }], duration: 263, media_type: 'track' },
-      { uri: 'library://track/10', name: 'Ohne Länge', artists: [], duration: null, media_type: 'track' },
+    expect((await genreTitel('3', {}, fetchFn)).map((t) => t.uri)).toEqual([
+      'library://track/3', 'library://track/2', 'library://track/5', 'library://track/4', 'library://track/1',
     ]);
+    expect(await genreTitel('3', { offset: '1', limit: '2' }, fetchFn)).toEqual([
+      { uri: 'library://track/2', name: 'Locomotive Breath', artists: [{ name: 'Jethro Tull' }], duration: 263, media_type: 'track' },
+      { uri: 'library://track/5', name: 'Paint It Black', artists: [{ name: 'The Rolling Stones' }], duration: 200, media_type: 'track' },
+    ]);
+    // zweite Seite kommt aus der gemerkten Liste (ein Abruf, mit Sortierung)
+    expect(fetchFn).toHaveBeenCalledTimes(1);
   });
 
   it('returns the albums of a genre in the shape of the HA services', async () => {
