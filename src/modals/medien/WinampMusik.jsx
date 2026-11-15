@@ -128,13 +128,17 @@ const Fenster = ({ titel, className = '', aktiv, onFokus, children }) => (
   </section>
 );
 
+// Mit dem Finger kommt ein Doppelklick oft nicht an (Zoom-Geste, zu langsam getippt): dort spielt
+// das zweite Antippen einer schon gewählten Zeile; der Doppelklick zählt dann nicht extra.
 function Zeile({ nr, item, laeuft, gewaehlt, onWaehlen, onSpielen }) {
+  const finger = useRef(false);
   return (
     <button
       type="button"
       className={`wa-zeile${laeuft ? ' laeuft' : ''}${gewaehlt ? ' gewaehlt' : ''}`}
-      onClick={onWaehlen}
-      onDoubleClick={onSpielen}
+      onPointerDown={(e) => { finger.current = e.pointerType === 'touch' || e.pointerType === 'pen'; }}
+      onClick={(e) => onWaehlen(e, finger.current)}
+      onDoubleClick={() => { if (!finger.current) onSpielen(); }}
       aria-current={laeuft ? 'true' : undefined}
       aria-selected={gewaehlt}
     >
@@ -302,7 +306,12 @@ function PlaylistEditor({
         {liste.map((t, i) => (
           <Zeile
             key={`${t.uri}-${i}`} nr={i + 1} item={t} laeuft={i === laufend} gewaehlt={auswahl.includes(i)}
-            onWaehlen={(e) => onKlick(e, i)} onSpielen={() => onSpielen(i)}
+            onWaehlen={(e, finger) => {
+              // Finger: zweites Antippen des gewählten Titels spielt ihn
+              if (finger && !mehrfach && auswahl.length === 1 && auswahl[0] === i) onSpielen(i);
+              else onKlick(e, i);
+            }}
+            onSpielen={() => onSpielen(i)}
           />
         ))}
       </div>
@@ -557,11 +566,14 @@ function MediaLibrary({ config, conn, raum, apiRef, suchRef, mehrfach, setMehrfa
   const auswahl = wahl.auswahl;
   const erster = auswahl.length ? auswahl[0] : -1;
   const gewaehlteTitel = auswahl.map((i) => items[i]).filter(istTitel);
-  const klick = (e, i) => {
+  const klick = (e, i, finger = false) => {
     const t = items[i];
     const einfach = !mehrfach && !e?.shiftKey && !e?.ctrlKey && !e?.metaKey;
+    const nochmal = einfach && auswahl.length === 1 && auswahl[0] === i && t;
     // zweites Antippen eines Albums/einer Playlist öffnet sie
-    if (einfach && auswahl.length === 1 && auswahl[0] === i && t && !istTitel(t) && t.aufklappbar !== false) oeffnen(t);
+    if (nochmal && !istTitel(t) && t.aufklappbar !== false) oeffnen(t);
+    // mit dem Finger: zweites Antippen eines Titels spielt ihn (Doppelklick kommt dort oft nicht an)
+    else if (nochmal && finger && istTitel(t)) spielen(i);
     else setWahl(klickAuswahl(e, i, wahl, mehrfach));
   };
   // ein Genre lässt sich nicht abspielen, nur öffnen
@@ -622,7 +634,7 @@ function MediaLibrary({ config, conn, raum, apiRef, suchRef, mehrfach, setMehrfa
             {!laedt && items.length === 0 && ansicht?.fehler && <div className="wa-hinweis">Fehler: {ansicht.fehler}</div>}
             {!laedt && items.length === 0 && !ansicht?.fehler && <div className="wa-hinweis">{ansicht?.ordner === MEINE[0] ? 'Noch keine – im Playlist Editor „Save“.' : 'Nichts gefunden.'}</div>}
             {items.map((t, i) => (
-              <Zeile key={`${t.uri}-${i}`} item={t} gewaehlt={auswahl.includes(i)} onWaehlen={(e) => klick(e, i)} onSpielen={() => doppelklick(i)} />
+              <Zeile key={`${t.uri}-${i}`} item={t} gewaehlt={auswahl.includes(i)} onWaehlen={(e, finger) => klick(e, i, finger)} onSpielen={() => doppelklick(i)} />
             ))}
             {!laedt && ansicht?.mehr && (
               <button type="button" className="wa-zeile" onClick={() => (ansicht.genreId ? genreTitelNachladen() : ordnerLaden(ansicht.ordner, ansicht.mehr))}><span className="name">… weitere laden</span></button>
