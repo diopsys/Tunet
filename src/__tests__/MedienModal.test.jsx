@@ -409,6 +409,29 @@ describe('Medien-Fenster', () => {
     fireEvent.doubleClick(lib.getByText('Band - Titel 1'));
     uhr.mockRestore();
     await waitFor(() => expect(callService).toHaveBeenCalledWith('music_assistant', 'play_media', expect.objectContaining({ media_id: expect.arrayContaining(['library://track/1']) })));
+
+    // Maus: zweimal klicken wählt nur, spielt nicht
+    const gespielt = () => callService.mock.calls.filter(([d, s]) => d === 'music_assistant' && s === 'play_media').length;
+    const vorher = gespielt();
+    const t3 = lib.getByText('Band - Titel 3');
+    fireEvent.pointerDown(t3, { pointerType: 'mouse' }); fireEvent.click(t3);
+    fireEvent.pointerDown(t3, { pointerType: 'mouse' }); fireEvent.click(t3);
+    expect(gespielt()).toBe(vorher);
+    // Finger: erstes Antippen wählt, zweites spielt; der Doppelklick danach spielt nicht noch einmal
+    const t2 = lib.getByText('Band - Titel 2');
+    fireEvent.pointerDown(t2, { pointerType: 'touch' }); fireEvent.click(t2);
+    expect(gespielt()).toBe(vorher);
+    fireEvent.pointerDown(t2, { pointerType: 'touch' }); fireEvent.click(t2);
+    fireEvent.doubleClick(t2);
+    await waitFor(() => expect(gespielt()).toBe(vorher + 1));
+    expect(callService.mock.calls.filter(([d, s]) => d === 'music_assistant' && s === 'play_media').at(-1)[2].media_id[0]).toBe('library://track/2');
+
+    // Playlist-Editor: zweimal antippen spielt den Titel aus der Playlist
+    const pl = within(screen.getByLabelText('Playlist'));
+    const zeile = pl.getByText('Band - Titel 4');
+    fireEvent.pointerDown(zeile, { pointerType: 'touch' }); fireEvent.click(zeile);
+    fireEvent.pointerDown(zeile, { pointerType: 'touch' }); fireEvent.click(zeile);
+    await waitFor(() => expect(gespielt()).toBe(vorher + 2));
     fetchMedienGenres.mockImplementation(async () => ({ aktiv: false, items: [] }));
     fetchMedienGenreAlben.mockImplementation(async () => ({ aktiv: false, items: [] }));
     fetchMedienGenreTitel.mockImplementation(async () => ({ aktiv: false, items: [] }));

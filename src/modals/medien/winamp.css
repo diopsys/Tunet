@@ -188,6 +188,7 @@
   font: inherit;
   text-align: left;
   cursor: pointer;
+  touch-action: manipulation; /* Doppeltippen nicht als Zoom abfangen */
 }
 .wa-zeile .nr { flex-shrink: 0; }
 .wa-zeile .name { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
