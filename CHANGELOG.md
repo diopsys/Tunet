@@ -1,6 +1,7 @@
 ## [Unreleased]
 
 ### Fixed
+- Lüftung, Tab „Betrieb“: Werte-Kästchen bleiben innerhalb der Geräte-Umrandung; Gerätemeldung auf Deutsch mit Code („Warnung · Code 35“)
 - Lüftung: Im Kaminmodus (climate meldet „aus“, die Ventilatoren laufen aber mit eigenen Zu-/Abluftwerten weiter) zeigen Karte, Kopfzeile und Schema jetzt „Lüftet“ bzw. „Kaminmodus“ mit Zu-/Abluftleistung und animierten Luftströmen statt „Aus“
 
 ## [1.31.9] — 2026-11-17

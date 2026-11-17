@@ -96,7 +96,12 @@ function LuftungFlowView({ entities, isMobile = false, modeSrc, modeLvl }) {
   const feuchte = val(E.luftfeuchtigkeit);
   const filterWarn = entities?.[E.filter]?.state === 'on';
   const kamin = entities?.[E.kaminmodus]?.state === 'on';
-  const alarm = entities?.[E.alarm]?.state;
+  const alarmEntity = entities?.[E.alarm];
+  const alarmState = alarmEntity?.state;
+  const alarmCodes = Array.isArray(alarmEntity?.attributes?.alarm_codes) ? alarmEntity.attributes.alarm_codes : [];
+  const alarmText = alarmState === 'alarm' || alarmState === 'warning'
+    ? `${alarmState === 'alarm' ? 'Alarm' : 'Warnung'}${alarmCodes.length ? ` · Code ${alarmCodes.join(', ')}` : ''}`
+    : null;
 
   // Maßgeblich sind die Ventilatoren: im Kaminmodus meldet climate „off“, die Anlage läuft aber
   // mit eigenen Zu-/Abluftwerten (Überdruck) weiter.
@@ -195,8 +200,8 @@ function LuftungFlowView({ entities, isMobile = false, modeSrc, modeLvl }) {
           <Fan cx={352} cy={74} rpm={zuRpm} on={supplyOn} />
           <Fan cx={128} cy={266} rpm={abRpm} on={exhaustOn} />
 
-          <Tag x={318} y={100} w={64} label="Zuluft" value={supplyOn ? `${Math.round(zuPct ?? 0)} %` : 'aus'} />
-          <Tag x={98} y={204} w={64} label="Abluft" value={exhaustOn ? `${Math.round(abPct ?? 0)} %` : 'aus'} />
+          <Tag x={308} y={102} w={60} label="Zuluft" value={supplyOn ? `${Math.round(zuPct ?? 0)} %` : 'aus'} />
+          <Tag x={112} y={202} w={60} label="Abluft" value={exhaustOn ? `${Math.round(abPct ?? 0)} %` : 'aus'} />
           <Tag x={112} y={100} w={58} label="Filter" value={filterWarn ? 'Wechsel' : 'OK'} warn={filterWarn} />
 
           {kamin && (
@@ -244,9 +249,9 @@ function LuftungFlowView({ entities, isMobile = false, modeSrc, modeLvl }) {
         <Metric label="Filter" text>
           <span style={{ color: filterWarn ? 'var(--lft-warn)' : undefined }}>{filterWarn ? 'Wechseln' : 'OK'}</span>
         </Metric>
-        {alarm && alarm !== '0' && alarm !== 'unknown' && alarm !== 'unavailable' && alarm.toLowerCase() !== 'kein alarm' && (
-          <Metric label="Alarm" wide text>
-            <span style={{ color: 'var(--lft-warn)' }}>{alarm}</span>
+        {alarmText && (
+          <Metric label="Gerätemeldung" wide text>
+            <span style={{ color: alarmState === 'alarm' ? '#f87171' : 'var(--lft-warn)' }}>{alarmText}</span>
           </Metric>
         )}
       </div>
