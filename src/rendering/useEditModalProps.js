@@ -53,6 +53,7 @@ export function useEditModalProps({
     const isEditFrigateEvents = !!editId && editId.startsWith('frigate_events_card_');
     const isEditFan = !!editId && (editId.startsWith('fan.') || editId.startsWith('fan_card_'));
     const isEditClimate = !!editId && editId.startsWith('climate_card_');
+    const isEditZeitschaltuhr = !!editId && editId.startsWith('zeitschaltuhr_card_');
 
     const editSettings = isEditCar ? resolveCarSettings(editId, rawEditSettings) : rawEditSettings;
     const nameFallbackEntityId = isEditSensor
@@ -143,6 +144,7 @@ export function useEditModalProps({
       isEditClimate,
       isEditAlarm,
       isEditLightPanel,
+      isEditZeitschaltuhr,
       nameFallbackEntityId,
       editSettingsKey,
       editSettings,

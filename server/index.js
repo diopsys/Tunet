@@ -12,7 +12,12 @@ import settingsRouter from './routes/settings.js';
 import maintenanceRouter from './routes/maintenance.js';
 import medienRouter from './routes/medien.js';
 import kalenderRouter from './routes/kalender.js';
+import { createSchedulesRouter } from './routes/schedules.js';
 import { createHomeAssistantAuthMiddleware } from './haAuth.js';
+import db from './db.js';
+import { createScheduleStore } from './scheduler/store.js';
+import { createSchedulerEngine } from './scheduler/engine.js';
+import { createHomeAssistantApi, resolveHomeAssistantTarget } from './scheduler/haApi.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = parseInt(process.env.PORT || '3002', 10);
@@ -28,11 +33,27 @@ const resolveAppVersion = () => {
   }
 };
 
+// Zeitschaltuhr: ausgeführt wird nur im Add-on (SUPERVISOR_TOKEN) oder mit TUNET_SCHEDULER_ENABLED=1.
+// Ein Dev-Server arbeitet mit derselben HA-Instanz wie das Add-on und würde sonst doppelt schalten.
+export const setupScheduler = (env = process.env) => {
+  const store = createScheduleStore(db);
+  const flag = env.TUNET_SCHEDULER_ENABLED;
+  const target = resolveHomeAssistantTarget(env);
+  let reason = null;
+  if (flag === '0') reason = 'disabled';
+  else if (flag !== '1' && !env.SUPERVISOR_TOKEN) reason = 'dev';
+  else if (!target) reason = 'no-ha';
+  const engine = reason ? null : createSchedulerEngine({ store, ha: createHomeAssistantApi(target) });
+  return { store, engine, info: { reason } };
+};
+
 export const createApp = ({
   appVersion = resolveAppVersion(),
   distPath = join(__dirname, '..', 'dist'),
   isProduction = process.env.NODE_ENV === 'production',
+  scheduler = null,
 } = {}) => {
+  const schedules = scheduler || { store: createScheduleStore(db), engine: null, info: { reason: 'disabled' } };
   const app = express();
   // Trust the HA ingress proxy so rate-limiting uses the real client IP
   app.set('trust proxy', 1);
@@ -107,6 +128,11 @@ export const createApp = ({
   app.use('/api/maintenance', homeAssistantAuth, maintenanceRouter);
   app.use('/api/medien', homeAssistantAuth, medienRouter);
   app.use('/api/kalender', homeAssistantAuth, kalenderRouter);
+  app.use(
+    '/api/schedules',
+    homeAssistantAuth,
+    createSchedulesRouter({ store: schedules.store, engine: schedules.engine, engineInfo: schedules.info })
+  );
 
   // Health check
   app.get('/api/health', (_req, res) => {
@@ -275,7 +301,8 @@ export const createApp = ({
 };
 
 const isMainModule = process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1];
-const app = createApp();
+const scheduler = isMainModule ? setupScheduler() : null;
+const app = createApp({ scheduler });
 
 // WebSocket proxy for go2rtc — lets browser connect via WSS through Tunet's HTTPS server
 const httpServer = createServer(app);
@@ -335,6 +362,12 @@ if (isMainModule) {
     console.log(
       `[server] Tunet backend running on port ${PORT} (${process.env.NODE_ENV === 'production' ? 'production' : 'development'})`
     );
+    if (scheduler?.engine) {
+      scheduler.engine.start();
+      console.log('[scheduler] Zeitschaltuhr aktiv');
+    } else {
+      console.log(`[scheduler] Zeitschaltuhr führt nichts aus (${scheduler?.info.reason})`);
+    }
   });
 }
 

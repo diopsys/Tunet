@@ -659,3 +659,27 @@ html[data-density='spacious'] .touch-feedback h3 {
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.25);
 }
+
+/* Zeitschaltuhr: nächste Schaltzeit auf Karten mit Zeitplan (gesetzt vom ScheduleHost) */
+[data-schedule-next] {
+  position: relative;
+}
+
+[data-schedule-next]::after {
+  content: '◷ ' attr(data-schedule-next);
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  z-index: 3;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent-color) 22%, transparent);
+  color: var(--text-primary);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 16px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  pointer-events: none;
+  opacity: 0.9;
+}

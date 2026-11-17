@@ -39,6 +39,7 @@ const rendererMocks = vi.hoisted(() => ({
   renderFrigateEventsCard: vi.fn(() => ({ renderer: 'frigate_events' })),
   renderPoolCard: vi.fn(() => ({ renderer: 'pool' })),
   renderMedienCard: vi.fn(() => ({ renderer: 'medien' })),
+  renderZeitschaltuhrCard: vi.fn(() => ({ renderer: 'zeitschaltuhr' })),
 }));
 
 vi.mock('../rendering/cards', () => rendererMocks);

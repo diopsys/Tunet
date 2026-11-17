@@ -52,6 +52,7 @@ import { scheduleLikelyModalPrefetch, scheduleModalPrefetch } from './utils/pref
 import { startPage } from './utils/startPage';
 
 const KameraLinkModal = lazyWithRetry(() => import('./modals/CameraModal'));
+const ScheduleHost = lazyWithRetry(() => import('./components/schedule/ScheduleHost'));
 
 /** @typedef {import('./types/dashboard').AppContentProps} AppContentProps */
 
@@ -877,6 +878,17 @@ export function AppContent({ showOnboarding, setShowOnboarding }) {
         cardConfig={modalManagerCardConfig}
         mediaTick={mediaTick}
       />
+      {entitiesLoaded && (
+        <Suspense fallback={null}>
+          <ScheduleHost
+            editMode={editMode}
+            cardSettings={cardSettings}
+            activePage={activePage}
+            callService={callService}
+            t={t}
+          />
+        </Suspense>
+      )}
       {kameraLink && entities?.[kameraLink.kamera] && (
         <Suspense fallback={null}>
           <KameraLinkModal

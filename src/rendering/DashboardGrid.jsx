@@ -299,7 +299,8 @@ export default function DashboardGrid({ page, media, grid, cards, actions, t }) 
           } else if (
             id.startsWith('light_panel_card_') ||
             id.startsWith('cover_panel_card_') ||
-            id.startsWith('security_panel_card_')
+            id.startsWith('security_panel_card_') ||
+            (id.startsWith('zeitschaltuhr_card_') && settings.colSpan === 'full')
           ) {
             cardHeight = null; // auto-sizes to content
           } else {

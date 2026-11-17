@@ -763,6 +763,7 @@ export default function EditCardModal({
   isEditClimate,
   isEditVacuum,
   isEditLightPanel,
+  isEditZeitschaltuhr,
   editSettingsKey,
   editSettings,
   isEditWeatherTemp,
@@ -1684,6 +1685,32 @@ export default function EditCardModal({
                       </button>
                     </div>
                   </div>
+                </div>
+              )}
+
+              {isEditZeitschaltuhr && editSettingsKey && (
+                <div className="space-y-2">
+                  <label className="ml-1 text-xs font-bold text-[var(--text-muted)] uppercase">
+                    {t('schedule.cardWidth')}
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    {[...Array.from({ length: maxColSpan }, (_, i) => i + 1), 'full'].map((span) => {
+                      const current = editSettings.colSpan || 1;
+                      const active = current === span;
+                      return (
+                        <button
+                          key={span}
+                          type="button"
+                          onClick={() => saveCardSetting(editSettingsKey, 'colSpan', span)}
+                          className={`popup-surface min-w-[44px] flex-1 rounded-xl border border-[var(--glass-border)] px-3 py-2 text-xs font-bold transition-colors ${active ? 'text-[var(--text-primary)]' : 'popup-surface-hover text-[var(--text-secondary)]'}`}
+                          style={active ? { backgroundColor: 'var(--glass-bg-hover)', borderColor: 'var(--accent-color)' } : undefined}
+                        >
+                          {span === 'full' ? t('schedule.cardFullWidth') : span}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <p className="ml-1 text-[10px] text-[var(--text-muted)]">{t('schedule.cardWidthHint')}</p>
                 </div>
               )}
 

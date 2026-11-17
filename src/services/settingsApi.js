@@ -202,3 +202,6 @@ export function kalenderTerminLoeschen({ entityId, uid, start, serie = false }) 
     body: JSON.stringify({ entityId, uid, start, serie }),
   });
 }
+
+// Gemeinsamer Zugang für weitere Tunet-APIs (z. B. Zeitschaltuhr)
+export { request as apiRequest };

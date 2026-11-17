@@ -51,9 +51,10 @@ export const DEFAULT_LIGHT_PANEL_TABS = [
     title: 'Automatik',
     icon: 'mdi:auto-mode',
     entities: [
-      { entityId: 'switch.schedule_789cd8', name: 'Carport Ein' },
-      { entityId: 'switch.schedule_0cc89b', name: 'Carport Aus' },
       { entityId: 'automation.treppenbeleuchtung_blueprint', name: 'Treppenbeleuchtung' },
     ],
   },
 ];
+
+/** Zeitschaltuhr im Tab zeigen? Ohne Einstellung nur im Tab „Automatik“. */
+export const tabShowsSchedules = (tab) => (typeof tab?.showSchedules === 'boolean' ? tab.showSchedules : tab?.id === 'automatik');

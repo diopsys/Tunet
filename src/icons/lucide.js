@@ -107,6 +107,8 @@ export {
   ArrowRight,
   CloudSun,
   AlarmClock,
+  Plane,
+  History,
   Archive,
   Award,
   Book,

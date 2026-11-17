@@ -1,8 +1,9 @@
-import { useState, useRef, useEffect, useCallback, useMemo, memo } from 'react';
-import { Lightbulb, ChevronRight, Zap, ToggleLeft, Workflow, Lock, Unlock, Edit2, Check, X } from '../../icons';
+import { useState, useRef, useEffect, useCallback, memo } from 'react';
+import { Lightbulb, ChevronRight, Zap, ToggleLeft, Workflow, Lock, Unlock } from '../../icons';
 import { getIconComponent } from '../../icons';
 import M3Slider from '../ui/M3Slider';
-import { DEFAULT_LIGHT_PANEL_TABS as DEFAULT_TABS } from './lightPanelDefaults';
+import { DEFAULT_LIGHT_PANEL_TABS as DEFAULT_TABS, tabShowsSchedules } from './lightPanelDefaults';
+import PanelSchedules from '../schedule/PanelSchedules';
 
 const DEBOUNCE_MS = 200;
 
@@ -11,293 +12,6 @@ const DOMAIN_FALLBACK_ICON = {
   switch: Zap,
   input_boolean: ToggleLeft,
   automation: Workflow,
-};
-
-/* ── Scheduler helpers ────────────────────────────────────────────── */
-function formatTimeslot(slot) {
-  if (!slot) return '';
-  const parseSunOffset = (base, rest) => {
-    const m = rest.match(/([+-])(\d{2}):(\d{2})/);
-    if (!m || (m[2] === '00' && m[3] === '00')) return base;
-    const h = parseInt(m[2]), min = parseInt(m[3]);
-    if (h > 0) return `${base} ${m[1]}${h}h`;
-    if (min > 0) return `${base} ${m[1]}${min}min`;
-    return base;
-  };
-  if (slot.startsWith('sunset')) return parseSunOffset('Sonnenuntergang', slot.slice(6));
-  if (slot.startsWith('sunrise')) return parseSunOffset('Sonnenaufgang', slot.slice(7));
-  return slot.substring(0, 5); // HH:MM
-}
-
-function formatWeekdays(weekdays) {
-  if (!weekdays?.length) return '';
-  if (weekdays.includes('daily')) return 'täglich';
-  if (weekdays.includes('workday')) return 'Mo–Fr';
-  if (weekdays.includes('weekend')) return 'Sa–So';
-  const MAP = { mon: 'Mo', tue: 'Di', wed: 'Mi', thu: 'Do', fri: 'Fr', sat: 'Sa', sun: 'So' };
-  return weekdays.map((d) => MAP[d] || d).join(', ');
-}
-
-function formatNextTrigger(iso) {
-  if (!iso) return null;
-  try {
-    return new Date(iso).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
-  } catch { return null; }
-}
-
-function parseOffsetMinutes(rest) {
-  const m = rest.match(/([+-])(\d{2}):(\d{2})/);
-  if (!m) return 0;
-  return (m[1] === '+' ? 1 : -1) * (parseInt(m[2]) * 60 + parseInt(m[3]));
-}
-
-function offsetMinutesToString(base, minutes) {
-  const sign = minutes >= 0 ? '+' : '-';
-  const abs = Math.abs(minutes);
-  const h = String(Math.floor(abs / 60)).padStart(2, '0');
-  const min = String(abs % 60).padStart(2, '0');
-  return `${base}${sign}${h}:${min}:00`;
-}
-
-function formatOffsetLabel(minutes) {
-  if (minutes === 0) return '±0';
-  const abs = Math.abs(minutes);
-  const sign = minutes > 0 ? '+' : '−';
-  if (abs < 60) return `${sign}${abs}min`;
-  const h = Math.floor(abs / 60);
-  const m = abs % 60;
-  return m ? `${sign}${h}h${m}` : `${sign}${h}h`;
-}
-
-const OFFSET_STEPS = [-180, -120, -60, -30, 0, 30, 60, 120, 180]; // minutes
-const WEEKDAY_KEYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
-const WEEKDAY_LABELS = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
-
-/* ── Scheduler Tile ───────────────────────────────────────────────── */
-const SchedulerTile = ({ entityId, name, entity, callService, allEntities }) => {
-  const [editing, setEditing] = useState(false);
-  const [mode, setMode] = useState('sunset');   // 'time' | 'sunset' | 'sunrise'
-  const [timeValue, setTimeValue] = useState('00:00');
-  const [offsetMin, setOffsetMin] = useState(0);
-  const [weekdays, setWeekdays] = useState(['daily']);
-
-  const isOn = entity?.state === 'on';
-  const isUnavailable = !entity?.state || entity.state === 'unavailable';
-  const attrs = useMemo(() => entity?.attributes || {}, [entity?.attributes]);
-
-  const timeslotStr = attrs.timeslots?.[0] || '';
-  const timeslotLabel = formatTimeslot(timeslotStr);
-  const weekdaysLabel = formatWeekdays(attrs.weekdays);
-  const nextTime = formatNextTrigger(attrs.next_trigger);
-  const controlledNames = (attrs.entities || [])
-    .map((id) => allEntities[id]?.attributes?.friendly_name || id.split('.')[1])
-    .join(', ');
-  const action = attrs.actions?.[0]?.service?.includes('turn_on') ? 'Ein' : 'Aus';
-  const iconName = attrs.icon;
-  const TileIcon = (iconName ? getIconComponent(iconName) : null) || Workflow;
-
-  const openEditor = useCallback(() => {
-    if (timeslotStr.startsWith('sunset')) {
-      setMode('sunset');
-      setOffsetMin(parseOffsetMinutes(timeslotStr.slice(6)));
-    } else if (timeslotStr.startsWith('sunrise')) {
-      setMode('sunrise');
-      setOffsetMin(parseOffsetMinutes(timeslotStr.slice(7)));
-    } else {
-      setMode('time');
-      setTimeValue(timeslotStr.substring(0, 5) || '00:00');
-    }
-    setWeekdays(attrs.weekdays?.length ? [...attrs.weekdays] : ['daily']);
-    setEditing(true);
-  }, [timeslotStr, attrs.weekdays]);
-
-  const handleSave = useCallback(() => {
-    const start = mode === 'time'
-      ? `${timeValue}:00`
-      : offsetMinutesToString(mode, offsetMin);
-    const actions = (attrs.entities || []).map((eid) => ({
-      service: attrs.actions?.[0]?.service || 'switch.turn_on',
-      entity_id: eid,
-    }));
-    callService('scheduler', 'edit', {
-      entity_id: entityId,
-      timeslots: [{ start, actions }],
-      weekdays,
-    });
-    setEditing(false);
-  }, [mode, timeValue, offsetMin, weekdays, entityId, attrs, callService]);
-
-  const toggleWeekday = (key) => {
-    setWeekdays((prev) => {
-      const preset = ['daily', 'workday', 'weekend'];
-      const filtered = prev.filter((d) => !preset.includes(d));
-      if (filtered.includes(key)) return filtered.filter((d) => d !== key) || ['daily'];
-      return [...filtered, key];
-    });
-  };
-
-  const setPreset = (preset) => setWeekdays([preset]);
-
-  const isPreset = (p) => weekdays.length === 1 && weekdays[0] === p;
-  const isDayActive = (key) => {
-    if (weekdays.includes('daily')) return true;
-    if (weekdays.includes('workday') && ['mon','tue','wed','thu','fri'].includes(key)) return true;
-    if (weekdays.includes('weekend') && ['sat','sun'].includes(key)) return true;
-    return weekdays.includes(key);
-  };
-
-  return (
-    <div className={`glass-texture col-span-full overflow-hidden rounded-3xl border border-[var(--glass-border)] bg-[var(--card-bg)] transition-all duration-300 ${isUnavailable ? 'opacity-50' : ''}`}>
-      {/* Header row */}
-      <div className="flex items-center">
-        <button
-          type="button"
-          data-haptic="card"
-          disabled={isUnavailable}
-          onClick={() => { if (!isUnavailable) callService('switch', isOn ? 'turn_off' : 'turn_on', { entity_id: entityId }); }}
-          style={{ touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent' }}
-          className={`flex min-w-0 flex-1 items-center gap-3 px-4 py-4 text-left transition-all active:scale-[0.97] ${isUnavailable ? 'cursor-default' : 'cursor-pointer'}`}
-        >
-          <div
-            className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl transition-all duration-300"
-            style={isOn ? { backgroundColor: 'rgba(59,130,246,0.12)', color: 'rgb(96,165,250)' } : { backgroundColor: 'var(--glass-bg-hover)', color: 'var(--text-muted)' }}
-          >
-            <TileIcon className="h-6 w-6 stroke-[1.5px]" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="mb-1.5 truncate text-xs font-bold leading-none tracking-widest uppercase text-[var(--text-secondary)] opacity-60">
-              {name}
-            </p>
-            <div className="flex flex-wrap items-baseline gap-x-1.5">
-              <span className={`text-lg font-medium leading-none ${isOn ? 'text-[var(--text-primary)]' : 'text-[var(--text-muted)] opacity-40'}`}>
-                {isOn ? 'Aktiv' : 'Inaktiv'}
-              </span>
-              {timeslotLabel && <span className="text-xs text-[var(--text-muted)] opacity-60">{timeslotLabel}</span>}
-              {weekdaysLabel && <span className="text-xs text-[var(--text-muted)] opacity-40">· {weekdaysLabel}</span>}
-            </div>
-            {(controlledNames || nextTime) && (
-              <div className="mt-1 flex flex-wrap items-center gap-x-1.5">
-                {controlledNames && <span className="truncate text-[10px] text-[var(--text-muted)] opacity-50">{action}: {controlledNames}</span>}
-                {nextTime && <span className="text-[10px] text-blue-400/70">· {nextTime} Uhr</span>}
-              </div>
-            )}
-          </div>
-        </button>
-
-        {/* Edit button */}
-        <button
-          type="button"
-          data-haptic="card"
-          onClick={() => editing ? setEditing(false) : openEditor()}
-          style={{ touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent' }}
-          className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl mr-3 transition-all active:scale-90 ${
-            editing ? 'bg-[var(--accent-color)] text-white' : 'text-[var(--text-muted)] opacity-25 hover:opacity-60'
-          }`}
-        >
-          <Edit2 className="h-4 w-4" />
-        </button>
-      </div>
-
-      {/* Inline editor */}
-      {editing && (
-        <div className="border-t border-[var(--glass-border)] px-3 pb-3 pt-3 space-y-3">
-
-          {/* Mode selector */}
-          <div className="flex gap-1.5">
-            {[['time', 'Uhrzeit'], ['sunset', 'Sonnenuntergang'], ['sunrise', 'Sonnenaufgang']].map(([m, label]) => (
-              <button
-                key={m}
-                type="button"
-                onClick={() => setMode(m)}
-                className={`flex-1 rounded-lg py-1.5 text-[10px] font-bold uppercase tracking-wide transition-all ${
-                  mode === m ? 'bg-[var(--accent-color)] text-white' : 'bg-[var(--glass-bg-hover)] text-[var(--text-muted)] hover:text-[var(--text-primary)]'
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-
-          {/* Time input or offset selector */}
-          {mode === 'time' ? (
-            <input
-              type="time"
-              value={timeValue}
-              onChange={(e) => setTimeValue(e.target.value)}
-              className="w-full rounded-xl bg-[var(--glass-bg-hover)] px-3 py-2 text-sm font-semibold text-[var(--text-primary)] outline-none border border-[var(--glass-border)]"
-            />
-          ) : (
-            <div className="flex items-center gap-1 overflow-x-auto scrollbar-hide">
-              {OFFSET_STEPS.map((step) => (
-                <button
-                  key={step}
-                  type="button"
-                  onClick={() => setOffsetMin(step)}
-                  className={`flex-shrink-0 rounded-lg px-2.5 py-1.5 text-[10px] font-bold transition-all ${
-                    offsetMin === step
-                      ? 'bg-[var(--accent-color)] text-white'
-                      : 'bg-[var(--glass-bg-hover)] text-[var(--text-muted)] hover:text-[var(--text-primary)]'
-                  }`}
-                >
-                  {formatOffsetLabel(step)}
-                </button>
-              ))}
-            </div>
-          )}
-
-          {/* Weekday selector */}
-          <div className="space-y-1.5">
-            <div className="flex gap-1.5">
-              {[['daily', 'Täglich'], ['workday', 'Mo–Fr'], ['weekend', 'Sa–So']].map(([p, label]) => (
-                <button
-                  key={p}
-                  type="button"
-                  onClick={() => setPreset(p)}
-                  className={`flex-1 rounded-lg py-1.5 text-[10px] font-bold tracking-wide transition-all ${
-                    isPreset(p) ? 'bg-[var(--accent-color)] text-white' : 'bg-[var(--glass-bg-hover)] text-[var(--text-muted)] hover:text-[var(--text-primary)]'
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-            <div className="flex gap-1.5">
-              {WEEKDAY_KEYS.map((key, i) => (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() => toggleWeekday(key)}
-                  className={`flex-1 rounded-lg py-1.5 text-[10px] font-bold transition-all ${
-                    isDayActive(key) ? 'bg-[var(--accent-color)]/80 text-white' : 'bg-[var(--glass-bg-hover)] text-[var(--text-muted)]'
-                  }`}
-                >
-                  {WEEKDAY_LABELS[i]}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Save / Cancel */}
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => setEditing(false)}
-              className="flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-bold text-[var(--text-muted)] bg-[var(--glass-bg-hover)] hover:text-[var(--text-primary)] transition-all"
-            >
-              <X className="h-3.5 w-3.5" /> Abbrechen
-            </button>
-            <button
-              type="button"
-              onClick={handleSave}
-              className="flex flex-1 items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-bold bg-[var(--accent-color)] text-white hover:opacity-90 transition-all"
-            >
-              <Check className="h-3.5 w-3.5" /> Speichern
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
 };
 
 /* ── Light Tile ───────────────────────────────────────────────────── */
@@ -457,6 +171,7 @@ const LightPanelCard = ({
   settings,
   onOpenLightModal,
   isMobile,
+  t,
 }) => {
   const tabs = settings?.panelTabs || DEFAULT_TABS;
   const [activeTabId, setActiveTabId] = useState(null);
@@ -470,9 +185,9 @@ const LightPanelCard = ({
     const state = entities[entityId]?.state;
     return !!state && state !== 'unavailable' && state !== 'unknown';
   });
-  const schedulerEntities = entities_.filter(({ entityId }) => !!entities[entityId]?.attributes?.timeslots);
-  const regularEntities = entities_.filter(({ entityId }) => !entities[entityId]?.attributes?.timeslots);
-  const hasBothGroups = schedulerEntities.length > 0 && regularEntities.length > 0;
+  const regularEntities = entities_;
+  const showSchedules = tabShowsSchedules(activeTab) && typeof t === 'function';
+  const hasBothGroups = showSchedules && regularEntities.length > 0;
   const remainder = regularEntities.length % cols;
   const spacers = remainder === 0 ? 0 : cols - remainder;
 
@@ -553,7 +268,7 @@ const LightPanelCard = ({
       {/* Tile grid */}
       <div className={`grid gap-3 ${cols === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
         {/* Zeitsteuerung section */}
-        {schedulerEntities.length > 0 && (
+        {showSchedules && (
           <>
             {hasBothGroups && (
               <div className="col-span-full flex items-center gap-2">
@@ -561,16 +276,7 @@ const LightPanelCard = ({
                 <div className="h-px flex-1 bg-[var(--glass-border)]" />
               </div>
             )}
-            {schedulerEntities.map(({ entityId, name }) => (
-              <SchedulerTile
-                key={entityId}
-                entityId={entityId}
-                name={name}
-                entity={entities[entityId]}
-                callService={callService}
-                allEntities={entities}
-              />
-            ))}
+            <PanelSchedules entities={entities} editMode={editMode} t={t} />
           </>
         )}
 

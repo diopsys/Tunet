@@ -399,6 +399,11 @@ export const handleAddSelected = (ctx) => {
       return;
     }
 
+    case 'zeitschaltuhr': {
+      commitSingleCard(`zeitschaltuhr_card_${Date.now()}`, {});
+      return;
+    }
+
     case 'medien': {
       // Ohne Vorbelegung: Zone, Player und Fernseher sind je Haushalt verschieden (settings.medien)
       commitSingleCard(`medien_card_${Date.now()}`, {});

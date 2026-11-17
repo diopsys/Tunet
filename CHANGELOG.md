@@ -1,3 +1,44 @@
+## [1.31.10] — 2026-11-17
+
+### Fixed
+- Lüftung, Tab „Betrieb“: Werte-Kästchen bleiben innerhalb der Geräte-Umrandung; Gerätemeldung auf Deutsch, Code 35 als „Interner Frostschutz aus (Kaminmodus)“
+- Lüftung: Im Kaminmodus (climate meldet „aus“, die Ventilatoren laufen aber mit eigenen Zu-/Abluftwerten weiter) zeigen Karte, Kopfzeile und Schema jetzt „Lüftet“ bzw. „Kaminmodus“ mit Zu-/Abluftleistung und animierten Luftströmen statt „Aus“
+
+## [1.31.9] — 2026-11-17
+
+### Added
+- Status-Pill „Zeitsteuerung“: Lichter, die gerade über die Zeitschaltuhr an sind, mit Zeitplan und Ende; sie zählen dann nicht mehr bei „Lichter an“ mit
+- Lüftung: Schwellen für CO₂-Bedarf (Low ein / Aus unter), Dauerbetrieb ab Außentemperatur, Frostschutz, PM2.5, Mindest-Stufendauer und Schalter für die Nacht-Grundlüftung im Automatik-Tab
+
+### Changed
+- Lüftung, Tab „Betrieb“ neu: animiertes Schema im Stil des Wärmepumpen-Hydraulikschemas mit Luftströmen in Temperaturfarben (Tempo nach Ventilatorleistung), drehenden Ventilatoren, Wärmetauscher mit Wirkungsgrad, Bypass als Umgehung, Filterstatus und Kennzahlen (Stufe, Wärmegewinn, Drehzahlen, Feuchte)
+- Lüftung an die neue Bedarfssteuerung angepasst: Automatik-Tab zeigt die Regelkette (Frostschutz, Luftqualität, Mild, CO₂, Nacht, kein Bedarf) mit aktiver Regel und Live-Werten, CO₂-Balken mit den Schwellen und den Grund mit Erklärung („CO₂ 930 ppm ≥ 900“, „Nacht-Slot bis 02:20“)
+- Lüftung: CO₂-Farben richten sich nach den Schwellen der Automation; Sperr-Anzeige aus letztem Stufenwechsel plus Mindest-Stufendauer; Hinweis, wenn der Kaminmodus die Smartsteuerung pausiert
+
+### Fixed
+- Zeitschaltuhr: Ein Zeitplan, der mitten im Zeitfenster angelegt oder eingeschaltet wird, schaltet sofort ein statt erst beim nächsten Beginn
+
+### Removed
+- Lüftung: Temperatur-Differenz-Steuerung (ΔTemp innen/Zuluft) samt Schwellen und Erklärtexten
+
+## [1.31.8] — 2026-11-13
+
+### Added
+- Zeitschaltuhr direkt in Tunet, ohne HACS-Scheduler: Zeitpläne laufen im Tunet-Server (Add-on) und schalten Lichter zu Uhrzeit oder Sonnenauf-/-untergang mit Versatz
+- Ein- und Ausschalten in einem Zeitplan: „Einschalten um“ plus „Ausschalten um“, „nach Dauer“ oder „nicht ausschalten“
+- Editor mit 24-h-Tagesring zum Ziehen (rastet an der Sonne ein), Wochentagen, Helligkeit, Aufdimmen, Bedingungen (jemand zu Hause, nur bei Dunkelheit, aussetzen wenn …) und Urlaubsmodus mit leicht verschobenen Zeiten
+- Zeitpläne einfach hinschreiben, z. B. „Terrasse täglich ab Sonnenuntergang für 2 Stunden“; langer Druck auf eine Lichtkarte legt einen Zeitplan für deren Lichter an
+- Karte „Zeitschaltuhr“ unter „Karte hinzufügen“: alle Zeitpläne mit Status, Uhrzeiten, Tagesleiste und Schalter; Breite einstellbar bis volle Breite
+- Licht-Panel: Zeitpläne als Kacheln unter „Zeitsteuerung“ im Tab „Automatik“ (pro Tab schaltbar)
+- Übersicht mit Aussetzen (heute / nächstes Mal), Testen, Konflikthinweisen, Protokoll und Übernahme der HACS-Scheduler-Zeitpläne (Ein/Aus-Paare werden zu einem Zeitplan)
+- Status-Pill „Nächste Schaltung“
+
+### Changed
+- Wärmepumpen-Schema: Rücklauf am Kondensator, Spreizung neben dem Vorlauf über der Pumpe
+
+### Removed
+- Licht-Panel: Kachel für den HACS-Scheduler (ersetzt durch die Zeitschaltuhr)
+
 ## [1.31.7] — 2026-11-07
 
 ### Added

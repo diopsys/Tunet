@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite';
+import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import { readFileSync } from 'fs';
 import { visualizer } from 'rollup-plugin-visualizer';
@@ -6,10 +6,27 @@ import { visualizer } from 'rollup-plugin-visualizer';
 const pkg = JSON.parse(readFileSync('./package.json', 'utf-8'));
 const analyze = process.env.ANALYZE === 'true';
 
+// Nur Dev-Server: Token aus .env in index.html setzen, wie es der Produktionsserver mit HA_TOKEN tut.
+// Sonst muss es nach jedem Leeren des Browser-Speichers (Safari nach 7 Tagen) neu eingegeben werden.
+// Eigene Variablennamen, damit das Backend nicht in den gemeinsamen HA_TOKEN-Modus wechselt.
+const devTokenPlugin = () => ({
+  name: 'tunet-dev-token',
+  apply: 'serve',
+  transformIndexHtml(html, ctx) {
+    const env = loadEnv(ctx.server?.config.mode || 'development', process.cwd(), '');
+    const token = env.TUNET_DEV_HA_TOKEN;
+    if (!token) return html;
+    const url = env.TUNET_DEV_HA_URL || env.TUNET_INTERNAL_HA_URL || '';
+    const esc = (v) => v.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+    return html.replace('<html', `<html data-ha-token="${esc(token)}" data-ha-url="${esc(url)}"`);
+  },
+});
+
 export default defineConfig({
   base: './',
   plugins: [
     react(),
+    devTokenPlugin(),
     analyze &&
       visualizer({
         filename: 'dist/bundle-report.html',

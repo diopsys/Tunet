@@ -1,6 +1,7 @@
 import { memo } from 'react';
 import { Fan } from '../../icons';
 import { getIconComponent } from '../../icons';
+import { co2Color as co2Color_ } from '../../utils/lueftungLogic';
 
 export const LUFTUNGSANLAGE_ENTITY_IDS = {
   climate: 'climate.blauberg_s21',
@@ -26,13 +27,18 @@ export const LUFTUNGSANLAGE_ENTITY_IDS = {
   co2Schwelle: 'input_number.luftung_co2_schwelle',
   vocSchwelle: 'input_number.luftung_voc_schwelle',
   feuchteSchwelle: 'input_number.luftung_feuchte_schwelle',
-  tempDiffKalt: 'input_number.luftung_temp_diff_kalt',
-  tempDiffKaltAus: 'input_number.luftung_temp_diff_kalt_aus',
-  tempDiffMild: 'input_number.luftung_temp_diff_mild_warm',
-  tempDiffMildAus: 'input_number.luftung_temp_diff_mild_warm_aus',
+  pm25Schwelle: 'input_number.luftung_pm2_5_schwelle',
+  co2LowEin: 'input_number.luftung_co2_low_ein',
+  co2Aus: 'input_number.luftung_co2_aus',
+  dauerbetriebAb: 'input_number.luftung_dauerbetrieb_ab_aussentemperatur',
+  frostAus: 'input_number.luftung_frostschutz_aus_temperatur',
+  mindestStufendauer: 'input_number.luftung_mindest_stufendauer',
+  nachtGrundlueftung: 'input_boolean.luftung_nacht_grundluftung',
   luftfeuchtigkeit: 'sensor.blauberg_s21_luftfeuchtigkeit',
   feuchtigkeitsDiff: 'sensor.innen_aussen_luftfeuchtigkeit_differenz',
   co2Eg: 'sensor.alpstuga_air_quality_monitor_kohlendioxid',
+  // Zweiter CO₂-Sensor (OG) folgt; die Automation nimmt das Maximum. Bis dahin leer.
+  co2Og: null,
   coMelder: 'sensor.co_melder_co_lesung',
   feuchteEg: 'sensor.alpstuga_air_quality_monitor_luftfeuchtigkeit',
   pm25Eg: 'sensor.alpstuga_air_quality_monitor_pm25',
@@ -43,11 +49,27 @@ export const LUFTUNGSANLAGE_ENTITY_IDS = {
   tempOg: 'sensor.luftqualitatssensor_temperature',
 };
 
-function getCo2Color(ppm) {
-  if (ppm == null) return 'var(--text-primary)';
-  if (ppm < 800) return '#4ade80';
-  if (ppm < 1000) return '#fb923c';
-  return '#f87171';
+const num = (entity) => {
+  const v = parseFloat(entity?.state);
+  return Number.isFinite(v) ? v : null;
+};
+
+/** Höchster CO₂-Wert aus EG und (falls vorhanden) OG – wie in der Automation. */
+export function co2Max(entities) {
+  const values = [LUFTUNGSANLAGE_ENTITY_IDS.co2Eg, LUFTUNGSANLAGE_ENTITY_IDS.co2Og]
+    .filter(Boolean)
+    .map((id) => num(entities?.[id]))
+    .filter((v) => v != null);
+  return values.length ? Math.max(...values) : null;
+}
+
+/** CO₂-Schwellen der Automation aus den Helfern. */
+export function co2Thresholds(entities) {
+  return {
+    co2LowEin: num(entities?.[LUFTUNGSANLAGE_ENTITY_IDS.co2LowEin]) ?? undefined,
+    co2Aus: num(entities?.[LUFTUNGSANLAGE_ENTITY_IDS.co2Aus]) ?? undefined,
+    co2Schwelle: num(entities?.[LUFTUNGSANLAGE_ENTITY_IDS.co2Schwelle]) ?? undefined,
+  };
 }
 
 const GenericLuftungsanlageCard = memo(function GenericLuftungsanlageCard({
@@ -73,31 +95,34 @@ const GenericLuftungsanlageCard = memo(function GenericLuftungsanlageCard({
 
   const climateEntity = entities?.[LUFTUNGSANLAGE_ENTITY_IDS.climate];
   const zuluftEntity = entities?.[LUFTUNGSANLAGE_ENTITY_IDS.zuluft];
-  const co2Entity = entities?.[LUFTUNGSANLAGE_ENTITY_IDS.co2Eg];
 
   const hvacState = climateEntity?.state || null;
   const zuluftTemp = zuluftEntity ? parseFloat(zuluftEntity.state) : null;
-  const co2Ppm = co2Entity ? parseFloat(co2Entity.state) : null;
+  const co2Ppm = co2Max(entities);
   const FAN_LABELS = { low: 'Low', medium: 'Medium', high: 'High' };
   const luftstufe = FAN_LABELS[climateEntity?.attributes?.fan_mode] || null;
+
+  // Im Kaminmodus ist climate „off“, die Ventilatoren laufen aber weiter
+  const fansRunning =
+    (num(entities?.[LUFTUNGSANLAGE_ENTITY_IDS.zuluftRpm]) ?? 0) > 0 || (num(entities?.[LUFTUNGSANLAGE_ENTITY_IDS.abluftRpm]) ?? 0) > 0;
 
   const STATE_LABELS = {
     off: translate('luftungsanlage.state.off') || 'Aus',
     auto: translate('luftungsanlage.state.auto') || 'Auto',
     fan_only: translate('luftungsanlage.state.fanOnly') || 'Lüften',
   };
-  const statusLabel = luftstufe || (hvacState ? (STATE_LABELS[hvacState] ?? hvacState) : '—');
+  const statusLabel = hvacState === 'off' ? (fansRunning ? 'Lüftet' : STATE_LABELS.off) : luftstufe || (hvacState ? (STATE_LABELS[hvacState] ?? hvacState) : '—');
 
-  const isActive = hvacState !== 'off' && hvacState != null;
+  const isActive = (hvacState !== 'off' && hvacState != null) || fansRunning;
   const iconColor = isActive ? '#4ade80' : 'var(--text-muted)';
   const iconBg = isActive ? 'rgba(74,222,128,0.1)' : 'rgba(127,127,127,0.1)';
 
   const statusDotColor =
-    hvacState === 'off'
+    !isActive
       ? 'bg-[var(--text-muted)]'
       : 'bg-[var(--status-success-fg)]';
 
-  const co2Color = getCo2Color(co2Ppm);
+  const co2Color = co2Color_(co2Ppm, co2Thresholds(entities));
   const coEntity = entities?.[LUFTUNGSANLAGE_ENTITY_IDS.coMelder];
   const coPpm = coEntity ? parseFloat(coEntity.state) : null;
   const coColor = coPpm == null ? 'var(--text-primary)' : coPpm >= 50 ? '#f87171' : coPpm >= 10 ? '#fb923c' : '#4ade80';

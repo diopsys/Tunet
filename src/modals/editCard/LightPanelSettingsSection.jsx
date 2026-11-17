@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { X } from 'lucide-react';
 import { SearchableSelect } from './CarMappingsSection';
-import { DEFAULT_LIGHT_PANEL_TABS } from '../../components/cards/lightPanelDefaults';
+import { DEFAULT_LIGHT_PANEL_TABS, tabShowsSchedules } from '../../components/cards/lightPanelDefaults';
 
 export function LightPanelSettingsSection({
   editSettings,
@@ -98,6 +98,28 @@ export function LightPanelSettingsSection({
           </button>
         ))}
       </div>
+
+      {/* Zeitschaltuhr im Tab */}
+      {activeTab && (
+        <div className="popup-surface flex items-center justify-between gap-3 rounded-xl px-3 py-2.5">
+          <div className="min-w-0">
+            <p className="text-xs font-bold text-[var(--text-primary)]">{t('schedule.panelToggle')}</p>
+            <p className="text-[10px] text-[var(--text-muted)]">{t('schedule.panelToggleHint')}</p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={tabShowsSchedules(activeTab)}
+            aria-label={t('schedule.panelToggle')}
+            onClick={() =>
+              saveTabs(tabs.map((tab) => (tab.id === resolvedActiveTabId ? { ...tab, showSchedules: !tabShowsSchedules(tab) } : tab)))
+            }
+            className={`relative h-6 w-11 flex-shrink-0 rounded-full transition-colors ${tabShowsSchedules(activeTab) ? 'bg-[var(--accent-color)]' : 'bg-[var(--glass-bg-hover)]'}`}
+          >
+            <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-all ${tabShowsSchedules(activeTab) ? 'left-[22px]' : 'left-0.5'}`} />
+          </button>
+        </div>
+      )}
 
       {/* Entity list for active tab */}
       <div className="space-y-2">

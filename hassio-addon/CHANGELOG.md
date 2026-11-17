@@ -1,5 +1,46 @@
 # Changelog
 
+## 1.31.10
+
+### Fixed
+- Ventilation "Betrieb" tab: value tags stay inside the unit outline; device message shown in German, code 35 as internal frost protection off (fireplace mode)
+- Ventilation: in fireplace mode (climate reports "off" while the fans keep running with their own supply/exhaust values) card, header and diagram now show the running fans and air flows instead of "off"
+
+## 1.31.9
+
+### Added
+- Status pill "Scheduled lights": lights currently on through the timer, with schedule and end time; they no longer count towards "Lights on"
+- Ventilation: thresholds for CO₂ demand (low on / off below), continuous mode from outside temperature, frost protection, PM2.5, minimum stage time and a switch for night ventilation in the Automatik tab
+
+### Changed
+- Ventilation, "Betrieb" tab redesigned: animated diagram in the style of the heat pump hydraulics with air flows in temperature colours (speed by fan power), spinning fans, heat exchanger with efficiency, bypass, filter status and key figures
+- Ventilation follows the new demand control: the Automatik tab shows the rule chain (frost, air quality, mild, CO₂, night, no demand) with the active rule and live values, a CO₂ bar with thresholds and the reason with an explanation
+- Ventilation: CO₂ colours follow the automation thresholds; lock display from the last stage change plus minimum stage time; hint when fireplace mode pauses the automation
+
+### Fixed
+- Timer: a schedule created or enabled in the middle of its window switches on right away instead of at the next start
+
+### Removed
+- Ventilation: temperature-difference control (ΔTemp inside/supply) with its thresholds and texts
+
+## 1.31.8
+
+### Added
+- Built-in timer, no HACS scheduler needed: schedules run in the Tunet server (add-on) and switch lights at a time or at sunrise/sunset with an offset
+- On and off in one schedule: "switch on at" plus "switch off at", "after a duration" or "don't switch off"
+- Editor with a draggable 24 h day ring (snaps to the sun), weekdays, brightness, fade-in, conditions (someone home, only when dark, skip if …) and vacation mode with slightly shifted times
+- Type schedules in plain words, e.g. "Terrasse täglich ab Sonnenuntergang für 2 Stunden"; long-press a light card to create a schedule for its lights
+- "Timer" card under "Add card": all schedules with status, times, day strip and switch; width adjustable up to full width
+- Light panel: schedules as tiles under "Scheduling" in the "Automatik" tab (per tab)
+- Overview with skip (today / next time), test, conflict hints, log and import of HACS scheduler schedules (on/off pairs become one schedule)
+- Status pill "Next switch"
+
+### Changed
+- Heat pump diagram: return at the condenser, spread next to the flow above the pump
+
+### Removed
+- Light panel: tile for the HACS scheduler (replaced by the timer)
+
 ## 1.31.7
 
 ### Added
