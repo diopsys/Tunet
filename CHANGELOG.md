@@ -1,4 +1,4 @@
-## [Unreleased]
+## [1.31.9] — 2026-11-17
 
 ### Added
 - Status-Pill „Zeitsteuerung“: Lichter, die gerade über die Zeitschaltuhr an sind, mit Zeitplan und Ende; sie zählen dann nicht mehr bei „Lichter an“ mit

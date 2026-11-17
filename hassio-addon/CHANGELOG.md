@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.31.9
 
 ### Added
 - Status pill "Scheduled lights": lights currently on through the timer, with schedule and end time; they no longer count towards "Lights on"
