@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useDashboardEffects } from '../hooks/useDashboardEffects';
+import { acquireIdleHold } from '../utils/idleHold';
 import {
   ENTITY_UPDATE_INTERVAL,
   INITIAL_FETCH_DELAY,
@@ -153,6 +154,82 @@ describe('useDashboardEffects › inactivity timer', () => {
     // but after full 10s from last interaction it fires
     act(() => vi.advanceTimersByTime(2000));
     expect(resetToHome).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not reset while an idle hold (e.g. live camera) is active', () => {
+    const resetToHome = vi.fn();
+    renderHook(() => useDashboardEffects(makeProps({ inactivityTimeout: 5, resetToHome })));
+
+    const release = acquireIdleHold();
+    act(() => vi.advanceTimersByTime(60_000));
+    expect(resetToHome).not.toHaveBeenCalled();
+
+    // after the hold ends the full timeout starts again
+    act(() => release());
+    act(() => vi.advanceTimersByTime(4000));
+    expect(resetToHome).not.toHaveBeenCalled();
+    act(() => vi.advanceTimersByTime(1000));
+    expect(resetToHome).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps holding until the last of several holds ends', () => {
+    const resetToHome = vi.fn();
+    renderHook(() => useDashboardEffects(makeProps({ inactivityTimeout: 5, resetToHome })));
+
+    const releaseA = acquireIdleHold();
+    const releaseB = acquireIdleHold();
+    act(() => releaseA());
+    act(() => releaseA()); // double release must not count twice
+    act(() => vi.advanceTimersByTime(30_000));
+    expect(resetToHome).not.toHaveBeenCalled();
+
+    act(() => releaseB());
+    act(() => vi.advanceTimersByTime(5000));
+    expect(resetToHome).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('useDashboardEffects › waking up', () => {
+  const setVisibility = (state) => {
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => state });
+    document.dispatchEvent(new Event('visibilitychange'));
+  };
+  afterEach(() => {
+    delete document.visibilityState;
+    localStorage.clear();
+  });
+
+  it('goes home when the app comes back after more than the idle timeout', () => {
+    const resetToHome = vi.fn();
+    renderHook(() => useDashboardEffects(makeProps({ inactivityTimeout: 60, resetToHome })));
+    act(() => setVisibility('hidden'));
+    // im Hintergrund laufen keine Timer: nur die Uhr springt weiter
+    vi.setSystemTime(Date.now() + 120_000);
+    act(() => setVisibility('visible'));
+    expect(resetToHome).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the page after a short break and restarts the idle timer', () => {
+    const resetToHome = vi.fn();
+    renderHook(() => useDashboardEffects(makeProps({ inactivityTimeout: 60, resetToHome })));
+    act(() => vi.advanceTimersByTime(50_000));
+    act(() => setVisibility('hidden'));
+    vi.setSystemTime(Date.now() + 20_000);
+    act(() => setVisibility('visible'));
+    expect(resetToHome).not.toHaveBeenCalled();
+    act(() => vi.advanceTimersByTime(59_000));
+    expect(resetToHome).not.toHaveBeenCalled();
+    act(() => vi.advanceTimersByTime(1_000));
+    expect(resetToHome).toHaveBeenCalledTimes(1);
+  });
+
+  it('does nothing on waking up without an idle timeout', () => {
+    const resetToHome = vi.fn();
+    renderHook(() => useDashboardEffects(makeProps({ inactivityTimeout: 0, resetToHome })));
+    act(() => setVisibility('hidden'));
+    vi.setSystemTime(Date.now() + 10_000_000);
+    act(() => setVisibility('visible'));
+    expect(resetToHome).not.toHaveBeenCalled();
   });
 });
 

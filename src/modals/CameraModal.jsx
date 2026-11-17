@@ -3,6 +3,7 @@ import { X, RefreshCw, Video, Camera } from '../icons';
 import { getIconComponent } from '../icons';
 import AccessibleModalShell from '../components/ui/AccessibleModalShell';
 import CameraFeed from '../components/camera/CameraFeed';
+import { useIdleHold } from '../utils/idleHold';
 
 export default function CameraModal({
   show,
@@ -32,6 +33,9 @@ export default function CameraModal({
   const Icon = iconName ? getIconComponent(iconName) || Camera : Camera;
   const activeSettings =
     viewMode === 'snapshot' ? { ...settings, cameraStreamEngine: 'snapshot' } : settings;
+
+  // Offene Kamera-Ansicht (Livebild oder Clip) hält den Rücksprung zur Startseite an
+  useIdleHold(Boolean(show && entityId && entity));
 
   if (!show || !entityId || !entity) return null;
 

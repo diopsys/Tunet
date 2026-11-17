@@ -147,6 +147,19 @@ describe('Medien-Kachel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Medien öffnen' }));
     expect(screen.queryByRole('dialog')).toBeNull();
   });
+
+  it('sends only one volume command at a time so slow receivers do not lag behind', async () => {
+    const callService = vi.fn();
+    const ents = { ...entities, 'media_player.zone2': { state: 'on', attributes: { source: 'HEOS Music', volume_level: 0.2 } } };
+    render(<MedienCard cardId="m" entities={ents} settings={{ medien }} callService={callService} />);
+    const regler = screen.getByLabelText('Lautstärke');
+    [25, 30, 35, 40, 45].forEach((v) => fireEvent.change(regler, { target: { value: String(v) } }));
+    const lautstaerke = () => callService.mock.calls.filter(([, s]) => s === 'volume_set').map(([, , d]) => d.volume_level);
+    expect(lautstaerke()).toEqual([0.25]);
+    expect(regler.value).toBe('45');
+    // erst nach der Rückmeldung von HA folgt der neueste Wert, Zwischenwerte entfallen
+    await waitFor(() => expect(lautstaerke()).toEqual([0.25, 0.45]));
+  });
   it('pauses without waking the room', async () => {
     const cfg = resolveMedienConfig({ medien: { ...medien, musik: { zoneQuelle: 'HEOS Music' } } });
     const zoneAus = { ...entities, 'media_player.zone2': { state: 'off' } };
@@ -174,17 +187,4 @@ describe('Medien-Kachel', () => {
     expect(await screen.findByRole('dialog')).toBeTruthy();
   });
 
-  it('sends only one volume command at a time', async () => {
-    let fertig;
-    const callService = vi.fn(() => new Promise((r) => { fertig = r; }));
-    render(<MedienCard cardId="m" entities={entities} settings={{ medien }} callService={callService} getEntityImageUrl={(u) => u} />);
-    const regler = screen.getByLabelText('Lautstärke');
-    fireEvent.change(regler, { target: { value: '25' } });
-    fireEvent.change(regler, { target: { value: '30' } });
-    fireEvent.change(regler, { target: { value: '45' } });
-    expect(callService).toHaveBeenCalledTimes(1);
-    expect(screen.getByText('45 %')).toBeTruthy();
-    fertig();
-    await waitFor(() => expect(callService.mock.calls.map((c) => c[2].volume_level)).toEqual([0.25, 0.45]));
-  });
 });

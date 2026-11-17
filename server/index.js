@@ -10,6 +10,8 @@ import profilesRouter from './routes/profiles.js';
 import iconsRouter from './routes/icons.js';
 import settingsRouter from './routes/settings.js';
 import maintenanceRouter from './routes/maintenance.js';
+import medienRouter from './routes/medien.js';
+import kalenderRouter from './routes/kalender.js';
 import { createSchedulesRouter } from './routes/schedules.js';
 import { createHomeAssistantAuthMiddleware } from './haAuth.js';
 import db from './db.js';
@@ -124,6 +126,8 @@ export const createApp = ({
   app.use('/api/icons', iconsRouter);
   app.use('/api/settings', homeAssistantAuth, settingsRouter);
   app.use('/api/maintenance', homeAssistantAuth, maintenanceRouter);
+  app.use('/api/medien', homeAssistantAuth, medienRouter);
+  app.use('/api/kalender', homeAssistantAuth, kalenderRouter);
   app.use(
     '/api/schedules',
     homeAssistantAuth,

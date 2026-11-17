@@ -40,7 +40,8 @@ export function renderCalendarCard(cardId, dragProps, getControls, cardStyle, se
           setShowEditCardModal(cardId);
           setEditCardSettingsKey(settingsKey);
         } else {
-          setShowCalendarModal(true);
+          // Schlüssel der Karte mitgeben: das Fenster liest daraus die Personen-Spalten
+          setShowCalendarModal(settingsKey || true);
         }
       }}
     />
