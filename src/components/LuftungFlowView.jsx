@@ -5,6 +5,11 @@ import { LUFTUNGSANLAGE_ENTITY_IDS as E } from './cards/GenericLuftungsanlageCar
 // Außenluft → Filter → Wärmetauscher → Zuluftventilator → Wohnräume, Abluft → Filter → Wärmetauscher →
 // Fortluftventilator → außen. Farben nach Temperatur, Tempo nach Ventilatorleistung, Bypass als Umgehung.
 
+// Bekannte Gerätemeldungen der S21 (alarm_codes)
+const ALARM_CODES = {
+  35: 'Interner Frostschutz aus (Kaminmodus)',
+};
+
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const fmt = (v, digits = 1) => (v == null ? '–' : v.toFixed(digits).replace('.', ','));
 const deg = (v) => (v == null ? '–' : `${fmt(v)}\u202f°C`);
@@ -99,8 +104,9 @@ function LuftungFlowView({ entities, isMobile = false, modeSrc, modeLvl }) {
   const alarmEntity = entities?.[E.alarm];
   const alarmState = alarmEntity?.state;
   const alarmCodes = Array.isArray(alarmEntity?.attributes?.alarm_codes) ? alarmEntity.attributes.alarm_codes : [];
+  const codeText = alarmCodes.map((c) => (ALARM_CODES[c] ? `${ALARM_CODES[c]} (${c})` : `Code ${c}`)).join(', ');
   const alarmText = alarmState === 'alarm' || alarmState === 'warning'
-    ? `${alarmState === 'alarm' ? 'Alarm' : 'Warnung'}${alarmCodes.length ? ` · Code ${alarmCodes.join(', ')}` : ''}`
+    ? `${alarmState === 'alarm' ? 'Alarm' : 'Warnung'}${codeText ? ` · ${codeText}` : ''}`
     : null;
 
   // Maßgeblich sind die Ventilatoren: im Kaminmodus meldet climate „off“, die Anlage läuft aber
