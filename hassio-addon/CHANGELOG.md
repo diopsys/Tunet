@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.31.10
 
 ### Fixed
 - Ventilation "Betrieb" tab: value tags stay inside the unit outline; device message shown in German, code 35 as internal frost protection off (fireplace mode)

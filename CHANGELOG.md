@@ -1,4 +1,4 @@
-## [Unreleased]
+## [1.31.10] — 2026-11-17
 
 ### Fixed
 - Lüftung, Tab „Betrieb“: Werte-Kästchen bleiben innerhalb der Geräte-Umrandung; Gerätemeldung auf Deutsch, Code 35 als „Interner Frostschutz aus (Kaminmodus)“
