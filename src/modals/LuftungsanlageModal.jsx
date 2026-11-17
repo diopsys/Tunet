@@ -3,6 +3,7 @@ import { Fan, Thermometer, X } from '../icons';
 import { LUFTUNGSANLAGE_ENTITY_IDS, co2Max } from '../components/cards/GenericLuftungsanlageCard';
 import { REASONS, co2Color, evaluateLueftung, lockUntil, parseLastMode, stageLabel } from '../utils/lueftungLogic';
 import AccessibleModalShell from '../components/ui/AccessibleModalShell';
+import LuftungFlowView from '../components/LuftungFlowView';
 import { getHistoryRest, getHistory } from '../services/haClient';
 
 const ACCENT = '#38bdf8';
@@ -297,19 +298,8 @@ export default function LuftungsanlageModal({
   const minTemp = e(LUFTUNGSANLAGE_ENTITY_IDS.climate)?.attributes?.min_temp ?? 15;
   const maxTemp = e(LUFTUNGSANLAGE_ENTITY_IDS.climate)?.attributes?.max_temp ?? 30;
   const tempActive = hvacState === 'heat' || hvacState === 'cool' || hvacState === 'auto';
-  const aussenluft = val(LUFTUNGSANLAGE_ENTITY_IDS.aussenluft);
-  const zuluft = val(LUFTUNGSANLAGE_ENTITY_IDS.zuluft);
-  const abluft = val(LUFTUNGSANLAGE_ENTITY_IDS.abluft);
-  const fortluft = val(LUFTUNGSANLAGE_ENTITY_IDS.fortluft);
-  const bypass = val(LUFTUNGSANLAGE_ENTITY_IDS.bypass);
-  const zuluftRpm = val(LUFTUNGSANLAGE_ENTITY_IDS.zuluftRpm);
-  const abluftRpm = val(LUFTUNGSANLAGE_ENTITY_IDS.abluftRpm);
-  const zuluftLeistung = val(LUFTUNGSANLAGE_ENTITY_IDS.zuluftLeistung);
-  const abluftLeistung = val(LUFTUNGSANLAGE_ENTITY_IDS.abluftLeistung);
   const FAN_MODE_LABELS = { low: 'Low', medium: 'Medium', high: 'High', off: 'Aus', auto: 'Auto' };
   const luftstufe = fanMode ? (FAN_MODE_LABELS[fanMode] || fanMode) : null;
-  const filterBinState = e(LUFTUNGSANLAGE_ENTITY_IDS.filter)?.state;
-  const filter = filterBinState === 'on' ? 'Wartung' : filterBinState === 'off' ? 'OK' : null;
   const kaminmodusAktiv = e(LUFTUNGSANLAGE_ENTITY_IDS.kaminmodus)?.state === 'on';
   const lastMode = str(LUFTUNGSANLAGE_ENTITY_IDS.lastMode);
   const outsideTemp = val(LUFTUNGSANLAGE_ENTITY_IDS.outsideTemp);
@@ -317,16 +307,6 @@ export default function LuftungsanlageModal({
   const automationState = str(LUFTUNGSANLAGE_ENTITY_IDS.automation);
   const saisonState = str(LUFTUNGSANLAGE_ENTITY_IDS.saison);
   const lockTs = str(LUFTUNGSANLAGE_ENTITY_IDS.lockTimestamp);
-
-  // WRG efficiency: (zuluft - aussen) / (abluft - aussen) * 100, only when bypass == 0
-  const isBypass = bypass != null && bypass > 0;
-  let wrgEfficiency = null;
-  if (!isBypass && aussenluft != null && zuluft != null && abluft != null) {
-    const denom = abluft - aussenluft;
-    if (Math.abs(denom) > 0.1) {
-      wrgEfficiency = Math.round(((zuluft - aussenluft) / denom) * 100);
-    }
-  }
 
   // CO2 / air quality
   const co2Eg = val(LUFTUNGSANLAGE_ENTITY_IDS.co2Eg);
@@ -569,135 +549,8 @@ export default function LuftungsanlageModal({
           {/* Tab: Betrieb */}
           {mainTab === 'betrieb' && (
             <>
-              {/* WRG Flow Diagram */}
               <div className="mb-6">
-                <p className="mb-3 text-[10px] font-bold tracking-[0.2em] text-[var(--text-muted)] uppercase">
-                  {translate('luftungsanlage.wrg') || 'Wärmerückgewinnung'}
-                </p>
-                <div className="popup-surface rounded-2xl p-4">
-                  <svg
-                    viewBox="0 0 300 195"
-                    className="w-full"
-                    style={{ fontFamily: 'inherit', maxHeight: isCompact ? '270px' : undefined }}
-                  >
-                    {/* Flow arrows */}
-                    {/* Top arrow: AUSSEN → WRG → ZULUFT */}
-                    <line x1="55" y1="45" x2="110" y2="75" stroke="#64b5f6" strokeWidth="1.5" opacity="0.6" />
-                    <line x1="190" y1="75" x2="245" y2="45" stroke="#81c784" strokeWidth="1.5" opacity="0.6" />
-                    {/* Bottom arrow: ABLUFT → WRG → FORTLUFT */}
-                    <line x1="245" y1="150" x2="190" y2="120" stroke="#ef9a9a" strokeWidth="1.5" opacity="0.6" />
-                    <line x1="110" y1="120" x2="55" y2="150" stroke="#ffb74d" strokeWidth="1.5" opacity="0.6" />
-
-                    {/* Center WRG box */}
-                    <rect x="110" y="68" width="80" height="59" rx="8" fill="var(--glass-bg)" stroke="var(--glass-border)" strokeWidth="1" />
-                    <text x="150" y="80" textAnchor="middle" fontSize="8" fontWeight="bold" fill={ACCENT} letterSpacing="0.05em">
-                      {isBypass ? 'BYPASS' : 'WRG'}
-                    </text>
-                    {isActive ? (
-                      <>
-                        <text x="150" y="95" textAnchor="middle" fontSize="15" fontWeight="300" fill={ACCENT}>
-                          {isBypass
-                            ? `${bypass != null ? bypass.toFixed(0) : '—'}%`
-                            : wrgEfficiency != null
-                            ? `${wrgEfficiency}%`
-                            : '—'}
-                        </text>
-                        <text x="150" y="106" textAnchor="middle" fontSize="7" fill={ACCENT} opacity="0.65">
-                          {isBypass ? 'Bypass' : 'Wirkungsgrad'}
-                        </text>
-                        <text x="150" y="116" textAnchor="middle" fontSize="7" fill={ACCENT} opacity="0.55">
-                          {isBypass
-                            ? 'Bypass aktiv'
-                            : aussenluft != null && zuluft != null
-                            ? `+${(zuluft - aussenluft).toFixed(1)}°C Gewinn`
-                            : ''}
-                        </text>
-                        {bypass != null && (
-                          <text x="150" y="124" textAnchor="middle" fontSize="6.5" fill={ACCENT} opacity="0.4">
-                            {`Bypass ${bypass.toFixed(0)}%`}
-                          </text>
-                        )}
-                      </>
-                    ) : (
-                      <>
-                        <text x="150" y="97" textAnchor="middle" fontSize="13" fontWeight="300" fill={ACCENT} opacity="0.6">
-                          Aus
-                        </text>
-                        {bypass != null && (
-                          <text x="150" y="112" textAnchor="middle" fontSize="7" fill={ACCENT} opacity="0.4">
-                            {`Bypass ${bypass.toFixed(0)}%`}
-                          </text>
-                        )}
-                      </>
-                    )}
-
-                    {/* AUSSEN — top left */}
-                    <rect x="2" y="22" width="62" height="46" rx="8" fill="rgba(100,181,246,0.1)" stroke="rgba(100,181,246,0.4)" strokeWidth="1" />
-                    <text x="33" y="38" textAnchor="middle" fontSize="7" fontWeight="bold" fill="#64b5f6" letterSpacing="0.08em">AUSSEN</text>
-                    <text x="33" y="56" textAnchor="middle" fontSize="14" fontWeight="300" fill="#64b5f6">
-                      {aussenluft != null ? `${aussenluft.toFixed(1)}°` : '—'}
-                    </text>
-
-                    {/* ZULUFT — top right */}
-                    <rect x="236" y="22" width="62" height="58" rx="8" fill="rgba(129,199,132,0.1)" stroke="rgba(129,199,132,0.4)" strokeWidth="1" />
-                    <text x="267" y="34" textAnchor="middle" fontSize="7" fontWeight="bold" fill="#81c784" letterSpacing="0.08em">ZULUFT</text>
-                    <text x="267" y="50" textAnchor="middle" fontSize="14" fontWeight="300" fill="#81c784">
-                      {zuluft != null ? `${zuluft.toFixed(1)}°` : '—'}
-                    </text>
-                    {zuluftRpm != null && (
-                      <text x="267" y="63" textAnchor="middle" fontSize="7" fill="#81c784" opacity="0.7">
-                        {zuluftRpm.toFixed(0)} RPM
-                      </text>
-                    )}
-                    {zuluftLeistung != null && (
-                      <text x="267" y="74" textAnchor="middle" fontSize="7" fill="#81c784" opacity="0.7">
-                        {zuluftLeistung.toFixed(0)} %
-                      </text>
-                    )}
-
-                    {/* ABLUFT — bottom right */}
-                    <rect x="236" y="127" width="62" height="58" rx="8" fill="rgba(239,154,154,0.1)" stroke="rgba(239,154,154,0.4)" strokeWidth="1" />
-                    <text x="267" y="139" textAnchor="middle" fontSize="7" fontWeight="bold" fill="#ef9a9a" letterSpacing="0.08em">ABLUFT</text>
-                    <text x="267" y="155" textAnchor="middle" fontSize="14" fontWeight="300" fill="#ef9a9a">
-                      {abluft != null ? `${abluft.toFixed(1)}°` : '—'}
-                    </text>
-                    {abluftRpm != null && (
-                      <text x="267" y="168" textAnchor="middle" fontSize="7" fill="#ef9a9a" opacity="0.7">
-                        {abluftRpm.toFixed(0)} RPM
-                      </text>
-                    )}
-                    {abluftLeistung != null && (
-                      <text x="267" y="179" textAnchor="middle" fontSize="7" fill="#ef9a9a" opacity="0.7">
-                        {abluftLeistung.toFixed(0)} %
-                      </text>
-                    )}
-
-                    {/* FORTLUFT — bottom left */}
-                    <rect x="2" y="127" width="62" height="46" rx="8" fill="rgba(255,183,77,0.1)" stroke="rgba(255,183,77,0.4)" strokeWidth="1" />
-                    <text x="33" y="143" textAnchor="middle" fontSize="7" fontWeight="bold" fill="#ffb74d" letterSpacing="0.08em">FORTLUFT</text>
-                    <text x="33" y="161" textAnchor="middle" fontSize="14" fontWeight="300" fill="#ffb74d">
-                      {fortluft != null ? `${fortluft.toFixed(1)}°` : '—'}
-                    </text>
-                  </svg>
-                </div>
-              </div>
-
-              {/* Status info */}
-              <div className="mb-6 grid grid-cols-3 gap-3">
-                <InfoTile
-                  label={translate('luftungsanlage.luftstufe') || 'Lüftungsstufe'}
-                  value={luftstufe}
-                  color={ACCENT}
-                />
-                <InfoTile
-                  label={translate('luftungsanlage.filter') || 'Filter'}
-                  value={filter}
-                  color={filter === 'Wartung' ? '#fb923c' : 'var(--text-primary)'}
-                />
-                <InfoTile
-                  label={translate('luftungsanlage.modeSource') || 'Quelle'}
-                  value={modeSrc}
-                />
+                <LuftungFlowView entities={entities} isMobile={isCompact} modeSrc={modeSrc} modeLvl={luftstufe} />
               </div>
 
               {/* Controls */}

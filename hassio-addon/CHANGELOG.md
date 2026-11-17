@@ -7,6 +7,7 @@
 - Ventilation: thresholds for CO₂ demand (low on / off below), continuous mode from outside temperature, frost protection, PM2.5, minimum stage time and a switch for night ventilation in the Automatik tab
 
 ### Changed
+- Ventilation, "Betrieb" tab redesigned: animated diagram in the style of the heat pump hydraulics with air flows in temperature colours (speed by fan power), spinning fans, heat exchanger with efficiency, bypass, filter status and key figures
 - Ventilation follows the new demand control: the Automatik tab shows the rule chain (frost, air quality, mild, CO₂, night, no demand) with the active rule and live values, a CO₂ bar with thresholds and the reason with an explanation
 - Ventilation: CO₂ colours follow the automation thresholds; lock display from the last stage change plus minimum stage time; hint when fireplace mode pauses the automation
 
