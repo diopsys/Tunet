@@ -1,3 +1,19 @@
+## [Unreleased]
+
+### Added
+- Status-Pill „Zeitsteuerung“: Lichter, die gerade über die Zeitschaltuhr an sind, mit Zeitplan und Ende; sie zählen dann nicht mehr bei „Lichter an“ mit
+- Lüftung: Schwellen für CO₂-Bedarf (Low ein / Aus unter), Dauerbetrieb ab Außentemperatur, Frostschutz, PM2.5, Mindest-Stufendauer und Schalter für die Nacht-Grundlüftung im Automatik-Tab
+
+### Changed
+- Lüftung an die neue Bedarfssteuerung angepasst: Automatik-Tab zeigt die Regelkette (Frostschutz, Luftqualität, Mild, CO₂, Nacht, kein Bedarf) mit aktiver Regel und Live-Werten, CO₂-Balken mit den Schwellen und den Grund mit Erklärung („CO₂ 930 ppm ≥ 900“, „Nacht-Slot bis 02:20“)
+- Lüftung: CO₂-Farben richten sich nach den Schwellen der Automation; Sperr-Anzeige aus letztem Stufenwechsel plus Mindest-Stufendauer; Hinweis, wenn der Kaminmodus die Smartsteuerung pausiert
+
+### Fixed
+- Zeitschaltuhr: Ein Zeitplan, der mitten im Zeitfenster angelegt oder eingeschaltet wird, schaltet sofort ein statt erst beim nächsten Beginn
+
+### Removed
+- Lüftung: Temperatur-Differenz-Steuerung (ΔTemp innen/Zuluft) samt Schwellen und Erklärtexten
+
 ## [1.31.8] — 2026-11-13
 
 ### Added

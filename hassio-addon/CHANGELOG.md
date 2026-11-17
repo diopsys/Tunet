@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- Status pill "Scheduled lights": lights currently on through the timer, with schedule and end time; they no longer count towards "Lights on"
+- Ventilation: thresholds for CO₂ demand (low on / off below), continuous mode from outside temperature, frost protection, PM2.5, minimum stage time and a switch for night ventilation in the Automatik tab
+
+### Changed
+- Ventilation follows the new demand control: the Automatik tab shows the rule chain (frost, air quality, mild, CO₂, night, no demand) with the active rule and live values, a CO₂ bar with thresholds and the reason with an explanation
+- Ventilation: CO₂ colours follow the automation thresholds; lock display from the last stage change plus minimum stage time; hint when fireplace mode pauses the automation
+
+### Fixed
+- Timer: a schedule created or enabled in the middle of its window switches on right away instead of at the next start
+
+### Removed
+- Ventilation: temperature-difference control (ΔTemp inside/supply) with its thresholds and texts
+
 ## 1.31.8
 
 ### Added
