@@ -98,9 +98,11 @@ function LuftungFlowView({ entities, isMobile = false, modeSrc, modeLvl }) {
   const kamin = entities?.[E.kaminmodus]?.state === 'on';
   const alarm = entities?.[E.alarm]?.state;
 
-  const running = hvac != null && hvac !== 'off';
-  const supplyOn = running && zuRpm > 0;
-  const exhaustOn = running && abRpm > 0;
+  // Maßgeblich sind die Ventilatoren: im Kaminmodus meldet climate „off“, die Anlage läuft aber
+  // mit eigenen Zu-/Abluftwerten (Überdruck) weiter.
+  const supplyOn = zuRpm > 0;
+  const exhaustOn = abRpm > 0;
+  const running = supplyOn || exhaustOn;
   const bp = clamp(bypassPct / 100, 0, 1);
   const isBypass = bp > 0.01;
 
@@ -119,10 +121,18 @@ function LuftungFlowView({ entities, isMobile = false, modeSrc, modeLvl }) {
     </g>
   );
 
-  const stageText = !running ? 'Aus' : modeLvl || (fanMode ? fanMode[0].toUpperCase() + fanMode.slice(1) : 'An');
+  const hvacOn = hvac != null && hvac !== 'off';
+  const stageText = !running
+    ? 'Aus'
+    : kamin
+      ? 'Kaminmodus'
+      : !hvacOn
+        ? 'Läuft'
+        : modeLvl || (fanMode ? fanMode[0].toUpperCase() + fanMode.slice(1) : 'An');
+  const stageSub = kamin && running ? `Zuluft ${Math.round(zuPct ?? 0)} % · Abluft ${Math.round(abPct ?? 0)} %` : modeSrc;
   const stateColor = kamin ? '#f97316' : running ? 'var(--lft-ok)' : 'var(--text-muted)';
   const levels = ['low', 'medium', 'high'];
-  const level = running ? levels.indexOf(fanMode) + 1 : 0;
+  const level = running && hvacOn && !kamin ? levels.indexOf(fanMode) + 1 : 0;
 
   return (
     <div className={`lft-root ${isMobile ? 'lft-mobile' : ''}`}>
@@ -209,7 +219,7 @@ function LuftungFlowView({ entities, isMobile = false, modeSrc, modeLvl }) {
               ))}
             </span>
           </span>
-          {modeSrc && modeSrc !== '—' && <span className="lft-sub">{modeSrc}</span>}
+          {stageSub && stageSub !== '—' && <span className="lft-sub">{stageSub}</span>}
         </Metric>
         <Metric label="Wirkungsgrad">
           {efficiency != null && running ? efficiency : '–'}

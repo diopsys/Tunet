@@ -102,19 +102,23 @@ const GenericLuftungsanlageCard = memo(function GenericLuftungsanlageCard({
   const FAN_LABELS = { low: 'Low', medium: 'Medium', high: 'High' };
   const luftstufe = FAN_LABELS[climateEntity?.attributes?.fan_mode] || null;
 
+  // Im Kaminmodus ist climate „off“, die Ventilatoren laufen aber weiter
+  const fansRunning =
+    (num(entities?.[LUFTUNGSANLAGE_ENTITY_IDS.zuluftRpm]) ?? 0) > 0 || (num(entities?.[LUFTUNGSANLAGE_ENTITY_IDS.abluftRpm]) ?? 0) > 0;
+
   const STATE_LABELS = {
     off: translate('luftungsanlage.state.off') || 'Aus',
     auto: translate('luftungsanlage.state.auto') || 'Auto',
     fan_only: translate('luftungsanlage.state.fanOnly') || 'Lüften',
   };
-  const statusLabel = luftstufe || (hvacState ? (STATE_LABELS[hvacState] ?? hvacState) : '—');
+  const statusLabel = hvacState === 'off' ? (fansRunning ? 'Lüftet' : STATE_LABELS.off) : luftstufe || (hvacState ? (STATE_LABELS[hvacState] ?? hvacState) : '—');
 
-  const isActive = hvacState !== 'off' && hvacState != null;
+  const isActive = (hvacState !== 'off' && hvacState != null) || fansRunning;
   const iconColor = isActive ? '#4ade80' : 'var(--text-muted)';
   const iconBg = isActive ? 'rgba(74,222,128,0.1)' : 'rgba(127,127,127,0.1)';
 
   const statusDotColor =
-    hvacState === 'off'
+    !isActive
       ? 'bg-[var(--text-muted)]'
       : 'bg-[var(--status-success-fg)]';
 

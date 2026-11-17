@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- Ventilation: in fireplace mode (climate reports "off" while the fans keep running with their own supply/exhaust values) card, header and diagram now show the running fans and air flows instead of "off"
+
 ## 1.31.9
 
 ### Added

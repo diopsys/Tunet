@@ -323,8 +323,10 @@ export default function LuftungsanlageModal({
     auto: 'Auto',
     fan_only: 'Lüften',
   };
-  const hvacLabel = hvacState ? (STATE_LABELS[hvacState] ?? hvacState) : '—';
-  const isActive = hvacState !== 'off' && hvacState != null;
+  // Im Kaminmodus ist climate „off“, die Ventilatoren laufen aber weiter
+  const fansRunning = (val(LUFTUNGSANLAGE_ENTITY_IDS.zuluftRpm) ?? 0) > 0 || (val(LUFTUNGSANLAGE_ENTITY_IDS.abluftRpm) ?? 0) > 0;
+  const hvacLabel = hvacState === 'off' && fansRunning ? 'Lüftet' : hvacState ? (STATE_LABELS[hvacState] ?? hvacState) : '—';
+  const isActive = (hvacState !== 'off' && hvacState != null) || fansRunning;
 
   const hvacOptions = [
     { value: 'off', label: 'Aus' },
@@ -550,7 +552,7 @@ export default function LuftungsanlageModal({
           {mainTab === 'betrieb' && (
             <>
               <div className="mb-6">
-                <LuftungFlowView entities={entities} isMobile={isCompact} modeSrc={modeSrc} modeLvl={luftstufe} />
+                <LuftungFlowView entities={entities} isMobile={isCompact} modeSrc={modeSrc} modeLvl={hvacState !== 'off' ? luftstufe : null} />
               </div>
 
               {/* Controls */}
