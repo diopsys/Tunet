@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Changed
+- Ventilation, air quality tab redesigned: CO₂ ring per floor with the automation thresholds, humidity with comfort range and PM2.5 with WHO guideline as bars, distance to the next fan stage; combined 24 h history for both floors with threshold bands and min/avg/max; CO detector
 - Ventilation: second CO₂ sensor upstairs – the Automatik tab shows ground and upper floor and marks which one currently leads (the automation uses the maximum); the air quality tab shows both floors the same way (CO₂, humidity, PM2.5, air quality, 24 h CO₂ history each)
 - Ventilation: upper floor values now come from the new air quality sensor
 

@@ -1,6 +1,7 @@
 ## [Unreleased]
 
 ### Changed
+- Lüftung, Tab „Luftqualität“ neu: je Etage CO₂-Ring mit den Schwellen der Automation und Einschätzung (Frisch/Gut/Erhöht/Schlecht), Feuchte mit Komfortbereich und PM2.5 mit WHO-Richtwert als Balken, Hinweis bis zur nächsten Lüftungsstufe; gemeinsamer 24-h-Verlauf EG/OG mit Schwellenbereichen und Min/Ø/Max; CO-Melder
 - Lüftung: zweiter CO₂-Sensor im OG – Automatik-Tab zeigt EG und OG mit Kennzeichnung, welcher Wert gerade führt (die Automation nimmt das Maximum); Luftqualitäts-Tab für EG und OG gleich aufgebaut (CO₂, Feuchte, PM2.5, Luftqualität auf Deutsch, je ein CO₂-Verlauf über 24 h)
 - Lüftung: OG-Werte kommen vom neuen Luftqualitätssensor (Feuchte, PM2.5, Temperatur, Luftqualität)
 
