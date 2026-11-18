@@ -1,3 +1,12 @@
+## [Unreleased]
+
+### Changed
+- Lüftung: zweiter CO₂-Sensor im OG – Automatik-Tab zeigt EG und OG mit Kennzeichnung, welcher Wert gerade führt (die Automation nimmt das Maximum); Luftqualitäts-Tab für EG und OG gleich aufgebaut (CO₂, Feuchte, PM2.5, Luftqualität auf Deutsch, je ein CO₂-Verlauf über 24 h)
+- Lüftung: OG-Werte kommen vom neuen Luftqualitätssensor (Feuchte, PM2.5, Temperatur, Luftqualität)
+
+### Removed
+- Lüftung: VOC-Anzeigen, VOC-Verlauf und VOC-Schwelle (die Automation wertet kein VOC mehr aus)
+
 ## [1.31.10] — 2026-11-17
 
 ### Fixed

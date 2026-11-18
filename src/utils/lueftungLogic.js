@@ -7,7 +7,6 @@ export const LUEFTUNG_DEFAULTS = {
   co2Aus: 750,
   co2Schwelle: 1200,
   feuchteSchwelle: 60,
-  vocSchwelle: 350,
   pm25Schwelle: 25,
   dauerbetriebAb: 12,
   frostAus: -10,
@@ -52,14 +51,13 @@ export function nightSlot(minuteOfDay, enabled) {
 
 /**
  * Wertet die Regelkette aus.
- * @param {object} input  Messwerte (co2: Liste, humidity/pm25/voc: Listen), Schwellen, Saison, lastMode …
+ * @param {object} input  Messwerte (co2/humidity/pm25: Listen, je Etage ein Wert), Schwellen, Saison, lastMode …
  * @returns {{ reason, stage, values, rules, explanation }}
  */
 export function evaluateLueftung(input) {
   const th = { ...LUEFTUNG_DEFAULTS, ...Object.fromEntries(Object.entries(input.thresholds || {}).filter(([, v]) => v != null)) };
   const co2 = maxOf(input.co2 || []);
   const hum = maxOf(input.humidity || []);
-  const voc = maxOf(input.voc || []);
   const pm25 = maxOf(input.pm25 || []);
   const outside = input.outsideTemp ?? null;
   const inside = input.insideTemp ?? null;
@@ -70,12 +68,11 @@ export function evaluateLueftung(input) {
   const aqHits = {
     co2: co2 != null && co2 >= th.co2Schwelle,
     hum: hum != null && hum >= th.feuchteSchwelle,
-    voc: voc != null && voc >= th.vocSchwelle,
     pm25: pm25 != null && pm25 >= th.pm25Schwelle,
   };
   const aqBad = Object.values(aqHits).some(Boolean);
   const aqGood =
-    n(co2) < th.co2Schwelle - 150 && n(hum) < th.feuchteSchwelle - HUMIDITY_HYSTERESIS && n(voc) < th.vocSchwelle * 0.85 && n(pm25) < th.pm25Schwelle * 0.8;
+    n(co2) < th.co2Schwelle - 150 && n(hum) < th.feuchteSchwelle - HUMIDITY_HYSTERESIS && n(pm25) < th.pm25Schwelle * 0.8;
   const frost = outside != null && (outside < th.frostAus || (last === 'frost_off' && outside < th.frostAus + FROST_HYSTERESIS));
   const aq = aqBad || (last === 'aq_medium' && !aqGood);
   const mild = outside != null && (outside >= th.dauerbetriebAb || (last === 'mild_low' && outside >= th.dauerbetriebAb - MILD_HYSTERESIS));
@@ -96,7 +93,6 @@ export function evaluateLueftung(input) {
   const aqParts = [
     aqHits.co2 && `CO₂ ${fmt(co2)} ppm ≥ ${fmt(th.co2Schwelle)}`,
     aqHits.hum && `Feuchte ${fmt(hum)} % ≥ ${fmt(th.feuchteSchwelle)}`,
-    aqHits.voc && `VOC ${fmt(voc)} ≥ ${fmt(th.vocSchwelle)}`,
     aqHits.pm25 && `PM2.5 ${fmt(pm25, 1)} ≥ ${fmt(th.pm25Schwelle)}`,
   ].filter(Boolean);
 
@@ -111,7 +107,7 @@ export function evaluateLueftung(input) {
     {
       id: 'aq_medium',
       matched: aq,
-      condition: 'CO₂, Feuchte, VOC oder PM2.5 über Schwelle',
+      condition: 'CO₂, Feuchte oder PM2.5 über Schwelle',
       live: aqParts.length ? aqParts.join(' · ') : last === 'aq_medium' && !aqGood ? 'Werte noch nicht deutlich darunter' : 'alle Werte unter Schwelle',
       hint: null,
     },
@@ -154,7 +150,7 @@ export function evaluateLueftung(input) {
   return {
     reason,
     stage: reason ? REASONS[reason].stage : null,
-    values: { co2, hum, voc, pm25, outside, inside },
+    values: { co2, hum, pm25, outside, inside },
     thresholds: th,
     rules,
     explanation: reason ? explanations[reason] : null,
@@ -197,4 +193,27 @@ export function lockUntil(lockTimestamp, minutes, now = Date.now()) {
   if (!Number.isFinite(at)) return null;
   const until = at + (minutes ?? LUEFTUNG_DEFAULTS.mindestStufendauer) * 60_000;
   return until > now ? until : null;
+}
+
+const QUALITY_LABELS = {
+  excellent: 'Sehr gut',
+  good: 'Gut',
+  moderate: 'Mäßig',
+  fair: 'Mäßig',
+  poor: 'Schlecht',
+  very_poor: 'Sehr schlecht',
+  extremely_poor: 'Extrem schlecht',
+};
+
+/** Luftqualitäts-Text der Sensoren (good/fair/poor …) auf Deutsch. */
+export function qualityLabel(state) {
+  if (!state || state === 'unknown' || state === 'unavailable') return null;
+  return QUALITY_LABELS[state] || state;
+}
+
+export function qualityColor(state) {
+  if (['excellent', 'good'].includes(state)) return '#4ade80';
+  if (['moderate', 'fair'].includes(state)) return '#fb923c';
+  if (['poor', 'very_poor', 'extremely_poor'].includes(state)) return '#f87171';
+  return 'var(--text-primary)';
 }

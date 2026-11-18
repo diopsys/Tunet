@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+- Ventilation: second CO₂ sensor upstairs – the Automatik tab shows ground and upper floor and marks which one currently leads (the automation uses the maximum); the air quality tab shows both floors the same way (CO₂, humidity, PM2.5, air quality, 24 h CO₂ history each)
+- Ventilation: upper floor values now come from the new air quality sensor
+
+### Removed
+- Ventilation: VOC values, history and threshold (no longer used by the automation)
+
 ## 1.31.10
 
 ### Fixed
