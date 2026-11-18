@@ -16,6 +16,22 @@ if bashio::config.has_value 'ha_token'; then
 	export HA_TOKEN="$(bashio::config 'ha_token')"
 fi
 
+# Music Assistant (Medien-Kachel: Titellängen); ohne ma_url der Host der App, Port 8095
+if bashio::config.has_value 'ma_url'; then
+	export MA_URL="$(bashio::config 'ma_url')"
+fi
+
+if bashio::config.has_value 'ma_token'; then
+	export MA_TOKEN="$(bashio::config 'ma_token')"
+fi
+
+# CalDAV (Kalender-Fenster: Termine löschen, das kann die HA-Integration nicht)
+for opt in caldav_url caldav_user caldav_password; do
+	if bashio::config.has_value "${opt}"; then
+		export "${opt^^}=$(bashio::config "${opt}")"
+	fi
+done
+
 if bashio::config.has_value 'data_encryption_mode'; then
 	export TUNET_ENCRYPTION_MODE="$(bashio::config 'data_encryption_mode')"
 fi

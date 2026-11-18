@@ -49,6 +49,7 @@ import {
   subscribeToOAuthTokenChanges,
 } from './services/oauthStorage';
 import { scheduleLikelyModalPrefetch, scheduleModalPrefetch } from './utils/prefetchModals';
+import { startPage } from './utils/startPage';
 
 const KameraLinkModal = lazyWithRetry(() => import('./modals/CameraModal'));
 const ScheduleHost = lazyWithRetry(() => import('./components/schedule/ScheduleHost'));
@@ -949,13 +950,8 @@ function ModalHost({
 export default function App() {
   const { config } = useConfig();
   const [oauthTokenRevision, setOAuthTokenRevision] = useState(0);
-  const [initialPage] = useState(() => {
-    try {
-      return localStorage.getItem('tunet_active_page') || 'home';
-    } catch {
-      return 'home';
-    }
-  });
+  // nach längerer Pause die Startseite, sonst die zuletzt besuchte (utils/startPage)
+  const [initialPage] = useState(() => startPage());
   // Detect if we're returning from an OAuth2 redirect
   const isOAuthCallback =
     typeof window !== 'undefined' &&

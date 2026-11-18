@@ -140,5 +140,68 @@ export function publishCurrentSettings({
   });
 }
 
+/** Playlist der Medien-Kachel (Winamp-Fenster) eines Raums lesen. */
+export function fetchMedienPlaylist(raum) {
+  return request(`/medien/playlist?raum=${encodeURIComponent(raum)}`);
+}
+
+/** Playlist der Medien-Kachel eines Raums speichern ({ items, index }). */
+export function saveMedienPlaylist(raum, { items, index }) {
+  return request('/medien/playlist', {
+    method: 'PUT',
+    body: JSON.stringify({ raum, items, index }),
+  });
+}
+
+/** Gespeicherte Playlists eines Raums: [{ schluessel, name, anzahl, updated_at }]. */
+export function fetchMedienListen(raum) {
+  return request(`/medien/listen?raum=${encodeURIComponent(raum)}`);
+}
+
+/** Playlist (laufend oder gespeichert, über ihren Schlüssel) löschen. */
+export function deleteMedienPlaylist(schluessel) {
+  return request(`/medien/playlist?raum=${encodeURIComponent(schluessel)}`, { method: 'DELETE' });
+}
+
+/** Längen von Music-Assistant-Titeln über den Tunet-Server: { dauer: { uri: Sekunden }, aktiv }. */
+/** Genres aus Music Assistant: { aktiv, items: [{ id, name, alben }] } */
+export function fetchMedienGenres({ suche, offset, limit } = {}) {
+  const q = new URLSearchParams();
+  if (suche) q.set('suche', suche);
+  if (offset) q.set('offset', String(offset));
+  if (limit) q.set('limit', String(limit));
+  const qs = q.toString();
+  return request(`/medien/genres${qs ? `?${qs}` : ''}`);
+}
+
+/** Alben eines Genres: { aktiv, items: [{ uri, name, artists, year, media_type }] } */
+export function fetchMedienGenreAlben(id) {
+  return request(`/medien/genres/${encodeURIComponent(id)}/alben`);
+}
+
+/** Titel eines Genres (je 500, ab offset): { aktiv, items: [{ uri, name, artists, duration, media_type }] } */
+export function fetchMedienGenreTitel(id, offset = 0) {
+  return request(`/medien/genres/${encodeURIComponent(id)}/titel${offset ? `?offset=${offset}` : ''}`);
+}
+
+export function fetchMedienDauer(uris) {
+  return request('/medien/dauer', {
+    method: 'POST',
+    body: JSON.stringify({ uris }),
+  });
+}
+
+// Kalender: Termine in CalDAV-Kalendern löschen (kann die HA-Integration nicht)
+export function fetchKalenderStatus() {
+  return request('/kalender/status');
+}
+
+export function kalenderTerminLoeschen({ entityId, uid, start, serie = false }) {
+  return request('/kalender/loeschen', {
+    method: 'POST',
+    body: JSON.stringify({ entityId, uid, start, serie }),
+  });
+}
+
 // Gemeinsamer Zugang für weitere Tunet-APIs (z. B. Zeitschaltuhr)
 export { request as apiRequest };

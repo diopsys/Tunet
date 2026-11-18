@@ -2,6 +2,9 @@ import { useState, useEffect, useRef, useCallback, memo } from 'react';
 import { Camera, AlertCircle } from '../../icons';
 import { getIconComponent } from '../../icons';
 import CameraFeed from '../camera/CameraFeed';
+import { useIdleHold } from '../../utils/idleHold';
+
+const LIVE_SOURCES = new Set(['custom', 'webrtc', 'hls', 'mjpeg']);
 
 const CameraCard = memo(/** @param {any} props */ function CameraCard({
   cardId,
@@ -72,6 +75,9 @@ const CameraCard = memo(/** @param {any} props */ function CameraCard({
     }
     previousMotionActiveRef.current = isMotionActive;
   }, [isOffline, refreshMode, motionSensorId, entities, doRefresh]);
+
+  // Großes Livebild hält den Rücksprung zur Startseite an (kleine Vorschau und Standbild nicht)
+  useIdleHold(!isSmall && !isOffline && !editMode && LIVE_SOURCES.has(activeSource));
 
   if (isSmall) {
     return (
