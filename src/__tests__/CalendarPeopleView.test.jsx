@@ -22,13 +22,13 @@ const kalender = (name) => ({
   attributes: { friendly_name: name, supported_features: 1 },
 });
 const entities = {
-  'calendar.alexa': kalender('Alexa'),
-  'calendar.david': kalender('David'),
-  'calendar.titus': kalender('Titus'),
-  'calendar.felizitas': kalender('Felizitas'),
+  'calendar.anna': kalender('Anna'),
+  'calendar.ben': kalender('Ben'),
+  'calendar.clara': kalender('Clara'),
+  'calendar.dora': kalender('Dora'),
   'calendar.muell': kalender('Müll'),
 };
-const PERSONEN = ['calendar.alexa', 'calendar.david', 'calendar.titus', 'calendar.felizitas'];
+const PERSONEN = ['calendar.anna', 'calendar.ben', 'calendar.clara', 'calendar.dora'];
 
 const pad = (n) => String(n).padStart(2, '0');
 const tag = (offset) => {
@@ -58,8 +58,8 @@ describe('Kalender: Personen-Ansicht', () => {
     vi.clearAllMocks();
     fetchKalenderStatus.mockResolvedValue({ aktiv: true });
     getCalendarEvents.mockResolvedValue({
-      'calendar.titus': { events: [{ summary: 'Fußball', start: tag(2), end: tag(3) }] },
-      'calendar.alexa': { events: [{ summary: 'Zahnarzt', start: tag(2), end: tag(3) }] },
+      'calendar.clara': { events: [{ summary: 'Fußball', start: tag(2), end: tag(3) }] },
+      'calendar.anna': { events: [{ summary: 'Zahnarzt', start: tag(2), end: tag(3) }] },
     });
   });
 
@@ -67,9 +67,9 @@ describe('Kalender: Personen-Ansicht', () => {
     renderModal();
     const ansicht = await screen.findByTestId('calendar-people-view');
     const namen = within(ansicht)
-      .getAllByText(/^(Alexa|David|Titus|Felizitas)$/)
+      .getAllByText(/^(Anna|Ben|Clara|Dora)$/)
       .map((el) => el.textContent);
-    expect(namen).toEqual(['Alexa', 'David', 'Titus', 'Felizitas']);
+    expect(namen).toEqual(['Anna', 'Ben', 'Clara', 'Dora']);
     await screen.findByText('Fußball');
     expect(getCalendarEvents).toHaveBeenCalledWith(
       expect.anything(),
@@ -98,7 +98,7 @@ describe('Kalender: Personen-Ansicht', () => {
     await screen.findByText('Fußball');
     fireEvent.click(screen.getAllByRole('button', { name: 'calendar.addFor' })[2]);
     const select = await screen.findByRole('combobox');
-    expect(select).toHaveValue('calendar.titus');
+    expect(select).toHaveValue('calendar.clara');
   });
 
   it('löscht CalDAV-Termine über den Tunet-Server, bei Serien erst nach zweiter Bestätigung', async () => {
@@ -110,13 +110,13 @@ describe('Kalender: Personen-Ansicht', () => {
     await waitFor(() => expect(fetchKalenderStatus).toHaveBeenCalled());
 
     const knoepfe = await screen.findAllByRole('button', { name: 'calendar.deleteEvent' });
-    expect(knoepfe).toHaveLength(2); // Alexa und Titus
-    const titus = knoepfe[1];
-    fireEvent.click(titus);
-    fireEvent.click(titus);
+    expect(knoepfe).toHaveLength(2); // Anna und Clara
+    const clara = knoepfe[1];
+    fireEvent.click(clara);
+    fireEvent.click(clara);
     await screen.findByText('calendar.deleteSeries');
     expect(kalenderTerminLoeschen).toHaveBeenLastCalledWith({
-      entityId: 'calendar.titus',
+      entityId: 'calendar.clara',
       uid: 'u-1',
       start: tag(2),
       serie: false,
@@ -155,18 +155,18 @@ describe('Kalenderfarben', () => {
   });
 
   it('nimmt die eingestellte Farbe für die Spalte', async () => {
-    renderModal({ calendarColors: { 'calendar.titus': '#123456', 'calendar.david': 'kaputt' } });
+    renderModal({ calendarColors: { 'calendar.clara': '#123456', 'calendar.ben': 'kaputt' } });
     const ansicht = await screen.findByTestId('calendar-people-view');
     const punkt = (name) => within(ansicht).getByText(name).previousElementSibling;
-    expect(punkt('Titus')).toHaveStyle({ backgroundColor: '#123456' });
+    expect(punkt('Clara')).toHaveStyle({ backgroundColor: '#123456' });
     // ungültige Angabe: Standardfarbe
-    expect(punkt('David').style.backgroundColor).not.toBe('');
+    expect(punkt('Ben').style.backgroundColor).not.toBe('');
   });
 
   it('meldet abgelehnte Anmeldung beim Löschen verständlich', async () => {
     fetchKalenderStatus.mockResolvedValue({ aktiv: true });
     getCalendarEvents.mockResolvedValue({
-      'calendar.titus': { events: [{ summary: 'Test', start: tag(1), end: tag(2) }] },
+      'calendar.clara': { events: [{ summary: 'Test', start: tag(1), end: tag(2) }] },
     });
     getCalendarEventsWithIds.mockResolvedValue([{ uid: 'u', summary: 'Test', start: tag(1) }]);
     kalenderTerminLoeschen.mockRejectedValue(

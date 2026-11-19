@@ -4,80 +4,10 @@ import { LUFTUNGSANLAGE_ENTITY_IDS, co2Max } from '../components/cards/GenericLu
 import { REASONS, co2Color, evaluateLueftung, lockUntil, parseLastMode, stageLabel } from '../utils/lueftungLogic';
 import AccessibleModalShell from '../components/ui/AccessibleModalShell';
 import LuftungFlowView from '../components/LuftungFlowView';
+import LuftqualitaetView, { AQ_COLORS } from '../components/LuftqualitaetView';
 import { getHistoryRest, getHistory } from '../services/haClient';
 
 const ACCENT = '#38bdf8';
-
-function getThresholdColor(value, thresholds) {
-  for (const t of thresholds) {
-    if (t.max == null || value < t.max) return t.color;
-  }
-  return thresholds[thresholds.length - 1].color;
-}
-
-function ColoredHistoryGraph({ data, height = 120, thresholds, noDataLabel = 'Keine Verlaufsdaten' }) {
-  if (!Array.isArray(data) || data.length < 2) {
-    return (
-      <div className="flex items-center justify-center text-xs" style={{ height, color: 'var(--text-muted)' }}>
-        {noDataLabel}
-      </div>
-    );
-  }
-  const pad = { top: 16, right: 16, bottom: 24, left: 38 };
-  const vbW = 600;
-  const gW = vbW - pad.left - pad.right;
-  const gH = height - pad.top - pad.bottom;
-  const values = data.map((d) => d.value);
-  let min = Math.min(...values);
-  let max = Math.max(...values);
-  if (min === max) { min -= 1; max += 1; }
-  const toX = (i) => pad.left + (i / (data.length - 1)) * gW;
-  const toY = (v) => pad.top + gH - ((v - min) / (max - min)) * gH;
-  const yLabels = [
-    { value: max, y: pad.top },
-    { value: (max + min) / 2, y: pad.top + gH / 2 },
-    { value: min, y: pad.top + gH },
-  ];
-  const xIdx = [0, Math.floor((data.length - 1) / 2), data.length - 1];
-  const xLabels = xIdx.map((i, k) => ({
-    x: toX(i),
-    label: new Date(data[i].time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    anchor: k === 0 ? 'start' : k === 2 ? 'end' : 'middle',
-  }));
-  return (
-    <div className="relative w-full select-none">
-      <svg viewBox={`0 0 ${vbW} ${height}`} className="h-full w-full overflow-visible" preserveAspectRatio="none">
-        {yLabels.map((l, i) => (
-          <line key={i} x1={pad.left} y1={l.y} x2={vbW - pad.right} y2={l.y}
-            stroke="currentColor" strokeOpacity="0.06" strokeDasharray="4 4" />
-        ))}
-        {data.slice(0, -1).map((d, i) => {
-          const mid = (d.value + data[i + 1].value) / 2;
-          return (
-            <line key={i}
-              x1={toX(i)} y1={toY(d.value)}
-              x2={toX(i + 1)} y2={toY(data[i + 1].value)}
-              stroke={getThresholdColor(mid, thresholds)}
-              strokeWidth="2.5" strokeLinecap="round" opacity="0.9"
-            />
-          );
-        })}
-        {yLabels.map((l, i) => (
-          <text key={i} x={pad.left - 6} y={l.y} textAnchor="end" dominantBaseline="middle"
-            style={{ fill: 'var(--text-secondary)', fontSize: '10px', opacity: 0.55, fontFamily: 'monospace' }}>
-            {l.value.toFixed(0)}
-          </text>
-        ))}
-        {xLabels.map((l, i) => (
-          <text key={i} x={l.x} y={height - 4} textAnchor={l.anchor}
-            style={{ fill: 'var(--text-secondary)', fontSize: '10px', opacity: 0.55, fontFamily: 'monospace' }}>
-            {l.label}
-          </text>
-        ))}
-      </svg>
-    </div>
-  );
-}
 
 function ThresholdRow({ label, value, unit, onDec, onInc }) {
   const display = value != null
@@ -153,7 +83,7 @@ export default function LuftungsanlageModal({
   const translate = t || ((key) => key);
   const [mainTab, setMainTab] = useState('betrieb');
   const [co2History, setCo2History] = useState([]);
-  const [vocHistory, setVocHistory] = useState([]);
+  const [co2OgHistory, setCo2OgHistory] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [modeHistory, setModeHistory] = useState([]);
   const [modeHistoryOpen, setModeHistoryOpen] = useState(false);
@@ -205,12 +135,12 @@ export default function LuftungsanlageModal({
         }
       };
 
-      const [co2, voc] = await Promise.all([
+      const [co2, co2Og] = await Promise.all([
         fetchOne(LUFTUNGSANLAGE_ENTITY_IDS.co2Eg),
-        fetchOne(LUFTUNGSANLAGE_ENTITY_IDS.vocOg),
+        fetchOne(LUFTUNGSANLAGE_ENTITY_IDS.co2Og),
       ]);
       setCo2History(co2);
-      setVocHistory(voc);
+      setCo2OgHistory(co2Og);
       setHistoryLoading(false);
     };
 
@@ -313,7 +243,8 @@ export default function LuftungsanlageModal({
   const feuchteEg = val(LUFTUNGSANLAGE_ENTITY_IDS.feuchteEg);
   const pm25Eg = val(LUFTUNGSANLAGE_ENTITY_IDS.pm25Eg);
   const luftqualitaetEg = str(LUFTUNGSANLAGE_ENTITY_IDS.luftqualitaetEg);
-  const vocOg = val(LUFTUNGSANLAGE_ENTITY_IDS.vocOg);
+  const co2Og = val(LUFTUNGSANLAGE_ENTITY_IDS.co2Og);
+  const luftqualitaetOg = str(LUFTUNGSANLAGE_ENTITY_IDS.luftqualitaetOg);
   const feuchteOg = val(LUFTUNGSANLAGE_ENTITY_IDS.feuchteOg);
   const pm25Og = val(LUFTUNGSANLAGE_ENTITY_IDS.pm25Og);
   const tempOg = val(LUFTUNGSANLAGE_ENTITY_IDS.tempOg);
@@ -351,9 +282,8 @@ export default function LuftungsanlageModal({
   const summerStage = fanMode;
   const nowDate = new Date();
   const evaluation = evaluateLueftung({
-    co2: [val(LUFTUNGSANLAGE_ENTITY_IDS.co2Eg), LUFTUNGSANLAGE_ENTITY_IDS.co2Og ? val(LUFTUNGSANLAGE_ENTITY_IDS.co2Og) : null],
+    co2: [co2Eg, co2Og],
     humidity: [feuchteEg, feuchteOg],
-    voc: [vocOg],
     pm25: [pm25Eg, pm25Og],
     outsideTemp,
     insideTemp,
@@ -366,7 +296,6 @@ export default function LuftungsanlageModal({
       co2Aus: val(LUFTUNGSANLAGE_ENTITY_IDS.co2Aus),
       co2Schwelle: val(LUFTUNGSANLAGE_ENTITY_IDS.co2Schwelle),
       feuchteSchwelle: val(LUFTUNGSANLAGE_ENTITY_IDS.feuchteSchwelle),
-      vocSchwelle: val(LUFTUNGSANLAGE_ENTITY_IDS.vocSchwelle),
       pm25Schwelle: val(LUFTUNGSANLAGE_ENTITY_IDS.pm25Schwelle),
       dauerbetriebAb: val(LUFTUNGSANLAGE_ENTITY_IDS.dauerbetriebAb),
       frostAus: val(LUFTUNGSANLAGE_ENTITY_IDS.frostAus),
@@ -374,7 +303,12 @@ export default function LuftungsanlageModal({
   });
   const th = evaluation.thresholds;
   const co2 = co2Max(entities);
-  const co2OgAvailable = Boolean(LUFTUNGSANLAGE_ENTITY_IDS.co2Og && val(LUFTUNGSANLAGE_ENTITY_IDS.co2Og) != null);
+  // Welche Etage gibt gerade den Ausschlag (die Automation nimmt das Maximum)?
+  const co2Lead = co2Eg != null && co2Og != null ? (co2Og > co2Eg ? 'og' : 'eg') : co2Og != null ? 'og' : co2Eg != null ? 'eg' : null;
+  const co2Floors = [
+    { key: 'eg', label: 'EG', value: co2Eg },
+    { key: 'og', label: 'OG', value: co2Og },
+  ];
   const co2ColorFor = (ppm) => co2Color(ppm, th);
   const isSummer = String(saisonState || '').toLowerCase().startsWith('som');
 
@@ -392,11 +326,10 @@ export default function LuftungsanlageModal({
     { value: th.co2Schwelle, label: 'Medium', color: '#f87171' },
   ];
   const limitColor = (v, limit, warnFactor) => (v == null ? 'var(--text-muted)' : v >= limit ? '#ef9a9a' : v >= limit * warnFactor ? '#ffb74d' : '#81c784');
-  const { hum, voc, pm25 } = evaluation.values;
+  const { hum, pm25 } = evaluation.values;
   const aqValues = [
     { label: 'CO₂', value: co2 != null ? co2.toFixed(0) : '—', limit: th.co2Schwelle.toFixed(0), color: limitColor(co2, th.co2Schwelle, 0.85) },
     { label: 'Feuchte', value: hum != null ? `${hum.toFixed(0)}%` : '—', limit: `${th.feuchteSchwelle.toFixed(0)}%`, color: limitColor(hum, th.feuchteSchwelle, 0.93) },
-    { label: 'VOC', value: voc != null ? voc.toFixed(0) : '—', limit: th.vocSchwelle.toFixed(0), color: limitColor(voc, th.vocSchwelle, 0.85) },
     { label: 'PM2.5', value: pm25 != null ? pm25.toFixed(1) : '—', limit: th.pm25Schwelle.toFixed(0), color: limitColor(pm25, th.pm25Schwelle, 0.8) },
   ];
   const lockEnd = lockUntil(lockTs, mindestStufendauer);
@@ -426,17 +359,6 @@ export default function LuftungsanlageModal({
       option,
     });
   };
-
-  const InfoTile = ({ label, value, color = 'var(--text-primary)', unit = '' }) => (
-    <div className="popup-surface flex flex-col items-center justify-center gap-1 rounded-2xl p-4">
-      <p className="text-[10px] font-bold tracking-[0.15em] uppercase" style={{ color: 'var(--text-muted)' }}>
-        {label}
-      </p>
-      <p className="text-xl font-light" style={{ color }}>
-        {value != null ? `${value}${unit}` : '—'}
-      </p>
-    </div>
-  );
 
   const isCompact = window.innerHeight < 900 ||
     window.matchMedia('(hover: none) and (pointer: coarse)').matches;
@@ -713,11 +635,33 @@ export default function LuftungsanlageModal({
               <div className="popup-surface rounded-2xl p-4 space-y-3">
                 <div className="flex items-baseline justify-between">
                   <p className="text-[10px] font-bold tracking-[0.2em] uppercase" style={{ color: 'var(--text-muted)' }}>
-                    CO₂{co2OgAvailable ? ' (max. EG/OG)' : ''}
+                    CO₂ · höherer Wert zählt
                   </p>
                   <p className="text-sm font-light" style={{ color: co2ColorFor(co2) }}>
                     {co2 != null ? `${co2.toFixed(0)} ppm` : '—'}
                   </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {co2Floors.map((f) => {
+                    const leads = f.key === co2Lead;
+                    return (
+                      <span
+                        key={f.key}
+                        className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px]"
+                        style={{
+                          borderColor: leads ? 'rgba(56,189,248,0.5)' : 'var(--glass-border)',
+                          backgroundColor: leads ? 'rgba(56,189,248,0.1)' : 'transparent',
+                          color: 'var(--text-secondary)',
+                        }}
+                      >
+                        <span className="font-bold">{f.label}</span>
+                        <span className="font-mono" style={{ color: co2ColorFor(f.value) }}>
+                          {f.value != null ? `${f.value.toFixed(0)} ppm` : '—'}
+                        </span>
+                        {leads && <span className="text-[10px] font-bold tracking-wider uppercase" style={{ color: ACCENT }}>führt</span>}
+                      </span>
+                    );
+                  })}
                 </div>
                 <div className="relative h-2 rounded-full" style={{ backgroundColor: 'var(--glass-border)' }}>
                   <div className="absolute inset-y-0 left-0 rounded-full" style={{ width: `${co2Scale(co2)}%`, backgroundColor: co2ColorFor(co2) }} />
@@ -818,9 +762,6 @@ export default function LuftungsanlageModal({
                       <ThresholdRow label="Feuchte" value={th.feuchteSchwelle} unit="%"
                         onDec={() => step(LUFTUNGSANLAGE_ENTITY_IDS.feuchteSchwelle, th.feuchteSchwelle, -1, 40, 90)}
                         onInc={() => step(LUFTUNGSANLAGE_ENTITY_IDS.feuchteSchwelle, th.feuchteSchwelle, 1, 40, 90)} />
-                      <ThresholdRow label="VOC" value={th.vocSchwelle} unit=""
-                        onDec={() => step(LUFTUNGSANLAGE_ENTITY_IDS.vocSchwelle, th.vocSchwelle, -10, 100, 500)}
-                        onInc={() => step(LUFTUNGSANLAGE_ENTITY_IDS.vocSchwelle, th.vocSchwelle, 10, 100, 500)} />
                       <ThresholdRow label="PM2.5" value={th.pm25Schwelle} unit=" µg"
                         onDec={() => step(LUFTUNGSANLAGE_ENTITY_IDS.pm25Schwelle, th.pm25Schwelle, -1, 5, 100)}
                         onInc={() => step(LUFTUNGSANLAGE_ENTITY_IDS.pm25Schwelle, th.pm25Schwelle, 1, 5, 100)} />
@@ -937,107 +878,17 @@ export default function LuftungsanlageModal({
 
           {/* Tab: Luftqualität */}
           {mainTab === 'luftqualitaet' && (
-            <div className="space-y-8 font-sans">
-              {/* EG */}
-              <div className="space-y-3">
-                <p className="text-[10px] font-bold tracking-[0.2em] text-[var(--text-muted)] uppercase">
-                  {translate('luftungsanlage.eg') || 'EG'}
-                </p>
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                  <div className="popup-surface flex flex-col items-center justify-center gap-1 rounded-2xl p-4">
-                    <p className="text-[10px] font-bold tracking-[0.15em] uppercase" style={{ color: 'var(--text-muted)' }}>
-                      {translate('luftungsanlage.co2') || 'CO₂'}
-                    </p>
-                    <p className="text-xl font-light" style={{ color: co2ColorFor(co2Eg) }}>
-                      {co2Eg != null ? `${co2Eg.toFixed(0)} ppm` : '—'}
-                    </p>
-                  </div>
-                  <InfoTile
-                    label={translate('luftungsanlage.feuchte') || 'Feuchte'}
-                    value={feuchteEg != null ? `${feuchteEg.toFixed(0)} %` : null}
-                  />
-                  <InfoTile
-                    label="PM2.5"
-                    value={pm25Eg != null ? `${pm25Eg.toFixed(1)} µg/m³` : null}
-                  />
-                  <InfoTile
-                    label={translate('luftungsanlage.luftqualitaet') || 'Luftqualität'}
-                    value={luftqualitaetEg}
-                  />
-                </div>
-                {/* CO₂ 24h chart */}
-                <div className="popup-surface rounded-2xl p-4">
-                  <p className="mb-2 text-[10px] font-bold tracking-[0.15em] uppercase" style={{ color: 'var(--text-muted)' }}>
-                    CO₂ — 24h
-                  </p>
-                  {historyLoading ? (
-                    <div className="flex h-[80px] items-center justify-center">
-                      <div className="h-6 w-6 animate-spin rounded-full border-b-2 opacity-30" style={{ borderColor: ACCENT }} />
-                    </div>
-                  ) : (
-                    <ColoredHistoryGraph
-                      data={co2History}
-                      height={isCompact ? 75 : 120}
-                      thresholds={[
-                        { max: th.co2LowEin, color: '#4ade80' },
-                        { max: th.co2Schwelle, color: '#fb923c' },
-                        { color: '#f87171' },
-                      ]}
-                    />
-                  )}
-                </div>
-              </div>
-
-              {/* OG */}
-              <div className="space-y-3">
-                <p className="text-[10px] font-bold tracking-[0.2em] text-[var(--text-muted)] uppercase">
-                  {translate('luftungsanlage.og') || 'OG'}
-                </p>
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                  <div className="popup-surface flex flex-col items-center justify-center gap-1 rounded-2xl p-4">
-                    <p className="text-[10px] font-bold tracking-[0.15em] uppercase" style={{ color: 'var(--text-muted)' }}>
-                      VOC
-                    </p>
-                    <p className="text-xl font-light" style={{ color: vocOg != null && vocOg > 200 ? '#fb923c' : 'var(--text-primary)' }}>
-                      {vocOg != null ? vocOg.toFixed(0) : '—'}
-                    </p>
-                  </div>
-                  <InfoTile
-                    label={translate('luftungsanlage.feuchte') || 'Feuchte'}
-                    value={feuchteOg != null ? `${feuchteOg.toFixed(0)} %` : null}
-                  />
-                  <InfoTile
-                    label="PM2.5"
-                    value={pm25Og != null ? `${pm25Og.toFixed(1)} µg/m³` : null}
-                  />
-                  <InfoTile
-                    label={translate('luftungsanlage.temp') || 'Temperatur'}
-                    value={tempOg != null ? `${tempOg.toFixed(1)} °C` : null}
-                  />
-                </div>
-                {/* VOC 24h chart */}
-                <div className="popup-surface rounded-2xl p-4">
-                  <p className="mb-2 text-[10px] font-bold tracking-[0.15em] uppercase" style={{ color: 'var(--text-muted)' }}>
-                    VOC — 24h
-                  </p>
-                  {historyLoading ? (
-                    <div className="flex h-[80px] items-center justify-center">
-                      <div className="h-6 w-6 animate-spin rounded-full border-b-2 opacity-30" style={{ borderColor: ACCENT }} />
-                    </div>
-                  ) : (
-                    <ColoredHistoryGraph
-                      data={vocHistory}
-                      height={isCompact ? 75 : 120}
-                      thresholds={[
-                        { max: 300, color: '#4ade80' },
-                        { max: 400, color: '#fb923c' },
-                        { color: '#f87171' },
-                      ]}
-                    />
-                  )}
-                </div>
-              </div>
-            </div>
+            <LuftqualitaetView
+              floors={[
+                { key: 'eg', label: translate('luftungsanlage.eg') || 'EG', color: AQ_COLORS.eg, co2: co2Eg, feuchte: feuchteEg, pm25: pm25Eg, quality: luftqualitaetEg, leads: co2Lead === 'eg' },
+                { key: 'og', label: translate('luftungsanlage.og') || 'OG', color: AQ_COLORS.og, co2: co2Og, feuchte: feuchteOg, pm25: pm25Og, quality: luftqualitaetOg, temp: tempOg, leads: co2Lead === 'og' },
+              ]}
+              th={th}
+              history={{ eg: co2History, og: co2OgHistory }}
+              historyLoading={historyLoading}
+              co={val(LUFTUNGSANLAGE_ENTITY_IDS.coMelder)}
+              isMobile={isCompact}
+            />
           )}
           </div>{/* end scrollable content */}
         </>

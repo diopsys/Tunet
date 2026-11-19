@@ -25,7 +25,6 @@ export const LUFTUNGSANLAGE_ENTITY_IDS = {
   alarm: 'sensor.blauberg_s21_alarm',
   lockTimestamp: 'input_datetime.luftung_lock_timestamp',
   co2Schwelle: 'input_number.luftung_co2_schwelle',
-  vocSchwelle: 'input_number.luftung_voc_schwelle',
   feuchteSchwelle: 'input_number.luftung_feuchte_schwelle',
   pm25Schwelle: 'input_number.luftung_pm2_5_schwelle',
   co2LowEin: 'input_number.luftung_co2_low_ein',
@@ -37,16 +36,16 @@ export const LUFTUNGSANLAGE_ENTITY_IDS = {
   luftfeuchtigkeit: 'sensor.blauberg_s21_luftfeuchtigkeit',
   feuchtigkeitsDiff: 'sensor.innen_aussen_luftfeuchtigkeit_differenz',
   co2Eg: 'sensor.alpstuga_air_quality_monitor_kohlendioxid',
-  // Zweiter CO₂-Sensor (OG) folgt; die Automation nimmt das Maximum. Bis dahin leer.
-  co2Og: null,
+  // Die Automation nimmt das Maximum aus EG und OG
+  co2Og: 'sensor.luftqualitatssensor_og_kohlendioxid',
   coMelder: 'sensor.co_melder_co_lesung',
   feuchteEg: 'sensor.alpstuga_air_quality_monitor_luftfeuchtigkeit',
   pm25Eg: 'sensor.alpstuga_air_quality_monitor_pm25',
   luftqualitaetEg: 'sensor.alpstuga_air_quality_monitor_luftqualitat',
-  vocOg: 'sensor.luftqualitatssensor_voc_index',
-  feuchteOg: 'sensor.luftqualitatssensor_humidity',
-  pm25Og: 'sensor.luftqualitatssensor_pm25',
-  tempOg: 'sensor.luftqualitatssensor_temperature',
+  feuchteOg: 'sensor.luftqualitatssensor_og_luftfeuchtigkeit',
+  pm25Og: 'sensor.luftqualitatssensor_og_pm25',
+  tempOg: 'sensor.luftqualitatssensor_og_temperatur',
+  luftqualitaetOg: 'sensor.luftqualitatssensor_og_luftqualitat',
 };
 
 const num = (entity) => {

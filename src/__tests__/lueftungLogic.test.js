@@ -1,10 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { co2Color, evaluateLueftung, lockUntil, nightSlot, parseLastMode } from '../utils/lueftungLogic';
+import { co2Color, evaluateLueftung, lockUntil, nightSlot, parseLastMode, qualityLabel } from '../utils/lueftungLogic';
 
 const base = {
   co2: [620],
   humidity: [50, 48],
-  voc: [100],
   pm25: [5, 4],
   outsideTemp: 4,
   insideTemp: 21,
@@ -48,6 +47,10 @@ describe('evaluateLueftung (Winter)', () => {
     expect(rules.filter((r) => r.active).map((r) => r.id)).toEqual(['co2_low']);
   });
 
+  it('ignores VOC (no longer evaluated by the automation)', () => {
+    expect(run({ voc: [999] }).reason).toBe('off');
+  });
+
   it('uses the maximum of several sensors and the helper thresholds', () => {
     expect(run({ co2: [620, 950] }).reason).toBe('co2_low');
     expect(run({ co2: [930], thresholds: { co2LowEin: 1000 } }).reason).toBe('off');
@@ -78,6 +81,12 @@ describe('helpers', () => {
     expect(parseLastMode('winter_airquality_medium')).toMatchObject({ src: 'Luftqualitäts-Override', lvl: 'Medium', kind: 'aq' });
     expect(parseLastMode('boost_3')).toMatchObject({ src: 'Boost-Modus' });
     expect(parseLastMode('manual')).toMatchObject({ src: 'Manuell' });
+  });
+
+  it('translates the air quality text', () => {
+    expect(qualityLabel('poor')).toBe('Schlecht');
+    expect(qualityLabel('good')).toBe('Gut');
+    expect(qualityLabel('unavailable')).toBeNull();
   });
 
   it('colours CO₂ by the automation thresholds', () => {

@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.31.11
+
+### Added
+- Media: Winamp-style music window with zones, playlist and library (folders, albums, genres, search), saved playlists per room, fade-out and Winamp keys; track lengths and genres via Music Assistant (new optional options `ma_url` / `ma_token`) (#15)
+- Calendar: people view with one column per calendar, colour per calendar; delete events in CalDAV calendars (new optional options `caldav_url` / `caldav_user` / `caldav_password`) (#15)
+- Back to the start page after inactivity also when the device wakes up; paused while a camera live view or the Winamp window is open (#15)
+
+### Changed
+- Ventilation, air quality tab redesigned: CO₂ ring per floor with the automation thresholds, humidity with comfort range and PM2.5 with WHO guideline as bars, distance to the next fan stage; combined 24 h history for both floors with threshold bands and min/avg/max; CO detector
+- Ventilation: second CO₂ sensor upstairs – the Automatik tab shows ground and upper floor and marks which one currently leads (the automation uses the maximum)
+- Ventilation: upper floor values now come from the new air quality sensor
+
+### Removed
+- Ventilation: VOC values, history and threshold (no longer used by the automation)
+
 ## 1.31.10
 
 ### Fixed

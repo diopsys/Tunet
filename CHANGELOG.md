@@ -1,3 +1,18 @@
+## [1.31.11] — 2026-11-18
+
+### Added
+- Medien: Musik-Fenster im Winamp-Stil mit Zonen, Playlist und Bibliothek (Ordner, Alben, Genres, Suche), gespeicherten Playlists je Raum, Ausblenden und Winamp-Tasten; Titellängen und Genres über Music Assistant (neue optionale App-Optionen `ma_url` / `ma_token`) (#15)
+- Kalender: Personen-Ansicht mit einer Spalte je Kalender, Farbe je Kalender einstellbar; Termine in CalDAV-Kalendern löschen (neue optionale App-Optionen `caldav_url` / `caldav_user` / `caldav_password`) (#15)
+- Nach längerer Inaktivität zurück zur Startseite auch beim Aufwecken des Geräts; pausiert, solange ein Kamera-Livebild oder das Winamp-Fenster offen ist (#15)
+
+### Changed
+- Lüftung, Tab „Luftqualität“ neu: je Etage CO₂-Ring mit den Schwellen der Automation und Einschätzung (Frisch/Gut/Erhöht/Schlecht), Feuchte mit Komfortbereich und PM2.5 mit WHO-Richtwert als Balken, Hinweis bis zur nächsten Lüftungsstufe; gemeinsamer 24-h-Verlauf EG/OG mit Schwellenbereichen und Min/Ø/Max; CO-Melder
+- Lüftung: zweiter CO₂-Sensor im OG – Automatik-Tab zeigt EG und OG mit Kennzeichnung, welcher Wert gerade führt (die Automation nimmt das Maximum)
+- Lüftung: OG-Werte kommen vom neuen Luftqualitätssensor (Feuchte, PM2.5, Temperatur, Luftqualität)
+
+### Removed
+- Lüftung: VOC-Anzeigen, VOC-Verlauf und VOC-Schwelle (die Automation wertet kein VOC mehr aus)
+
 ## [1.31.10] — 2026-11-17
 
 ### Fixed

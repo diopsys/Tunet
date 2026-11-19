@@ -25,8 +25,8 @@ const multistatus = (...antworten) =>
 describe('Hilfsfunktionen', () => {
   it('liest die Kalender-ID aus der unique_id der CalDAV-Integration', () => {
     expect(kalenderIdAusUniqueId('01M724HPQ5-personal')).toBe('personal');
-    expect(kalenderIdAusUniqueId('01M724HPQ5-alexa_A_hillmann_D_pro_personal')).toBe(
-      'alexa_A_hillmann_D_pro_personal'
+    expect(kalenderIdAusUniqueId('01M724HPQ5-anna_A_example_D_org_personal')).toBe(
+      'anna_A_example_D_org_personal'
     );
     expect(kalenderIdAusUniqueId('ohne')).toBeNull();
     expect(kalenderIdAusUniqueId('x-a/b')).toBeNull();
@@ -56,7 +56,7 @@ describe('terminLoeschen', () => {
   const env = { ...process.env };
   beforeEach(() => {
     process.env.CALDAV_URL = 'https://mail.example.org/SOGo/dav';
-    process.env.CALDAV_USER = 'david@example.org';
+    process.env.CALDAV_USER = 'user@example.org';
     process.env.CALDAV_PASSWORD = 'geheim';
     cacheLeeren();
   });
@@ -66,8 +66,8 @@ describe('terminLoeschen', () => {
   });
 
   const register = vi.fn(async (entityId) =>
-    entityId === 'calendar.alexa'
-      ? { platform: 'caldav', unique_id: 'ENTRY-alexa_A_example_D_org_personal' }
+    entityId === 'calendar.anna'
+      ? { platform: 'caldav', unique_id: 'ENTRY-anna_A_example_D_org_personal' }
       : { platform: 'local_calendar', unique_id: 'x' }
   );
 
@@ -77,10 +77,10 @@ describe('terminLoeschen', () => {
       aufrufe.push({ url, method: opts.method, depth: opts.headers.Depth, auth: opts.headers.Authorization });
       const ok = (text, status = 207) => ({ ok: true, status, text: async () => text });
       if (opts.method === 'PROPFIND' && url === 'https://mail.example.org/SOGo/dav/') {
-        return ok(multistatus('<D:response><D:href>/SOGo/dav/</D:href><D:propstat><D:prop><D:current-user-principal><D:href>/SOGo/dav/david@example.org/</D:href></D:current-user-principal></D:prop></D:propstat></D:response>'));
+        return ok(multistatus('<D:response><D:href>/SOGo/dav/</D:href><D:propstat><D:prop><D:current-user-principal><D:href>/SOGo/dav/user@example.org/</D:href></D:current-user-principal></D:prop></D:propstat></D:response>'));
       }
       if (opts.method === 'PROPFIND') {
-        return ok(multistatus('<D:response><D:href>/SOGo/dav/david@example.org/</D:href><D:propstat><D:prop><C:calendar-home-set><D:href>/SOGo/dav/david@example.org/Calendar/</D:href></C:calendar-home-set></D:prop></D:propstat></D:response>'));
+        return ok(multistatus('<D:response><D:href>/SOGo/dav/user@example.org/</D:href><D:propstat><D:prop><C:calendar-home-set><D:href>/SOGo/dav/user@example.org/Calendar/</D:href></C:calendar-home-set></D:prop></D:propstat></D:response>'));
       }
       if (opts.method === 'REPORT') return ok(multistatus(...termine));
       if (opts.method === 'DELETE') return ok('', 204);
@@ -97,38 +97,38 @@ describe('terminLoeschen', () => {
 
   it('löscht den Termin mit der UID in der Sammlung der Entität', async () => {
     const { fetchFn, aufrufe } = davServer([
-      antwort('/SOGo/dav/david@example.org/Calendar/alexa_A_example_D_org_personal/a.ics', ics('andere')),
-      antwort('/SOGo/dav/david@example.org/Calendar/alexa_A_example_D_org_personal/b.ics', ics('gesucht')),
+      antwort('/SOGo/dav/user@example.org/Calendar/anna_A_example_D_org_personal/a.ics', ics('andere')),
+      antwort('/SOGo/dav/user@example.org/Calendar/anna_A_example_D_org_personal/b.ics', ics('gesucht')),
     ]);
     const r = await terminLoeschen(
-      { entityId: 'calendar.alexa', uid: 'gesucht', start: '2026-11-12T09:00:00+01:00' },
+      { entityId: 'calendar.anna', uid: 'gesucht', start: '2026-11-12T09:00:00+01:00' },
       { fetchFn, register }
     );
     expect(r).toEqual({ geloescht: 1 });
     const report = aufrufe.find((a) => a.method === 'REPORT');
     expect(report.url).toBe(
-      'https://mail.example.org/SOGo/dav/david@example.org/Calendar/alexa_A_example_D_org_personal/'
+      'https://mail.example.org/SOGo/dav/user@example.org/Calendar/anna_A_example_D_org_personal/'
     );
     expect(report.depth).toBe('1');
     const loeschen = aufrufe.filter((a) => a.method === 'DELETE');
     expect(loeschen.map((a) => a.url)).toEqual([
-      'https://mail.example.org/SOGo/dav/david@example.org/Calendar/alexa_A_example_D_org_personal/b.ics',
+      'https://mail.example.org/SOGo/dav/user@example.org/Calendar/anna_A_example_D_org_personal/b.ics',
     ]);
-    expect(loeschen[0].auth).toBe(`Basic ${Buffer.from('david@example.org:geheim').toString('base64')}`);
+    expect(loeschen[0].auth).toBe(`Basic ${Buffer.from('user@example.org:geheim').toString('base64')}`);
   });
 
   it('verlangt bei Serien eine Bestätigung', async () => {
     const termine = [antwort('/c/s.ics', ics('serie', 'RRULE:FREQ=WEEKLY\r\n'))];
     let { fetchFn, aufrufe } = davServer(termine);
     expect(
-      await terminLoeschen({ entityId: 'calendar.alexa', uid: 'serie', start: '2026-11-12' }, { fetchFn, register })
+      await terminLoeschen({ entityId: 'calendar.anna', uid: 'serie', start: '2026-11-12' }, { fetchFn, register })
     ).toEqual({ serie: true });
     expect(aufrufe.some((a) => a.method === 'DELETE')).toBe(false);
 
     ({ fetchFn, aufrufe } = davServer(termine));
     expect(
       await terminLoeschen(
-        { entityId: 'calendar.alexa', uid: 'serie', start: '2026-11-12', serie: true },
+        { entityId: 'calendar.anna', uid: 'serie', start: '2026-11-12', serie: true },
         { fetchFn, register }
       )
     ).toEqual({ geloescht: 1 });
@@ -137,7 +137,7 @@ describe('terminLoeschen', () => {
   it('meldet 404, wenn die UID fehlt, und 400 bei Nicht-CalDAV-Kalendern', async () => {
     const { fetchFn } = davServer([antwort('/c/a.ics', ics('andere'))]);
     await expect(
-      terminLoeschen({ entityId: 'calendar.alexa', uid: 'fehlt', start: '2026-11-12' }, { fetchFn, register })
+      terminLoeschen({ entityId: 'calendar.anna', uid: 'fehlt', start: '2026-11-12' }, { fetchFn, register })
     ).rejects.toMatchObject({ status: 404 });
     await expect(
       terminLoeschen({ entityId: 'calendar.lokal', uid: 'x', start: '2026-11-12' }, { fetchFn, register })
