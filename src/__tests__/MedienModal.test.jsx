@@ -7,7 +7,7 @@ import {
   auswahlKlick, ausblendenKonfig, blockSchieben, dauerErgaenzen, fehlendeDauer, laufenderIndex, maAbspielen, ohneAuswahl, spAbspielen, spSpringen, spTitel, zeit,
 } from '../modals/medien/musik';
 import {
-  fetchMedienDauer, fetchMedienGenreAlben, fetchMedienGenreTitel, fetchMedienGenres, fetchMedienPlaylist, saveMedienPlaylist,
+  fetchMedienAlbumTitel, fetchMedienDauer, fetchMedienGenreAlben, fetchMedienGenreTitel, fetchMedienGenres, fetchMedienPlaylist, saveMedienPlaylist,
 } from '../services/settingsApi';
 
 vi.mock('../services/settingsApi', () => ({
@@ -19,6 +19,7 @@ vi.mock('../services/settingsApi', () => ({
   fetchMedienGenres: vi.fn(async () => ({ aktiv: false, items: [] })),
   fetchMedienGenreAlben: vi.fn(async () => ({ aktiv: false, items: [] })),
   fetchMedienGenreTitel: vi.fn(async () => ({ aktiv: false, items: [] })),
+  fetchMedienAlbumTitel: vi.fn(async () => ({ aktiv: false, items: [] })),
 }));
 
 const medien = {
@@ -374,6 +375,37 @@ describe('Medien-Fenster', () => {
     expect(await screen.findByText('Jethro Tull - Aqualung')).toBeTruthy();
     fetchMedienGenres.mockImplementation(async () => ({ aktiv: false, items: [] }));
     fetchMedienGenreAlben.mockImplementation(async () => ({ aktiv: false, items: [] }));
+  });
+
+  it('opens a Music Assistant album through the server with the album artist first', async () => {
+    fetchMedienGenres.mockImplementation(async () => ({ aktiv: true, items: [{ id: '3', name: 'Hip-Hop', alben: 1 }] }));
+    fetchMedienGenreAlben.mockImplementation(async () => ({
+      aktiv: true, items: [{ uri: 'library://album/2067', name: 'Bambule', artists: [{ name: 'Beginner' }], media_type: 'album' }],
+    }));
+    fetchMedienAlbumTitel.mockImplementation(async () => ({
+      aktiv: true,
+      items: [
+        { uri: 'library://track/24376', name: 'Hammerhart', artists: [{ name: 'Beginner' }], hauptanzahl: 1, duration: 205, media_type: 'track' },
+        { uri: 'library://track/24384', name: 'Füchse', artists: [{ name: 'Beginner' }, { name: 'Samy Deluxe' }], hauptanzahl: 1, duration: 275, media_type: 'track' },
+      ],
+    }));
+    const bConn = { sendMessagePromise: vi.fn(async () => ({ response: { items: [] } })) };
+    const ents = { ...basis, 'media_player.tv': { state: 'off', attributes: {} }, 'media_player.vu': { state: 'off', attributes: {} } };
+    const r = render(<MedienCard cardId="m" entities={ents} settings={{ medien }} callService={vi.fn()} conn={bConn} getEntityImageUrl={(u) => u} />);
+    fireEvent.click(r.container.firstChild);
+    await screen.findByRole('dialog');
+    fireEvent.click(await screen.findByRole('button', { name: 'Genres' }));
+    fireEvent.click(await screen.findByText('Hip-Hop'));
+    fireEvent.click(screen.getByRole('button', { name: 'Öffnen' }));
+    fireEvent.click(await screen.findByText('Beginner - Bambule'));
+    fireEvent.click(screen.getByRole('button', { name: 'Öffnen' }));
+    expect(await screen.findByText('Beginner feat. Samy Deluxe - Füchse')).toBeTruthy();
+    expect(screen.getByText('Beginner - Hammerhart')).toBeTruthy();
+    expect(fetchMedienAlbumTitel).toHaveBeenCalledWith('library://album/2067');
+    expect(bConn.sendMessagePromise.mock.calls.some(([m]) => m.type === 'media_player/browse_media')).toBe(false);
+    fetchMedienGenres.mockImplementation(async () => ({ aktiv: false, items: [] }));
+    fetchMedienGenreAlben.mockImplementation(async () => ({ aktiv: false, items: [] }));
+    fetchMedienAlbumTitel.mockImplementation(async () => ({ aktiv: false, items: [] }));
   });
 
   it('lists the tracks of a genre below its albums and loads more', async () => {

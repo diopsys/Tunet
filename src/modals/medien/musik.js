@@ -9,6 +9,16 @@ export const istSpotifyUri = (uri) => /^spotify/.test(uri || '');
 
 const namen = (artists) => (Array.isArray(artists) ? artists.map((a) => a?.name).filter(Boolean).join(', ') : '');
 
+/**
+ * Interpreten eines Titels; hauptanzahl = Zahl der Album-Interpreten vorn (vom Tunet-Server),
+ * die übrigen sind Gäste: „Beginner feat. Samy Deluxe“. Ohne hauptanzahl alle mit Komma.
+ */
+export function interpretenText(artists, hauptanzahl) {
+  const n = Array.isArray(artists) ? artists.filter((a) => a?.name) : [];
+  if (!Number.isInteger(hauptanzahl) || hauptanzahl < 1 || hauptanzahl >= n.length) return namen(n);
+  return `${namen(n.slice(0, hauptanzahl))} feat. ${namen(n.slice(hauptanzahl))}`;
+}
+
 /** Eintrag einer SpotifyPlus-Antwort (Track, Album, Playlist, Künstler; auch {track}/{album}). */
 export function spTitel(x) {
   const o = x?.track || x?.album || x;
@@ -37,7 +47,7 @@ export function maTitel(x) {
   return {
     uri: o.uri,
     name: o.name || '',
-    artist: namen(o.artists),
+    artist: interpretenText(o.artists, o.hauptanzahl),
     dauer: Number.isFinite(x?.duration) ? x.duration : Number.isFinite(o.duration) ? o.duration : null,
     image: o.image || o.album?.image || null,
     media_type: o.media_type || 'track',

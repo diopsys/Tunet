@@ -205,6 +205,49 @@ export async function genreTitel(id, { offset, limit } = {}, fetchFn = fetch) {
   return (await alleGenreTitel(id, fetchFn)).slice(von, von + ganz(limit, MAX_SEITE, MAX_SEITE));
 }
 
+const nameSchluessel = (n) => String(n || '').trim().toLocaleLowerCase('de');
+
+/**
+ * Interpreten eines Titels mit den Album-Interpreten vorn. Music Assistant speichert die
+ * Interpreten eines Titels nicht in der Reihenfolge der Datei (Bambule: „Samy Deluxe, Beginner“
+ * statt „Beginner/Samy Deluxe“). Ergebnis: { artists, hauptanzahl } – hauptanzahl = Zahl der
+ * Album-Interpreten vorn (0, wenn keiner dabei ist, z. B. bei Samplern).
+ */
+export function interpretenOrdnen(artists, albumArtists) {
+  const liste = (Array.isArray(artists) ? artists : []).filter((k) => k?.name).map((k) => ({ name: k.name }));
+  const haupt = (Array.isArray(albumArtists) ? albumArtists : []).map((k) => nameSchluessel(k?.name)).filter(Boolean);
+  const vorn = [];
+  for (const h of haupt) {
+    const i = liste.findIndex((k, j) => nameSchluessel(k.name) === h && !vorn.includes(j));
+    if (i >= 0) vorn.push(i);
+  }
+  return {
+    artists: [...vorn.map((i) => liste[i]), ...liste.filter((_, i) => !vorn.includes(i))],
+    hauptanzahl: vorn.length,
+  };
+}
+
+const ALBUM_URI = /^([a-z][a-z0-9_-]*):\/\/album\/([^/?#]{1,200})$/i;
+
+/**
+ * Titel eines Albums in der Form der HA-Dienste ({ uri, name, artists, hauptanzahl, duration,
+ * media_type }), Album-Interpreten vorn, nach CD und Titelnummer. null bei fremder URI.
+ */
+export async function albumTitel(uri, fetchFn = fetch) {
+  const m = typeof uri === 'string' ? uri.match(ALBUM_URI) : null;
+  if (!m) return null;
+  const ziel = { item_id: m[2], provider_instance_id_or_domain: m[1] };
+  const [album, titel] = await Promise.all([
+    befehl('music/albums/get', ziel, fetchFn).catch(() => null),
+    befehl('music/albums/album_tracks', { ...ziel, in_library_only: false }, fetchFn),
+  ]);
+  const zahl = (v) => (Number.isFinite(v) ? v : 0);
+  return liste(titel)
+    .filter((t) => t?.uri && t?.name)
+    .sort((x, y) => zahl(x.disc_number) - zahl(y.disc_number) || zahl(x.track_number) - zahl(y.track_number))
+    .map((t) => ({ ...titelForm(t), ...interpretenOrdnen(t.artists, album?.artists || t.album?.artists) }));
+}
+
 /** Nur für Tests. */
 export function cacheLeeren() {
   cache.clear();

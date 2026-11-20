@@ -179,6 +179,11 @@ export function fetchMedienGenreAlben(id) {
   return request(`/medien/genres/${encodeURIComponent(id)}/alben`);
 }
 
+/** Titel eines Albums, Album-Interpreten vorn: { aktiv, items: [{ uri, name, artists, hauptanzahl, duration, media_type }] } */
+export function fetchMedienAlbumTitel(uri) {
+  return request(`/medien/album?uri=${encodeURIComponent(uri)}`);
+}
+
 /** Titel eines Genres (je 500, ab offset): { aktiv, items: [{ uri, name, artists, duration, media_type }] } */
 export function fetchMedienGenreTitel(id, offset = 0) {
   return request(`/medien/genres/${encodeURIComponent(id)}/titel${offset ? `?offset=${offset}` : ''}`);

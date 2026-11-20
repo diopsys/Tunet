@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pause, Play, Repeat, Shuffle, SkipBack, SkipForward } from '../../icons';
 import { beideZonenAktionen, nacheinander, playAktionen } from '../../components/cards/MedienCard';
 import {
-  deleteMedienPlaylist, fetchMedienDauer, fetchMedienGenreAlben, fetchMedienGenreTitel, fetchMedienGenres, fetchMedienListen, fetchMedienPlaylist,
+  deleteMedienPlaylist, fetchMedienAlbumTitel, fetchMedienDauer, fetchMedienGenreAlben, fetchMedienGenreTitel, fetchMedienGenres, fetchMedienListen, fetchMedienPlaylist,
   saveMedienPlaylist,
 } from '../../services/settingsApi';
 import {
@@ -525,7 +525,15 @@ function MediaLibrary({ config, conn, raum, apiRef, suchRef, mehrfach, setMehrfa
           items = (Array.isArray(r) ? r : r?.items || r?.tracks || []).map(spTitel).filter(Boolean);
         }
       } else {
-        items = await aufklappen(conn, config.player, item);
+        // Alben aus Music Assistant über den Tunet-Server: alle Interpreten, Album-Interpret vorn
+        // (browse_media nennt je Titel nur den ersten, und den in falscher Reihenfolge)
+        if (item.quelle === 'ma' && item.media_type === 'album' && /^[a-z][a-z0-9_-]*:\/\/album\//i.test(item.uri || '')) {
+          const r = await fetchMedienAlbumTitel(item.uri).catch(() => null);
+          if (r?.aktiv && r.items?.length) {
+            items = r.items.map(maTitel).filter(Boolean).map((t) => ({ ...t, image: t.image || item.image || null }));
+          }
+        }
+        if (!items.length) items = await aufklappen(conn, config.player, item);
       }
       setStapel((s) => [...s, ansicht]);
       setAnsicht({ titel: [item.artist, item.name].filter(Boolean).join(' - '), quelle: item.quelle, kontext, items, mehr, fehler, genreId });

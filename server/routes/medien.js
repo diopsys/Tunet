@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import db from '../db.js';
-import { genreAlben, genreTitel, genres, maAktiv, titelDauer } from '../utils/musicAssistant.js';
+import { albumTitel, genreAlben, genreTitel, genres, maAktiv, titelDauer } from '../utils/musicAssistant.js';
 
 /*
  * Playlist der Medien-Kachel (Winamp-Fenster) je Raum: die Liste, die gerade über Music
@@ -129,6 +129,20 @@ const genreInhalt = (laden, was) => async (req, res) => {
     return res.json({ aktiv: true, items: [], fehler: err.message });
   }
 };
+// Titel eines Albums (Album-Interpreten vorn); ohne ma_token aktiv: false
+router.get('/album', async (req, res) => {
+  if (!maAktiv()) return res.json({ aktiv: false, items: [] });
+  const uri = typeof req.query.uri === 'string' ? req.query.uri.slice(0, 300) : '';
+  try {
+    const items = await albumTitel(uri);
+    if (items === null) return res.status(400).json({ error: 'Ungültige Album-URI' });
+    return res.json({ aktiv: true, items });
+  } catch (err) {
+    console.warn(`[medien] Titel eines Albums aus Music Assistant: ${err.message}`);
+    return res.json({ aktiv: true, items: [], fehler: err.message });
+  }
+});
+
 router.get('/genres/:id/alben', genreInhalt(genreAlben, 'Alben'));
 router.get('/genres/:id/titel', genreInhalt(genreTitel, 'Titel'));
 

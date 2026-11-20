@@ -3,7 +3,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { playlistBereinigen } from '../routes/medien.js';
 import {
-  cacheLeeren, genreAlben, genreTitel, genres, gueltigeUri, titelDauer,
+  albumTitel, cacheLeeren, genreAlben, interpretenOrdnen, genreTitel, genres, gueltigeUri, titelDauer,
 } from '../utils/musicAssistant.js';
 
 describe('playlistBereinigen', () => {
@@ -165,5 +165,50 @@ describe('Genres', () => {
     ]);
     // zwei Seiten Titel (500 + 3), dann Schluss
     expect(fetchFn.mock.calls.filter(([, o]) => JSON.parse(o.body).command === 'music/genres/tracks')).toHaveLength(2);
+  });
+});
+
+describe('Album-Titel', () => {
+  const antwort = (daten) => ({ ok: true, json: async () => daten });
+  afterEach(() => { vi.unstubAllEnvs(); cacheLeeren(); });
+
+  it('puts the album artists first, guests after them', () => {
+    expect(interpretenOrdnen([{ name: 'Ferris MC' }, { name: 'Das Bo' }, { name: 'Beginner' }], [{ name: 'beginner' }])).toEqual({
+      artists: [{ name: 'Beginner' }, { name: 'Ferris MC' }, { name: 'Das Bo' }], hauptanzahl: 1,
+    });
+    // Sampler: Album-Interpret nicht unter den Titel-Interpreten → Reihenfolge bleibt
+    expect(interpretenOrdnen([{ name: 'A' }, { name: 'B' }], [{ name: 'Various Artists' }])).toEqual({
+      artists: [{ name: 'A' }, { name: 'B' }], hauptanzahl: 0,
+    });
+  });
+
+  it('loads the tracks of an album in track order with the album artist first', async () => {
+    vi.stubEnv('MA_TOKEN', 'geheim');
+    const fetchFn = vi.fn(async (url, opts) => {
+      const { command, args } = JSON.parse(opts.body);
+      expect(args).toMatchObject({ item_id: '2067', provider_instance_id_or_domain: 'library' });
+      if (command === 'music/albums/get') return antwort({ uri: 'library://album/2067', name: 'Bambule', artists: [{ name: 'Beginner' }] });
+      expect(command).toBe('music/albums/album_tracks');
+      return antwort([
+        { uri: 'library://track/24384', name: 'Füchse', track_number: 5, disc_number: 1, duration: 275, artists: [{ name: 'Samy Deluxe' }, { name: 'Beginner' }] },
+        { uri: 'library://track/24376', name: 'Hammerhart', track_number: 2, disc_number: 1, duration: 205, artists: [{ name: 'Beginner' }] },
+      ]);
+    });
+    expect(await albumTitel('library://album/2067', fetchFn)).toEqual([
+      { uri: 'library://track/24376', name: 'Hammerhart', artists: [{ name: 'Beginner' }], hauptanzahl: 1, duration: 205, media_type: 'track' },
+      { uri: 'library://track/24384', name: 'Füchse', artists: [{ name: 'Beginner' }, { name: 'Samy Deluxe' }], hauptanzahl: 1, duration: 275, media_type: 'track' },
+    ]);
+  });
+
+  it('rejects other uris and works without the album itself', async () => {
+    vi.stubEnv('MA_TOKEN', 'geheim');
+    expect(await albumTitel('library://track/1', vi.fn())).toBeNull();
+    expect(await albumTitel('spotify:album:1', vi.fn())).toBeNull();
+    const fetchFn = vi.fn(async (url, opts) => {
+      const { command } = JSON.parse(opts.body);
+      if (command === 'music/albums/get') return { ok: false, status: 404, text: async () => 'not found' };
+      return antwort([{ uri: 'library://track/1', name: 'X', artists: [{ name: 'B' }, { name: 'A' }], album: { artists: [{ name: 'A' }] } }]);
+    });
+    expect((await albumTitel('library://album/9', fetchFn))[0]).toMatchObject({ artists: [{ name: 'A' }, { name: 'B' }], hauptanzahl: 1 });
   });
 });
