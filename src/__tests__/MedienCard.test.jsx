@@ -113,6 +113,40 @@ describe('Medien-Kachel', () => {
     await waitFor(() => expect(callService).toHaveBeenCalledWith('media_player', 'turn_off', { entity_id: 'media_player.tv' }));
   });
 
+  it('shows a main zone left running without TV and switches it off with the room', async () => {
+    const callService = vi.fn();
+    const mitTv = { ...medien, tv: { entity: 'media_player.tv', surround: 'media_player.surround' } };
+    const nurHaupt = {
+      'media_player.zone2': { state: 'off', attributes: {} },
+      'media_player.ma': { state: 'idle', attributes: {} },
+      'media_player.tv': { state: 'off', attributes: {} },
+      'media_player.surround': { state: 'on', attributes: { source: 'NET', volume_level: 0.25, friendly_name: 'Marantz Surround' } },
+    };
+    expect(medienModus(resolveMedienConfig({ medien: mitTv }), nurHaupt)).toBe('haupt');
+    render(<MedienCard cardId='m' entities={nurHaupt} settings={{ medien: mitTv }} callService={callService} getEntityImageUrl={(u) => u} />);
+    expect(screen.getByText('NET')).toBeTruthy();
+    expect(screen.getByText('Hauptzone · Marantz Surround')).toBeTruthy();
+    expect(screen.getByText('25 %')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Aus/ })).toHaveAttribute('aria-pressed', 'false');
+    fireEvent.click(screen.getByRole('button', { name: /Aus/ }));
+    await waitFor(() => expect(callService).toHaveBeenCalledWith('media_player', 'turn_off', { entity_id: 'media_player.surround' }));
+    expect(callService).toHaveBeenCalledWith('media_player', 'turn_off', { entity_id: 'media_player.zone2' });
+  });
+
+  it('switches off both zones after "both zones" without TV', async () => {
+    const callService = vi.fn();
+    const mitTv = { ...medien, tv: { entity: 'media_player.tv', surround: 'media_player.surround' } };
+    const beide = {
+      ...entities,
+      'media_player.surround': { state: 'on', attributes: { source: 'NET' } },
+    };
+    render(<MedienCard cardId='m' entities={beide} settings={{ medien: mitTv }} callService={callService} getEntityImageUrl={(u) => u} />);
+    fireEvent.click(screen.getByRole('button', { name: /Aus/ }));
+    await waitFor(() => expect(callService).toHaveBeenCalledWith('media_player', 'turn_off', { entity_id: 'media_player.surround' }));
+    expect(callService).toHaveBeenCalledWith('media_player', 'turn_off', { entity_id: 'media_player.zone2' });
+    expect(callService).not.toHaveBeenCalledWith('media_player', 'turn_off', { entity_id: 'media_player.tv' });
+  });
+
   it('switches the room to the player input before playing', async () => {
     const cfg = resolveMedienConfig({ medien: { ...medien, musik: { zoneQuelle: 'HEOS Music' } } });
     expect(playAktionen(cfg, { 'media_player.zone2': { state: 'off' } })).toEqual([

@@ -258,6 +258,11 @@ function ZonenFenster({ config, entities, ruf, lautSetzen }) {
   const quellen = (config.quellen || []).filter((q) => q.source || q.aus);
   const beideAn = haupt && istAn(zone) && istAn(entities[haupt]);
   const hauptZuerst = Boolean(config.tv && (istAn(entities[config.tv.entity]) || istAn(entities[config.tv.sat?.entity])));
+  // Hauptzone getrennt ein- und ausschalten; beim Einschalten übernimmt sie die Quelle des Raums
+  const hauptAn = Boolean(haupt) && istAn(entities[haupt]);
+  const hauptSchalten = () => ruf(hauptAn
+    ? [['media_player', 'turn_off', { entity_id: haupt }]]
+    : istAn(zone) ? beideZonenAktionen(config.zone, haupt, entities, hauptZuerst) : [['media_player', 'turn_on', { entity_id: haupt }]]);
   const quelle = (q) => (q.aus
     ? ruf([['media_player', 'turn_off', { entity_id: config.zone }]])
     : ruf([['media_player', 'turn_on', { entity_id: config.zone }], ['media_player', 'select_source', { entity_id: config.zone, source: q.source }]]));
@@ -272,10 +277,13 @@ function ZonenFenster({ config, entities, ruf, lautSetzen }) {
           </div>
           {haupt && (
             <div className="wa-knopfreihe">
+              <Knopf led aktiv={hauptAn} onClick={hauptSchalten}>Hauptzone</Knopf>
               <Knopf led aktiv={beideAn} disabled={!istAn(zone) && !istAn(entities[haupt])} onClick={() => ruf(beideZonenAktionen(config.zone, haupt, entities, hauptZuerst))}>Beide Zonen</Knopf>
             </div>
           )}
-          <div className="wa-lcd wa-hinweis">{istAn(zone) ? `${config.name || 'Raum'}: ${zone.attributes?.source || 'an'}` : `${config.name || 'Raum'}: aus`}</div>
+          <div className="wa-lcd wa-hinweis">{istAn(zone) ? `${config.name || 'Raum'}: ${zone.attributes?.source || 'an'}`
+            : `${config.name || 'Raum'}: aus`}
+            {haupt ? ` · Hauptzone: ${hauptAn ? entities[haupt].attributes?.source || 'an' : 'aus'}` : ''}</div>
         </div>
         <Fader name={config.name || 'Raum'} entityId={config.zone} entities={entities} lautSetzen={lautSetzen} />
         {haupt && <Fader name="Haupt" entityId={haupt} entities={entities} lautSetzen={lautSetzen} />}

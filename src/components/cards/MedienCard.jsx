@@ -31,7 +31,7 @@ const MedienModal = lazyWithRetry(() => import('../../modals/MedienModal'));
  *
  * Ein Knopf gilt als aktiv, wenn die Zone an ist und seine `source` gewählt ist bzw. das
  * erste Gerät aus `einschalten` an ist. „Aus“ schaltet im TV-Betrieb Fernseher und Surround
- * aus, sonst die Zone.
+ * aus, sonst die Zone und eine noch laufende Hauptzone (tv.surround, z. B. nach „Beide Zonen“).
  */
 
 const AN = ['on', 'playing', 'paused', 'idle', 'buffering'];
@@ -60,12 +60,20 @@ export function resolveMedienConfig(settings) {
 }
 
 /** Was die Kachel zeigt: 'zone' (Raum läuft), 'tv' (nur der Fernseher läuft),
- *  'sat' (nur der Sat-Receiver ist noch an) oder 'aus'. */
+ *  'sat' (nur der Sat-Receiver ist noch an), 'haupt' (nur die Hauptzone/Surround läuft, ohne
+ *  Fernseher – z. B. Musik, nachdem der Raum aus „Beide Zonen“ ausgeschaltet wurde) oder 'aus'. */
 export function medienModus(config, entities) {
   if (istAn(config.zone ? entities[config.zone] : null)) return 'zone';
   if (config.tv && istAn(entities[config.tv.entity])) return 'tv';
   if (config.tv?.sat?.entity && istAn(entities[config.tv.sat.entity])) return 'sat';
+  if (config.tv?.surround && istAn(entities[config.tv.surround])) return 'haupt';
   return 'aus';
+}
+
+/** „Aus“ ohne Fernseher: die Zone und die Hauptzone, falls sie noch läuft. */
+export function zonenAusIds(config, entities) {
+  const haupt = config.tv?.surround;
+  return [config.zone, haupt && istAn(entities[haupt]) ? haupt : null].filter(Boolean);
 }
 
 /** Aktiv-Zustand eines Quellen-Knopfs. */
@@ -154,7 +162,8 @@ const MedienCard = ({ cardId, dragProps, controls, cardStyle, editMode, entities
   const spotifyLaeuft = spE?.state === 'playing' && (!sp.geraet || spE.attributes?.source === sp.geraet);
   const playerId = modus === 'tv' || modus === 'sat' ? null : spotifyLaeuft ? sp.entity : config.player;
   const player = playerId ? entities[playerId] : null;
-  const lautId = modus === 'tv' ? config.tv.surround || config.tv.entity : config.zone;
+  const lautId = modus === 'tv' ? config.tv.surround || config.tv.entity : modus === 'haupt' ? config.tv.surround : config.zone;
+  const hauptE = modus === 'haupt' ? entities[config.tv.surround] : null;
   const lautEntity = lautId ? entities[lautId] : null;
   const titel = name || 'Medien';
   const raum = config.name || zone?.attributes?.friendly_name || '';
@@ -165,22 +174,25 @@ const MedienCard = ({ cardId, dragProps, controls, cardStyle, editMode, entities
   const medienTitel = !belegt ? 'Noch nicht belegt'
     : tv ? tv.attributes?.friendly_name || 'Fernseher'
     : satBox ? 'Sat-Receiver an'
-    : player && pa.media_title ? pa.media_title : modus === 'zone' ? zone?.attributes?.source || 'An' : 'Aus';
+    : player && pa.media_title ? pa.media_title : modus === 'zone' ? zone?.attributes?.source || 'An'
+    : hauptE ? hauptE.attributes?.source || 'An' : 'Aus';
   const medienUnter = !belegt ? 'Zone, Player oder Fernseher in settings.medien eintragen'
     : tv
     ? tv.attributes?.source || tv.attributes?.media_title || ''
     : satBox ? [satBox.attributes?.media_channel || satBox.attributes?.source, 'Fernseher aus'].filter(Boolean).join(' · ')
-    : player && pa.media_title ? pa.media_artist || pa.media_album_name || '' : '';
+    : player && pa.media_title ? pa.media_artist || pa.media_album_name || ''
+    : hauptE ? `Hauptzone · ${hauptE.attributes?.friendly_name || ''}`.replace(/ · $/, '') : '';
   const bild = tv ? tv.attributes?.entity_picture : player ? pa.entity_picture : null;
   const cover = bild && getEntityImageUrl ? getEntityImageUrl(bild) : null;
   // gedrosselt: langsame Receiver (HEOS) stauen sonst jeden Zwischenwert auf
   const setzen = useCallback((id, v) => callService?.('media_player', 'volume_set', { entity_id: id, volume_level: v }), [callService]);
   const regler = useLautstaerke(lautEntity, lautId, setzen);
-  // „Aus“ im TV- bzw. Sat-Betrieb: Fernseher, Surround und ein noch laufender Sat-Receiver
+  // „Aus“ im TV- bzw. Sat-Betrieb: Fernseher, Surround und ein noch laufender Sat-Receiver;
+  // sonst die Zone und eine noch laufende Hauptzone
   const satId = config.tv?.sat?.entity;
   const tvAus = tv || satBox
     ? [config.tv.entity, config.tv.surround, satId && istAn(entities[satId]) ? satId : null].filter(Boolean)
-    : null;
+    : zonenAusIds(config, entities);
   const ruf = (aktionen) => nacheinander(callService, aktionen);
   const stop = (fn) => (e) => { e.stopPropagation(); if (!editMode) fn(); };
   const oeffnen = () => { if (!editMode && belegt) setOffen(true); };
@@ -225,7 +237,7 @@ const MedienCard = ({ cardId, dragProps, controls, cardStyle, editMode, entities
       </div>
 
       {/* Lautstärke der Zone */}
-      {lautEntity && (modus === 'zone' || modus === 'tv') && (
+      {lautEntity && (modus === 'zone' || modus === 'tv' || modus === 'haupt') && (
         <label className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
           <Volume2 className="h-3.5 w-3.5 flex-shrink-0 text-[var(--text-muted)]" />
           <input
