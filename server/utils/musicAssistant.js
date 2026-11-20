@@ -189,7 +189,25 @@ const GENRE_TITEL_MERKEN_MS = 60_000;
 const GENRE_TITEL_ZEITLIMIT_MS = 30_000;
 const genreTitelCache = new Map();
 const vergleich = new Intl.Collator('de', { sensitivity: 'base', numeric: true });
-const interpretName = (t) => (t.artists[0]?.name || '').replace(/^the\s+/i, '');
+const interpretName = (t) => ((Array.isArray(t.artists) ? t.artists : [])[0]?.name || '').replace(/^the\s+/i, '');
+const nummer = (v) => (Number.isFinite(v) ? v : 0);
+const jahr = (a) => (Number.isInteger(a?.year) && a.year > 0 ? a.year : Infinity);
+
+/**
+ * Reihenfolge der Genre-Titel: je Interpret (ohne „The“) erst die Alben – älteste zuerst, ohne
+ * Jahr am Ende, dann nach Name – in CD- und Titelfolge, danach die Einzeltitel (ohne Album) nach Name.
+ */
+export function genreTitelVergleich(x, y) {
+  const ax = x.album?.uri ? x.album : null;
+  const ay = y.album?.uri ? y.album : null;
+  return vergleich.compare(interpretName(x), interpretName(y))
+    || (ax ? 0 : 1) - (ay ? 0 : 1)
+    || (ax && ay && ax.uri !== ay.uri
+      ? (jahr(ax) - jahr(ay) || 0) || vergleich.compare(String(ax.name || ''), String(ay.name || '')) || vergleich.compare(ax.uri, ay.uri)
+      : 0)
+    || (ax && ay ? nummer(x.disc_number) - nummer(y.disc_number) || nummer(x.track_number) - nummer(y.track_number) : 0)
+    || vergleich.compare(titelName(x), titelName(y));
+}
 
 async function alleGenreTitel(id, fetchFn) {
   const schluessel = String(id);
@@ -197,8 +215,8 @@ async function alleGenreTitel(id, fetchFn) {
   if (gemerkt && Date.now() - gemerkt.zeit < GENRE_TITEL_MERKEN_MS) return gemerkt.titel;
   const titel = liste(await sortiert('music/genres/tracks', { item_id: schluessel, limit: 0, offset: 0 }, fetchFn, GENRE_TITEL_ZEITLIMIT_MS))
     .filter((t) => t?.uri && t?.name)
-    .map(titelForm)
-    .sort((x, y) => vergleich.compare(interpretName(x), interpretName(y)) || vergleich.compare(x.name, y.name));
+    .sort(genreTitelVergleich)
+    .map(titelForm);
   if (genreTitelCache.size >= 50) genreTitelCache.delete(genreTitelCache.keys().next().value);
   genreTitelCache.set(schluessel, { zeit: Date.now(), titel });
   return titel;
@@ -206,7 +224,7 @@ async function alleGenreTitel(id, fetchFn) {
 
 /**
  * Titel eines Genres in der Form der HA-Dienste ({ uri, name, artists, duration, media_type }),
- * sortiert nach Interpret (ohne führendes „The“), dann Titel; seitenweise.
+ * sortiert nach Interpret (ohne führendes „The“), dann Alben in Titelfolge, dann Einzeltitel; seitenweise.
  */
 export async function genreTitel(id, { offset, limit } = {}, fetchFn = fetch) {
   const von = ganz(offset, 0, 1e6);

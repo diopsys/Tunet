@@ -228,3 +228,29 @@ describe('Album-Titel', () => {
     expect((await albumTitel('library://album/9', fetchFn))[0]).toMatchObject({ artists: [{ name: 'A' }, { name: 'B' }], hauptanzahl: 1 });
   });
 });
+
+describe('Genre-Titel: Alben vor Einzeltiteln', () => {
+  const antwort = (daten) => ({ ok: true, json: async () => daten });
+  afterEach(() => { vi.unstubAllEnvs(); cacheLeeren(); });
+
+  it('lists per artist the albums (oldest first) in track order, then the single tracks', async () => {
+    vi.stubEnv('MA_TOKEN', 'geheim');
+    const x = [{ name: 'Xavier Naidoo' }];
+    const nvdw = { uri: 'library://album/2173', name: 'Nicht von dieser Welt', year: 1997 };
+    const live = { uri: 'library://album/2174', name: 'Live', year: 2008 };
+    const wett = { uri: 'library://album/2175', name: 'Wettsingen in Schwetzingen', year: null };
+    const fetchFn = vi.fn(async () => antwort([
+      { uri: 'u:1', name: 'Abschied nehmen', artists: x, album: wett, track_number: 14, disc_number: 0 },
+      { uri: 'u:2', name: '20.000 Meilen', artists: x, album: live, track_number: 2, disc_number: 1 },
+      { uri: 'u:3', name: 'Zu Hause', artists: x, album: null },
+      { uri: 'u:4', name: 'Sie sieht mich nicht', artists: x, album: nvdw, track_number: 5, disc_number: 0 },
+      { uri: 'u:5', name: '20.000 Meilen', artists: x, album: nvdw, track_number: 2, disc_number: 0 },
+      { uri: 'u:6', name: 'Ich kenne nichts', artists: x, album: live, track_number: 1, disc_number: 2 },
+      { uri: 'u:7', name: 'Abgrund', artists: x },
+      { uri: 'u:8', name: 'Wir kiffen', artists: [{ name: 'Stefan Raab' }], album: null },
+    ]));
+    expect((await genreTitel('5', {}, fetchFn)).map((t) => t.uri)).toEqual([
+      'u:8', 'u:5', 'u:4', 'u:2', 'u:6', 'u:1', 'u:7', 'u:3',
+    ]);
+  });
+});
