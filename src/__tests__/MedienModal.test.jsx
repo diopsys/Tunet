@@ -116,6 +116,24 @@ describe('Medien-Fenster', () => {
     expect(laufenderIndex(items, { attributes: { media_title: 'drei' } }, 0)).toBe(2);
   });
 
+  it('starts the clicked title first when shuffle is on, the rest goes to the queue', async () => {
+    const items = [{ uri: 'library://track/1', name: 'Eins' }, { uri: 'library://track/2', name: 'Zwei' }, { uri: 'library://track/3', name: 'Drei' }];
+    const ents = (shuffle) => ({
+      'media_player.zone2': { state: 'on', attributes: { source: 'HEOS Music' } },
+      'media_player.ma': { state: 'playing', attributes: { shuffle } },
+    });
+    expect(maAbspielen(medien, items, 1, ents(true))).toEqual([
+      ['music_assistant', 'play_media', { entity_id: 'media_player.ma', media_id: ['library://track/2'], media_type: 'track', enqueue: 'replace' }],
+      ['music_assistant', 'play_media', { entity_id: 'media_player.ma', media_id: ['library://track/3'], media_type: 'track', enqueue: 'add' }],
+    ]);
+    // ohne Zufall, beim letzten Titel und bei Alben wie bisher ein Aufruf
+    expect(maAbspielen(medien, items, 1, ents(false))).toHaveLength(1);
+    expect(maAbspielen(medien, items, 2, ents(true))).toEqual([
+      ['music_assistant', 'play_media', { entity_id: 'media_player.ma', media_id: ['library://track/3'], media_type: 'track', enqueue: 'replace' }],
+    ]);
+    expect(maAbspielen(medien, [{ uri: 'library://album/5', media_type: 'album' }], 0, ents(true))).toHaveLength(1);
+  });
+
   it('switches the room to the player input only when needed', async () => {
     const items = [{ uri: 'library://track/1', name: 'Eins' }];
     const zone = (state, source) => ({ 'media_player.zone2': { state, attributes: { source } } });

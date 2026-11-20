@@ -129,10 +129,17 @@ export function maAbspielen(config, items, ab = 0, entities = null) {
   const t = items[ab];
   if (!t || !config?.player) return [];
   const media_id = t.media_type && t.media_type !== 'track' ? t.uri : nurTitel(items.slice(ab)).map((x) => x.uri);
-  return [
-    ...raumAktionen(config, entities),
-    ['music_assistant', 'play_media', { entity_id: config.player, media_id, media_type: t.media_type || 'track', enqueue: 'replace' }],
-  ];
+  const spielen = (id, enqueue) => ['music_assistant', 'play_media', { entity_id: config.player, media_id: id, media_type: t.media_type || 'track', enqueue }];
+  // Zufallswiedergabe an: MA würde die ganze Liste mischen und irgendwo anfangen. Wie bei Winamp
+  // läuft zuerst der gewählte Titel, der Rest kommt danach (gemischt) in die Warteschlange.
+  if (Array.isArray(media_id) && media_id.length > 1 && entities?.[config.player]?.attributes?.shuffle) {
+    return [
+      ...raumAktionen(config, entities),
+      spielen([media_id[0]], 'replace'),
+      spielen(media_id.slice(1), 'add'),
+    ];
+  }
+  return [...raumAktionen(config, entities), spielen(media_id, 'replace')];
 }
 
 /** Music Assistant: Titel anhängen ('add') oder als Nächstes ('next'). */
