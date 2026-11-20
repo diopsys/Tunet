@@ -234,6 +234,33 @@ describe('Medien-Fenster', () => {
     fetchMedienPlaylist.mockResolvedValue({ items: [], index: 0 });
   });
 
+  it('jumps in the playlist to the typed beginning, a pause of 1 s starts over', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true, toFake: ['Date'] });
+    fetchMedienPlaylist.mockResolvedValue({ items: [
+      { uri: 'library://track/1', name: 'You are', artist: 'Atomic Kitten' },
+      { uri: 'library://track/2', name: 'Take My Heart', artist: 'Band Ohne Namen' },
+      { uri: 'library://track/3', name: 'Walk Like an Egyptian', artist: 'The Bangles' },
+      { uri: 'library://track/4', name: 'Pompeii', artist: 'Bastille' },
+    ], index: 0 });
+    const callService = vi.fn();
+    const ents = { ...basis, 'media_player.tv': { state: 'off', attributes: {} }, 'media_player.vu': { state: 'off', attributes: {} } };
+    const r = render(<MedienCard cardId="m" entities={ents} settings={{ medien }} callService={callService} conn={{ sendMessagePromise: vi.fn(async () => ({ response: { items: [] } })) }} getEntityImageUrl={(u) => u} />);
+    fireEvent.click(r.container.firstChild);
+    await screen.findByRole('dialog');
+    await screen.findByText('The Bangles - Walk Like an Egyptian');
+    fireEvent.pointerDown(screen.getByLabelText('Playlist Editor'));
+    const gewaehlt = () => screen.getByRole('listbox', { name: 'Playlist' }).querySelector('[aria-selected="true"] .name')?.textContent;
+    for (const k of ['b', 'a', 'n', 'g']) fireEvent.keyDown(window, { key: k });
+    await waitFor(() => expect(gewaehlt()).toBe('The Bangles - Walk Like an Egyptian'));
+    // „b“ ist sonst „nächster Titel“ – in der Playlist nicht
+    expect(callService.mock.calls.some(([, s]) => s === 'media_next_track')).toBe(false);
+    vi.setSystemTime(Date.now() + 1100);
+    fireEvent.keyDown(window, { key: 'a' });
+    await waitFor(() => expect(gewaehlt()).toBe('Atomic Kitten - You are'));
+    vi.useRealTimers();
+    fetchMedienPlaylist.mockResolvedValue({ items: [], index: 0 });
+  });
+
   it('controls the volume with the arrow keys while the main window is active', async () => {
     const callService = vi.fn();
     const ents = {

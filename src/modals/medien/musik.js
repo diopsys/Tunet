@@ -72,6 +72,26 @@ export function browseTitel(c) {
   };
 }
 
+const vergleichstext = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLocaleLowerCase('de');
+const anzeige = (t) => vergleichstext([t?.artist, t?.name].filter(Boolean).join(' - ')).replace(/^the\s+/, '');
+
+/**
+ * Eintippen in der Playlist: Index des ersten Eintrags, dessen Anzeige („Interpret - Titel“, ohne
+ * führendes „The“, ohne Akzente) mit `text` beginnt; -1, wenn keiner passt. Ein einzelner
+ * Buchstabe sucht ab dem Eintrag nach `aktuell` (zweimal „b“ = nächster mit B), sonst ab vorn.
+ */
+export function eintippenIndex(items, text, aktuell = -1) {
+  const t = vergleichstext(text);
+  if (!t || !Array.isArray(items) || !items.length) return -1;
+  const n = items.length;
+  const start = t.length === 1 ? aktuell + 1 : 0;
+  for (let j = 0; j < n; j += 1) {
+    const i = (Math.max(0, start) + j) % n;
+    if (anzeige(items[i]).startsWith(t)) return i;
+  }
+  return -1;
+}
+
 /** Winamp-Zeit: m:ss bzw. h:mm:ss. */
 export function zeit(sek) {
   if (!Number.isFinite(sek) || sek < 0) return '';

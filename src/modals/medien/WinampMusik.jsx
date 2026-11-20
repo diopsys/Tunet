@@ -6,7 +6,7 @@ import {
   saveMedienPlaylist,
 } from '../../services/settingsApi';
 import {
-  auswahlKlick, ausblendenKonfig, blockSchieben, browseTitel, dauerErgaenzen, fehlendeDauer, istSpotifyUri, laufenderIndex, maAbspielen, maEinreihen,
+  auswahlKlick, ausblendenKonfig, blockSchieben, browseTitel, dauerErgaenzen, eintippenIndex, fehlendeDauer, istSpotifyUri, laufenderIndex, maAbspielen, maEinreihen,
   maRestErsetzen, maTitel, ohneAuswahl, position, spAbspielen, spListe, spSpringen, spTitel, spWarteschlange, zeit,
 } from './musik';
 import useLautstaerke from './useLautstaerke';
@@ -109,6 +109,8 @@ const ART_NAME = {
   album: 'Album', playlist: 'Playlist', artist: 'Künstler', folder: 'Ordner', radio: 'Radio', gespeichert: 'Liste', genre: 'Genre',
 };
 const TASTEN_AUS = ['INPUT', 'TEXTAREA', 'SELECT'];
+// Eintippen in der Playlist: so lange gehören Buchstaben zusammen
+const EINTIPPEN_MS = 1000;
 
 const Knopf = ({ onClick, label, aktiv, led, gross, disabled, children, ...rest }) => (
   <button
@@ -293,6 +295,10 @@ function PlaylistEditor({
     listeRef.current?.querySelector('[aria-current="true"]')?.scrollIntoView?.({ block: 'nearest' });
   }, [laufend]);
   const erster = auswahl.length ? auswahl[0] : -1;
+  // gewählten Titel sichtbar halten (Pfeiltasten, Eintippen)
+  useEffect(() => {
+    if (erster >= 0) listeRef.current?.querySelector('[aria-selected="true"]')?.scrollIntoView?.({ block: 'nearest' });
+  }, [erster]);
   const speichern = (e) => {
     e.preventDefault();
     if (!name?.trim()) return;
@@ -855,6 +861,7 @@ export default function WinampMusik({ config, entities, callService, conn, raum 
   const gewaehltesSpielen = () => (fokus === 'lib' ? libApi.current?.spielen() : playlistAuswahlSpielen());
 
   // Winamp-Tasten (nur außerhalb von Eingabefeldern)
+  const eintippen = useRef({ text: '', zeit: 0 });
   const tastenRef = useRef(null);
   tastenRef.current = (e) => {
     if (TASTEN_AUS.includes(e.target?.tagName) || e.target?.isContentEditable || e.altKey) return;
@@ -862,6 +869,19 @@ export default function WinampMusik({ config, entities, callService, conn, raum 
     const p = (service) => playerId && ruf([['media_player', service, { entity_id: playerId }]]);
     if (e.shiftKey && (k === 'V' || k === 'v')) { e.preventDefault(); ausblenden(null); return; }
     if (e.ctrlKey || e.metaKey) return;
+    // Playlist im Fokus: Buchstaben springen zum Anfang (statt Winamp-Tasten); 1 s Pause beginnt neu
+    if (fokus === 'liste' && k.length === 1 && liste.length) {
+      const jetzt = Date.now();
+      const neu = jetzt - eintippen.current.zeit > EINTIPPEN_MS;
+      if (neu && k === ' ') return;
+      e.preventDefault();
+      const text = (neu ? '' : eintippen.current.text) + k;
+      eintippen.current = { text, zeit: jetzt };
+      const aktuell = plWahl.auswahl.length ? plWahl.auswahl[plWahl.auswahl.length - 1] : -1;
+      const i = eintippenIndex(liste, text, aktuell);
+      if (i >= 0) setPlWahl({ auswahl: [i], anker: i });
+      return;
+    }
     if (k === 'Enter') {
       const los = gewaehltesSpielen();
       if (!los) return;
