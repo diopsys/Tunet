@@ -166,9 +166,17 @@ export async function genreAlben(id, { offset, limit } = {}, fetchFn = fetch) {
     .map(albumForm);
 }
 
+// Music Assistant trennt Zusätze wie „(Radiomix)“ oder „(Live)“ vom Titel ab und legt sie in
+// version ab – ohne sie stehen Fassungen eines Titels gleichnamig untereinander.
+const titelName = (t) => {
+  const version = typeof t.version === 'string' ? t.version.trim() : '';
+  if (!version || t.name.toLocaleLowerCase('de').includes(version.toLocaleLowerCase('de'))) return t.name;
+  return `${t.name} (${version})`;
+};
+
 const titelForm = (t) => ({
   uri: t.uri,
-  name: t.name,
+  name: titelName(t),
   artists: (Array.isArray(t.artists) ? t.artists : []).filter((k) => k?.name).map((k) => ({ name: k.name })),
   duration: Number.isFinite(t.duration) && t.duration > 0 ? t.duration : null,
   media_type: 'track',

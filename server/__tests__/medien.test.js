@@ -200,6 +200,22 @@ describe('Album-Titel', () => {
     ]);
   });
 
+  it('appends the version to the track name unless it is already part of it', async () => {
+    vi.stubEnv('MA_TOKEN', 'geheim');
+    const fetchFn = vi.fn(async (url, opts) => {
+      const { command } = JSON.parse(opts.body);
+      if (command === 'music/albums/get') return antwort({ uri: 'library://album/7', name: 'Bohème', artists: [{ name: 'Annett Louisan' }] });
+      return antwort([
+        { uri: 'library://track/1', name: 'Das Spiel', version: '', track_number: 1, artists: [{ name: 'Annett Louisan' }] },
+        { uri: 'library://track/13', name: 'Das Spiel', version: 'Radiomix', track_number: 13, artists: [{ name: 'Annett Louisan' }] },
+        { uri: 'library://track/14', name: 'Das Spiel (Live)', version: 'live', track_number: 14, artists: [{ name: 'Annett Louisan' }] },
+      ]);
+    });
+    expect((await albumTitel('library://album/7', fetchFn)).map((t) => t.name)).toEqual([
+      'Das Spiel', 'Das Spiel (Radiomix)', 'Das Spiel (Live)',
+    ]);
+  });
+
   it('rejects other uris and works without the album itself', async () => {
     vi.stubEnv('MA_TOKEN', 'geheim');
     expect(await albumTitel('library://track/1', vi.fn())).toBeNull();
