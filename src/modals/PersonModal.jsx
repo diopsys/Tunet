@@ -13,6 +13,13 @@ import {
   formatRelativeTime,
 } from '../utils';
 
+const OSM_TILE_OPTIONS = {
+  maxZoom: 19,
+  referrerPolicy: 'strict-origin-when-cross-origin',
+  attribution:
+    '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a>',
+};
+
 function getBatteryTone(level) {
   if (level < 20) return 'text-[var(--status-error-fg)]';
   if (level < 50) return 'text-[var(--status-warning-fg)]';
@@ -208,7 +215,9 @@ export default function PersonModal({
   const isLightTheme =
     typeof document !== 'undefined' && document.documentElement.dataset.theme === 'light';
   // OSM tiles are free with no API key; dark mode applied via CSS filter on tiles only
-  const tileUrl = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+  // OSM tile policy: single host (no a/b/c subdomains), attribution and a Referer are required.
+  // Home Assistant sends "Referrer-Policy: no-referrer", so the tile images set their own policy.
+  const tileUrl = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
   const tileClassName = isLightTheme ? '' : 'osm-tile-dark';
 
   // 1. Manual Override
@@ -274,10 +283,10 @@ export default function PersonModal({
         }).setView([currentLat, currentLon], 14);
 
         tileLayerRef.current = L.tileLayer(tileUrl, {
-          subdomains: 'abc',
-          maxZoom: 19,
+          ...OSM_TILE_OPTIONS,
           className: tileClassName,
         }).addTo(map);
+        L.control.attribution({ prefix: false }).addTo(map);
 
         mapInstanceRef.current = map;
         // Invalidate size to ensure it fills container
@@ -287,8 +296,7 @@ export default function PersonModal({
         if (hasDifferentLayer) {
           tileLayerRef.current?.remove();
           tileLayerRef.current = L.tileLayer(tileUrl, {
-            subdomains: 'abc',
-            maxZoom: 19,
+            ...OSM_TILE_OPTIONS,
             className: tileClassName,
           }).addTo(mapInstanceRef.current);
         }
