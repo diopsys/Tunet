@@ -43,6 +43,15 @@ describe('eintippenIndex', () => {
     expect(eintippenIndex(liste, 'b', 3)).toBe(1);
   });
 
+  it('searches the titles when no artist fits', () => {
+    const mit = [...liste, { artist: 'Xavier Naidoo', name: 'Holt die Seeleute heim' }, { artist: 'Helge and the Firefuckers', name: 'Hey Joe' }];
+    expect(eintippenIndex(mit, 'holt')).toBe(5);
+    expect(eintippenIndex(mit, 'holt d')).toBe(5);
+    // Interpret geht vor: „he“ = Helge, nicht „Heart“ im Titel
+    expect(eintippenIndex(mit, 'he')).toBe(6);
+    expect(eintippenIndex(mit, 'holt ein')).toBe(-1);
+  });
+
   it('ignores accents', () => {
     expect(eintippenIndex(liste, 'a', 0)).toBe(4);
   });

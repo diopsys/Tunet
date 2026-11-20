@@ -76,8 +76,9 @@ const vergleichstext = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/
 const anzeige = (t) => vergleichstext([t?.artist, t?.name].filter(Boolean).join(' - ')).replace(/^the\s+/, '');
 
 /**
- * Eintippen in der Playlist: Index des ersten Eintrags, dessen Anzeige („Interpret - Titel“, ohne
- * führendes „The“, ohne Akzente) mit `text` beginnt; -1, wenn keiner passt. Ein einzelner
+ * Eintippen in der Playlist: Index des ersten Eintrags, dessen Anzeige („Interpret - Titel“) mit
+ * `text` beginnt, sonst des ersten, dessen Titel damit beginnt; jeweils ohne führendes „The“ und
+ * ohne Akzente; -1, wenn keiner passt. Ein einzelner
  * Buchstabe sucht ab dem Eintrag nach `aktuell` (zweimal „b“ = nächster mit B), sonst ab vorn.
  */
 export function eintippenIndex(items, text, aktuell = -1) {
@@ -85,11 +86,16 @@ export function eintippenIndex(items, text, aktuell = -1) {
   if (!t || !Array.isArray(items) || !items.length) return -1;
   const n = items.length;
   const start = t.length === 1 ? aktuell + 1 : 0;
-  for (let j = 0; j < n; j += 1) {
-    const i = (Math.max(0, start) + j) % n;
-    if (anzeige(items[i]).startsWith(t)) return i;
-  }
-  return -1;
+  const suchen = (passt) => {
+    for (let j = 0; j < n; j += 1) {
+      const i = (Math.max(0, start) + j) % n;
+      if (passt(items[i])) return i;
+    }
+    return -1;
+  };
+  // erst Interpret („Interpret - Titel“), dann Titel allein („holt“ → „Holt die Seeleute heim“)
+  const i = suchen((x) => anzeige(x).startsWith(t));
+  return i >= 0 ? i : suchen((x) => vergleichstext(x?.name).replace(/^the\s+/, '').startsWith(t));
 }
 
 /** Winamp-Zeit: m:ss bzw. h:mm:ss. */
