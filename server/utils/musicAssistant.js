@@ -274,6 +274,44 @@ export async function albumTitel(uri, fetchFn = fetch) {
     .map((t) => ({ ...titelForm(t), ...interpretenOrdnen(t.artists, album?.artists || t.album?.artists) }));
 }
 
+const KUENSTLER_URI = /^([a-z][a-z0-9_-]*):\/\/artist\/([^/?#]{1,200})$/i;
+
+/** Reihenfolge der Titel eines Künstlers: Alben (älteste zuerst) in CD- und Titelfolge, dann Titel ohne Album. */
+function kuenstlerTitelVergleich(x, y) {
+  const ax = x.album?.uri ? x.album : null;
+  const ay = y.album?.uri ? y.album : null;
+  return (ax ? 0 : 1) - (ay ? 0 : 1)
+    || (ax && ay && ax.uri !== ay.uri
+      ? (jahr(ax) - jahr(ay) || 0) || vergleich.compare(String(ax.name || ''), String(ay.name || '')) || vergleich.compare(ax.uri, ay.uri)
+      : 0)
+    || (ax && ay ? nummer(x.disc_number) - nummer(y.disc_number) || nummer(x.track_number) - nummer(y.track_number) : 0)
+    || vergleich.compare(titelName(x), titelName(y));
+}
+
+/**
+ * Alben und alle Titel eines Künstlers: [Alben (albumForm, älteste zuerst), Titel (titelForm)].
+ * browse_media liefert für einen Künstler nur seine eigenen Alben – Künstler, die nur auf Samplern
+ * vorkommen (10cc, 4 Non Blondes), blieben dort leer. null bei fremder URI.
+ */
+export async function kuenstlerInhalt(uri, fetchFn = fetch) {
+  const m = typeof uri === 'string' ? uri.match(KUENSTLER_URI) : null;
+  if (!m) return null;
+  const ziel = { item_id: m[2], provider_instance_id_or_domain: m[1] };
+  const [alben, titel] = await Promise.all([
+    befehl('music/artists/artist_albums', ziel, fetchFn).catch(() => []),
+    befehl('music/artists/artist_tracks', ziel, fetchFn),
+  ]);
+  const albenListe = liste(alben)
+    .filter((a) => a?.uri && a?.name)
+    .sort((x, y) => (jahr(x) - jahr(y) || 0) || vergleich.compare(String(x.name), String(y.name)))
+    .map(albumForm);
+  const titelListe = liste(titel)
+    .filter((t) => t?.uri && t?.name)
+    .sort(kuenstlerTitelVergleich)
+    .map((t) => ({ ...titelForm(t), ...interpretenOrdnen(t.artists, t.album?.artists) }));
+  return [...albenListe, ...titelListe];
+}
+
 /** Nur für Tests. */
 export function cacheLeeren() {
   cache.clear();

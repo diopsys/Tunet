@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import db from '../db.js';
-import { albumTitel, genreAlben, genreTitel, genres, maAktiv, titelDauer } from '../utils/musicAssistant.js';
+import { albumTitel, genreAlben, genreTitel, genres, kuenstlerInhalt, maAktiv, titelDauer } from '../utils/musicAssistant.js';
 
 /*
  * Playlist der Medien-Kachel (Winamp-Fenster) je Raum: die Liste, die gerade über Music
@@ -139,6 +139,20 @@ router.get('/album', async (req, res) => {
     return res.json({ aktiv: true, items });
   } catch (err) {
     console.warn(`[medien] Titel eines Albums aus Music Assistant: ${err.message}`);
+    return res.json({ aktiv: true, items: [], fehler: err.message });
+  }
+});
+
+// Alben und Titel eines Künstlers (auch Titel nur auf Samplern); ohne ma_token aktiv: false
+router.get('/kuenstler', async (req, res) => {
+  if (!maAktiv()) return res.json({ aktiv: false, items: [] });
+  const uri = typeof req.query.uri === 'string' ? req.query.uri.slice(0, 300) : '';
+  try {
+    const items = await kuenstlerInhalt(uri);
+    if (items === null) return res.status(400).json({ error: 'Ungültige Künstler-URI' });
+    return res.json({ aktiv: true, items });
+  } catch (err) {
+    console.warn(`[medien] Alben und Titel eines Künstlers aus Music Assistant: ${err.message}`);
     return res.json({ aktiv: true, items: [], fehler: err.message });
   }
 });

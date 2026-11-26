@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pause, Play, Repeat, Shuffle, SkipBack, SkipForward } from '../../icons';
 import { beideZonenAktionen, nacheinander, playAktionen } from '../../components/cards/MedienCard';
 import {
-  deleteMedienPlaylist, fetchMedienAlbumTitel, fetchMedienDauer, fetchMedienGenreAlben, fetchMedienGenreTitel, fetchMedienGenres, fetchMedienListen, fetchMedienPlaylist,
+  deleteMedienPlaylist, fetchMedienAlbumTitel, fetchMedienDauer, fetchMedienGenreAlben, fetchMedienGenreTitel, fetchMedienGenres, fetchMedienKuenstler, fetchMedienListen, fetchMedienPlaylist,
   saveMedienPlaylist,
 } from '../../services/settingsApi';
 import {
@@ -546,6 +546,12 @@ function MediaLibrary({ config, conn, raum, apiRef, suchRef, mehrfach, setMehrfa
           if (r?.aktiv && r.items?.length) {
             items = r.items.map(maTitel).filter(Boolean).map((t) => ({ ...t, image: t.image || item.image || null }));
           }
+        }
+        // Künstler über den Tunet-Server: Alben und alle Titel – browse_media nennt nur eigene Alben,
+        // Künstler, die nur auf Samplern vorkommen, blieben leer
+        if (item.quelle === 'ma' && item.media_type === 'artist' && /^[a-z][a-z0-9_-]*:\/\/artist\//i.test(item.uri || '')) {
+          const r = await fetchMedienKuenstler(item.uri).catch(() => null);
+          if (r?.aktiv && r.items?.length) items = r.items.map(maTitel).filter(Boolean);
         }
         if (!items.length) items = await aufklappen(conn, config.player, item);
       }

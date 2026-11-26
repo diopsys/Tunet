@@ -3,7 +3,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { playlistBereinigen } from '../routes/medien.js';
 import {
-  albumTitel, cacheLeeren, genreAlben, interpretenOrdnen, genreTitel, genres, gueltigeUri, titelDauer,
+  albumTitel, cacheLeeren, genreAlben, interpretenOrdnen, genreTitel, genres, gueltigeUri, kuenstlerInhalt, titelDauer,
 } from '../utils/musicAssistant.js';
 
 describe('playlistBereinigen', () => {
@@ -226,6 +226,53 @@ describe('Album-Titel', () => {
       return antwort([{ uri: 'library://track/1', name: 'X', artists: [{ name: 'B' }, { name: 'A' }], album: { artists: [{ name: 'A' }] } }]);
     });
     expect((await albumTitel('library://album/9', fetchFn))[0]).toMatchObject({ artists: [{ name: 'A' }, { name: 'B' }], hauptanzahl: 1 });
+  });
+});
+
+describe('Künstler: Alben und Titel', () => {
+  const antwort = (daten) => ({ ok: true, json: async () => daten });
+  afterEach(() => { vi.unstubAllEnvs(); });
+
+  it('lists the titles of an artist who only appears on compilations', async () => {
+    vi.stubEnv('MA_TOKEN', 'geheim');
+    const fetchFn = vi.fn(async (url, opts) => {
+      const { command, args } = JSON.parse(opts.body);
+      expect(args).toMatchObject({ item_id: '3194', provider_instance_id_or_domain: 'library' });
+      if (command === 'music/artists/artist_albums') return antwort([]);
+      return antwort([
+        { uri: 'library://track/2', name: 'Whats up', duration: 295, artists: [{ name: '4 Non Blondes' }], album: { uri: 'library://album/20', name: 'The Very Best Of All Woman', year: 2005, artists: [] } },
+        { uri: 'library://track/1', name: 'What’s Up', duration: 296, artists: [{ name: '4 Non Blondes' }], album: { uri: 'library://album/10', name: 'Volume 3', year: 2004, artists: [] } },
+      ]);
+    });
+    expect(await kuenstlerInhalt('library://artist/3194', fetchFn)).toEqual([
+      { uri: 'library://track/1', name: 'What’s Up', artists: [{ name: '4 Non Blondes' }], hauptanzahl: 0, duration: 296, media_type: 'track' },
+      { uri: 'library://track/2', name: 'Whats up', artists: [{ name: '4 Non Blondes' }], hauptanzahl: 0, duration: 295, media_type: 'track' },
+    ]);
+  });
+
+  it('puts the albums (oldest first) before the titles, titles without album last', async () => {
+    vi.stubEnv('MA_TOKEN', 'geheim');
+    const b = [{ name: 'Band' }];
+    const fetchFn = vi.fn(async (url, opts) => {
+      const { command } = JSON.parse(opts.body);
+      if (command === 'music/artists/artist_albums') {
+        return antwort([{ uri: 'library://album/2', name: 'Zwei', year: 2001, artists: b }, { uri: 'library://album/1', name: 'Eins', year: 1999, artists: b }]);
+      }
+      return antwort([
+        { uri: 'library://track/9', name: 'Single', artists: b },
+        { uri: 'library://track/3', name: 'B', track_number: 2, artists: b, album: { uri: 'library://album/1', name: 'Eins', year: 1999, artists: b } },
+        { uri: 'library://track/4', name: 'C', track_number: 1, artists: b, album: { uri: 'library://album/2', name: 'Zwei', year: 2001, artists: b } },
+        { uri: 'library://track/5', name: 'A', track_number: 1, artists: b, album: { uri: 'library://album/1', name: 'Eins', year: 1999, artists: b } },
+      ]);
+    });
+    const r = await kuenstlerInhalt('library://artist/1', fetchFn);
+    expect(r.map((x) => `${x.media_type}:${x.name}`)).toEqual(['album:Eins', 'album:Zwei', 'track:A', 'track:B', 'track:C', 'track:Single']);
+    expect(r[2].hauptanzahl).toBe(1);
+  });
+
+  it('rejects other uris', async () => {
+    expect(await kuenstlerInhalt('library://album/1', vi.fn())).toBeNull();
+    expect(await kuenstlerInhalt('spotify:artist:1', vi.fn())).toBeNull();
   });
 });
 
