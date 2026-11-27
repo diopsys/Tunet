@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback, memo } from 'react';
 import { Lightbulb, ChevronRight, Zap, ToggleLeft, Workflow, Lock, Unlock } from '../../icons';
 import { getIconComponent } from '../../icons';
 import M3Slider from '../ui/M3Slider';
-import { DEFAULT_LIGHT_PANEL_TABS as DEFAULT_TABS, tabShowsSchedules } from './lightPanelDefaults';
+import { DEFAULT_LIGHT_PANEL_TABS as DEFAULT_TABS, scheduleEntityFilter, tabShowsSchedules } from './lightPanelDefaults';
 import PanelSchedules from '../schedule/PanelSchedules';
 
 const DEBOUNCE_MS = 200;
@@ -79,7 +79,10 @@ const LightTile = memo(({
   const btnIcon = isMobile ? 'h-3.5 w-3.5' : 'h-4 w-4';
 
   return (
-    <div className={`glass-texture overflow-hidden rounded-2xl border border-[var(--glass-border)] bg-[var(--card-bg)] transition-all duration-300 ${isUnavailable ? 'opacity-50' : ''}`}>
+    <div
+      data-schedule-entity={entityId}
+      className={`glass-texture overflow-hidden rounded-2xl border border-[var(--glass-border)] bg-[var(--card-bg)] transition-all duration-300 ${isUnavailable ? 'opacity-50' : ''}`}
+    >
       <div className="flex items-center">
         <button
           type="button"
@@ -276,7 +279,7 @@ const LightPanelCard = ({
                 <div className="h-px flex-1 bg-[var(--glass-border)]" />
               </div>
             )}
-            <PanelSchedules entities={entities} editMode={editMode} t={t} />
+            <PanelSchedules entities={entities} editMode={editMode} t={t} entityIds={scheduleEntityFilter(activeTab)} />
           </>
         )}
 

@@ -2,19 +2,35 @@ import { memo, useMemo } from 'react';
 import { Plus } from '../../icons';
 import { useHomeAssistantMeta } from '../../contexts';
 import { useSchedules } from '../../hooks/useSchedules';
-import { scheduleContext } from '../../utils/scheduleModel';
+import { isPickable, scheduleContext } from '../../utils/scheduleModel';
 import { openScheduleEditor } from '../../utils/scheduleEvents';
 import ScheduleEntry, { sortSchedules } from './ScheduleEntry';
 
-/** Zeitpläne der Zeitschaltuhr als Kacheln im Licht-Panel (Bereich „Zeitsteuerung“). */
-function PanelSchedules({ entities, editMode, t }) {
+/** Nur Zeitpläne, die mindestens eine der Entitäten schalten (entityIds null = alle). */
+export function filterSchedulesByEntities(schedules, entityIds) {
+  if (!entityIds) return schedules || [];
+  const wanted = new Set(entityIds);
+  return (schedules || []).filter((s) => (s.targets?.entities || []).some((id) => wanted.has(id)));
+}
+
+/**
+ * Zeitpläne der Zeitschaltuhr als Kacheln im Licht-Panel (Bereich „Zeitsteuerung“).
+ * entityIds: nur Zeitpläne für diese Geräte zeigen; „Neu“ schlägt dann die Lichter davon vor.
+ */
+function PanelSchedules({ entities, editMode, t, entityIds = null }) {
   const { haConfig } = useHomeAssistantMeta();
   const { schedules, settings, loaded } = useSchedules();
   const ctx = useMemo(() => scheduleContext(haConfig), [haConfig]);
   const now = Date.now();
   const minute = Math.floor(now / 60_000);
   const vacation = Boolean(settings?.vacation);
-  const sorted = useMemo(() => sortSchedules(schedules, minute * 60_000, ctx, vacation), [schedules, ctx, vacation, minute]);
+  const filterKey = entityIds ? entityIds.join('|') : null;
+  const sorted = useMemo(
+    () => sortSchedules(filterSchedulesByEntities(schedules, entityIds), minute * 60_000, ctx, vacation),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [schedules, ctx, vacation, minute, filterKey]
+  );
+  const suggested = useMemo(() => (entityIds || []).filter(isPickable), [filterKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!loaded) return null;
   return (
@@ -24,7 +40,7 @@ function PanelSchedules({ entities, editMode, t }) {
       ))}
       <button
         type="button"
-        onClick={() => openScheduleEditor({})}
+        onClick={() => openScheduleEditor(suggested.length ? { entities: suggested } : {})}
         className="flex min-h-[64px] items-center justify-center gap-1.5 rounded-2xl border border-dashed border-[var(--glass-border)] text-xs font-semibold text-[var(--text-muted)] transition-colors hover:bg-[var(--glass-bg-hover)] hover:text-[var(--text-primary)]"
       >
         <Plus className="h-4 w-4" />

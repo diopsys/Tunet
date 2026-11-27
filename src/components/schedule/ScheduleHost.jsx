@@ -7,6 +7,7 @@ import {
   createDraft,
   entityIdsForCard,
   formatClock,
+  isPickable,
   nextSwitchByEntity,
   scheduleContext,
 } from '../../utils/scheduleModel';
@@ -79,7 +80,9 @@ export default function ScheduleHost({ editMode, cardSettings, activePage, callS
       if (!card) return;
       const cardId = card.getAttribute('data-card-id');
       if (cardId.startsWith('zeitschaltuhr_card_')) return;
-      const ids = entityIdsForCard(cardId, settingsFor(cardId));
+      // Kachel mit eigenem Gerät (z. B. im Licht-Panel) → nur dieses Gerät, sonst alle der Karte
+      const tileEntity = event.target?.closest?.('[data-schedule-entity]')?.getAttribute('data-schedule-entity');
+      const ids = tileEntity ? (isPickable(tileEntity) ? [tileEntity] : []) : entityIdsForCard(cardId, settingsFor(cardId));
       if (!ids.length) return;
       cancel();
       pressRef.current = {

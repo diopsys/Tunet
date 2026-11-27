@@ -58,3 +58,25 @@ export const DEFAULT_LIGHT_PANEL_TABS = [
 
 /** Zeitschaltuhr im Tab zeigen? Ohne Einstellung nur im Tab „Automatik“. */
 export const tabShowsSchedules = (tab) => (typeof tab?.showSchedules === 'boolean' ? tab.showSchedules : tab?.id === 'automatik');
+
+/**
+ * Welche Zeitpläne ein Tab zeigt: „Automatik“ alle, jeder andere Tab nur die,
+ * die mindestens ein Gerät des Tabs schalten. null = keine Einschränkung.
+ */
+export const scheduleEntityFilter = (tab) =>
+  tab?.id === 'automatik' ? null : (tab?.entities || []).map((e) => e.entityId);
+
+/** Neue, eindeutige Tab-ID aus dem Titel (z. B. „Weihnachten“ → „weihnachten“, sonst „tab_2“). */
+export function newTabId(title, tabs) {
+  const base =
+    String(title || '')
+      .toLowerCase()
+      .replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/ß/g, 'ss')
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '') || 'tab';
+  const used = new Set((tabs || []).map((t) => t.id));
+  if (!used.has(base)) return base;
+  let n = 2;
+  while (used.has(`${base}_${n}`)) n += 1;
+  return `${base}_${n}`;
+}
