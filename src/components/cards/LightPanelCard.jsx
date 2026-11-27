@@ -283,12 +283,12 @@ const LightPanelCard = ({
           </>
         )}
 
-        {/* Licht / Automatik section */}
+        {/* Geräte des Tabs (im Tab „Automatik“: Automationen) */}
         {regularEntities.length > 0 && (
           <>
             {hasBothGroups && (
               <div className="col-span-full flex items-center gap-2">
-                <span className="text-[10px] font-bold uppercase tracking-widest text-[var(--text-muted)] opacity-60">Automatik</span>
+                <span className="text-[10px] font-bold uppercase tracking-widest text-[var(--text-muted)] opacity-60">{activeTab?.id === 'automatik' ? 'Automationen' : 'Geräte'}</span>
                 <div className="h-px flex-1 bg-[var(--glass-border)]" />
               </div>
             )}

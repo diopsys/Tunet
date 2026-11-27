@@ -52,3 +52,25 @@ describe('LightPanelCard', () => {
     expect(screen.getByText('Stern')).toBeTruthy();
   });
 });
+
+describe('LightPanelCard: Überschriften', () => {
+  it('nennt die Kacheln unter der Zeitsteuerung „Geräte“', async () => {
+    vi.resetModules();
+    vi.doMock('../components/schedule/PanelSchedules', () => ({ default: () => null }));
+    const { default: Card } = await import('../components/cards/LightPanelCard');
+    render(
+      <Card
+        cardId="light_panel_card_1"
+        entities={{ 'light.kette': { state: 'off', attributes: {} } }}
+        callService={vi.fn()}
+        optimisticLightBrightness={{}}
+        setOptimisticLightBrightness={vi.fn()}
+        settings={{ panelTabs: [{ id: 'weihnachten', title: 'Weihnachten', showSchedules: true, entities: [{ entityId: 'light.kette', name: 'Kette' }] }] }}
+        isMobile={false}
+        t={(k) => k}
+      />
+    );
+    expect(screen.getByText('Geräte')).toBeTruthy();
+    expect(screen.queryByText('Automatik')).toBeNull();
+  });
+});
