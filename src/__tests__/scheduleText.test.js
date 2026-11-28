@@ -5,6 +5,7 @@ import {
   findConflicts,
   fromHacsSchedule,
   hacsImportItems,
+  isPickable,
   nextSwitchByEntity,
 } from '../utils/scheduleModel';
 
@@ -76,8 +77,13 @@ describe('parseScheduleText', () => {
     expect(parseScheduleText('EG Flur um 18 Uhr an', { entities: dup }).draft.targets.entities).toEqual(['light.eg_flur']);
   });
 
-  it('offers only lights for now and understands a duration', () => {
-    expect(parseScheduleText('Kaffeemaschine um 6 Uhr an', { entities, areas }).missing).toContain('target');
+  it('offers lights and switches, but not scheduler switches, and understands a duration', () => {
+    expect(parseScheduleText('Kaffeemaschine um 6 Uhr an', { entities, areas }).draft.targets.entities).toEqual(['switch.kaffee']);
+    const sched = { 'switch.schedule_abc': { attributes: { friendly_name: 'Carport Aus' } } };
+    expect(parseScheduleText('Carport Aus um 6 Uhr an', { entities: sched }).missing).toContain('target');
+    expect(isPickable('switch.stern_titus')).toBe(true);
+    expect(isPickable('switch.schedule_0cc89b')).toBe(false);
+    expect(isPickable('cover.garage')).toBe(false);
     const { draft } = parseScheduleText('Terrasse täglich ab Sonnenuntergang für 2,5 Stunden', { entities, areas });
     expect(draft.slots[0]).toMatchObject({ start: { type: 'sunset', offset: 0 }, end: { type: 'duration', minutes: 150 } });
     expect(parseScheduleText('Schlafzimmer 6:30 bis 8 Uhr 10 min lang aufdimmen', { entities, areas }).draft.slots[0].end).toEqual({ type: 'time', time: '08:00' });

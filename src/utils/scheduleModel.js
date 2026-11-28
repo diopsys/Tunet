@@ -207,9 +207,11 @@ const SCHEDULABLE = new Set([
 
 export const isSchedulable = (entityId) => ENTITY_ID.test(entityId || '') && SCHEDULABLE.has(domainOf(entityId));
 
-// Vorerst bietet die Oberfläche nur Lichter an; Server und Datenformat können mehr
-export const PICKABLE_DOMAINS = new Set(['light']);
-export const isPickable = (entityId) => isSchedulable(entityId) && PICKABLE_DOMAINS.has(domainOf(entityId));
+// Die Oberfläche bietet Lichter und Schalter (z. B. Steckdosen) an; Server und Datenformat können mehr.
+// Zeitplan-Schalter der HACS-Komponente (switch.schedule_*) sind selbst Zeitpläne, keine Geräte.
+export const PICKABLE_DOMAINS = new Set(['light', 'switch']);
+export const isPickable = (entityId) =>
+  isSchedulable(entityId) && PICKABLE_DOMAINS.has(domainOf(entityId)) && !String(entityId).startsWith('switch.schedule_');
 
 /** Alle schaltbaren Entitäten, die eine Karte zeigt (Karten-ID und Karteneinstellungen). */
 export function entityIdsForCard(cardId, settings) {
