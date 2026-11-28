@@ -82,6 +82,21 @@ describe('validate', () => {
     expect(value.action.on.brightness).toBe(100);
     expect(sanitizeSchedule({ targets: { entities: [] } }).error).toBeTruthy();
   });
+
+  it('keeps empty numbers empty instead of turning them into 0', () => {
+    const { value } = sanitizeSchedule({
+      targets: { entities: ['light.flur'] },
+      slots: [{ start: { type: 'sunset', offset: null }, end: { type: 'time', time: '23:00' } }],
+      action: { on: { brightness: null, colorTemp: '' }, off: { position: null } },
+      weekdays: ALL_DAYS,
+      conditions: { darkOnly: true, luxEntity: 'sensor.lux', luxBelow: null },
+    });
+    expect(value.conditions.luxBelow).toBeNull();
+    expect(value.action.on).toEqual({});
+    expect(value.action.off).toEqual({});
+    expect(value.slots[0].start).toEqual({ type: 'sunset', offset: 0 });
+    expect(sanitizeSchedule({ targets: { entities: ['light.flur'] }, slots: [{ start: { type: 'time', time: '18:00' }, end: { type: 'time', time: '19:00' } }], weekdays: ALL_DAYS, conditions: { luxBelow: '30' } }).value.conditions.luxBelow).toBe(30);
+  });
 });
 
 describe('actions', () => {
@@ -167,6 +182,22 @@ describe('engine', () => {
     await t.engine.tick();
     expect(t.ha.callService).not.toHaveBeenCalled();
     expect(t.store.listRuns().map((r) => r.status)).toEqual(['skipped', 'skipped']);
+  });
+
+  it('treats a stored lux limit of 0 as the default (50 lx)', async () => {
+    const slots = [{ id: 's1', start: { type: 'time', time: '18:00' }, end: { type: 'time', time: '19:00' } }];
+    const s = schedule({ slots, conditions: { darkOnly: true, luxEntity: 'sensor.lux', luxBelow: 0 } });
+    const states = [{ entity_id: 'sensor.lux', state: '3' }];
+    const t = setup({ schedules: [s], states, start: berlin('2026-11-12T17:00:05Z') });
+    t.store.setState('lastTick', berlin('2026-11-12T16:59:55Z'));
+    await t.engine.tick();
+    expect(t.ha.callService).toHaveBeenCalledWith('light', 'turn_on', { entity_id: ['light.flur'] });
+    states[0].state = '80';
+    t.set(berlin('2026-11-13T17:00:05Z'));
+    t.store.setState('lastTick', berlin('2026-11-13T16:59:55Z'));
+    await t.engine.tick();
+    expect(t.store.listRuns()[0]).toMatchObject({ status: 'skipped' });
+    expect(t.store.listRuns()[0].message).toMatch(/zu hell/);
   });
 
   it('honours "skip once" and resolves areas', async () => {

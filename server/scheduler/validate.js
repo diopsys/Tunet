@@ -7,7 +7,9 @@ const MAX_SLOTS = 12;
 const MAX_TARGETS = 100;
 
 const str = (v, max = 120) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
+// Leer (null, undefined, '') bleibt leer; Number(null) wäre sonst 0
 const num = (v, lo, hi) => {
+  if (v == null || v === '') return null;
   const n = Number(v);
   return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : null;
 };

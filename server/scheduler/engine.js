@@ -74,7 +74,9 @@ export function createSchedulerEngine({
     if (c.darkOnly) {
       if (c.luxEntity) {
         const lux = Number(state(c.luxEntity));
-        if (Number.isFinite(lux) && lux >= (c.luxBelow ?? DEFAULT_LUX_BELOW)) return `zu hell (${lux} lx)`;
+        // 0 lx stammt aus einem leeren Feld (frühere Bereinigung machte null zu 0): Standard nehmen
+        const limit = c.luxBelow > 0 ? c.luxBelow : DEFAULT_LUX_BELOW;
+        if (Number.isFinite(lux) && lux >= limit) return `zu hell (${lux} lx)`;
       } else if (state('sun.sun') === 'above_horizon') {
         return 'Sonne über dem Horizont';
       }
